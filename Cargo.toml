@@ -1,0 +1,2 @@
+[workspace]
+members = ["soulseek_protocol"]

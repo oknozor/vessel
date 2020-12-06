@@ -1,9 +1,8 @@
-use crate::server_message::{ToBytes};
+use crate::server_message::chat::SendChatMessage;
+use crate::server_message::login::LoginRequest;
+use crate::server_message::ToBytes;
 use tokio::io::{self, BufWriter};
 use tokio::net::TcpStream;
-use crate::server_message::login::LoginRequest;
-use crate::server_message::chat::SendChatMessage;
-use tokio::prelude::AsyncWrite;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub enum ServerRequest {

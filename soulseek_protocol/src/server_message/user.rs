@@ -1,8 +1,8 @@
-use std::net::Ipv4Addr;
-use crate::server_message::ParseBytes;
-use std::io::Cursor;
-use bytes::Buf;
 use crate::read_string;
+use crate::server_message::ParseBytes;
+use bytes::Buf;
+use std::io::Cursor;
+use std::net::Ipv4Addr;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UserStatus {
@@ -48,15 +48,15 @@ impl ParseBytes for UserList {
     type Output = Self;
 
     fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self> {
-            let number_of_users = src.get_u32_le();
-            let mut users = Vec::with_capacity(number_of_users as usize);
+        let number_of_users = src.get_u32_le();
+        let mut users = Vec::with_capacity(number_of_users as usize);
 
-            for _ in 0..number_of_users {
-                let username = read_string(src)?;
-                users.push(username)
-            }
+        for _ in 0..number_of_users {
+            let username = read_string(src)?;
+            users.push(username)
+        }
 
-            Ok(Self(users))
+        Ok(Self(users))
     }
 }
 
@@ -108,7 +108,6 @@ pub struct UserStats {
     dirs: u32,
     country_code: String,
 }
-
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UserData {

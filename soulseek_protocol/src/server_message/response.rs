@@ -1,15 +1,12 @@
+use crate::server_message::chat::*;
 use crate::server_message::login::*;
+use crate::server_message::response::ServerResponse::UserRemoved;
 use crate::server_message::room::*;
 use crate::server_message::user::*;
-use crate::server_message::chat::*;
-use std::io::{Cursor, Seek};
+use crate::server_message::{Header, MessageCode, ParseBytes, HEADER_LEN};
 use crate::SlskError;
-use crate::server_message::{MessageCode, ParseBytes, Header, HEADER_LEN};
-use byteorder::{LittleEndian, ReadBytesExt};
-use std::io::Read;
 use bytes::Buf;
-use crate::server_message::response::ServerResponse::UserRemoved;
-use tokio::io::SeekFrom;
+use std::io::Cursor;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub enum ServerResponse {
@@ -36,12 +33,11 @@ pub enum ServerResponse {
     Unknown(u32, u32, Vec<u8>), // length, code, raw bytes,
 }
 
-
 impl ServerResponse {
     pub fn check(src: &mut Cursor<&[u8]>) -> Result<Header, SlskError> {
         // Check if the buffer contains enough bytes to parse the message error
         if src.remaining() < 8 {
-           return Err(SlskError::Incomplete)
+            return Err(SlskError::Incomplete);
         }
 
         // Check if the buffer contains the full message already
@@ -52,15 +48,17 @@ impl ServerResponse {
             // discard header data
             src.set_position(0);
             src.advance(HEADER_LEN as usize);
-            Ok(Header { code, message_len: len })
+            Ok(Header {
+                code,
+                message_len: len,
+            })
         }
-
     }
 
-    pub fn parse(src: &mut Cursor<&[u8]>, header: &Header) -> std::io::Result<ServerResponse>{
+    pub fn parse(src: &mut Cursor<&[u8]>, header: &Header) -> std::io::Result<ServerResponse> {
         match header.code {
             MessageCode::Login => LoginResponse::parse(src).map(ServerResponse::LoginResponse),
-            MessageCode::SetListenPort => src.read_u32::<LittleEndian>().map(ServerResponse::ListenPort),
+            MessageCode::SetListenPort => Ok(ServerResponse::ListenPort(src.get_u32_le())),
             MessageCode::GetPeerAddress => PeerAddress::parse(src).map(ServerResponse::PeerAddress),
             MessageCode::AddUser => UserAdded::parse(src).map(ServerResponse::UserAdded),
             MessageCode::RemoveUser => UserRoomEvent::parse(src).map(ServerResponse::UserRemoved),
@@ -97,12 +95,16 @@ impl ServerResponse {
             MessageCode::GlobalAdminMessage => todo!(),
             MessageCode::GlobalUserList => todo!(),
             MessageCode::TunneledMessage => todo!(),
-            MessageCode::PrivilegedUsers => UserList::parse(src).map(ServerResponse::PrivilegedUsers),
+            MessageCode::PrivilegedUsers => {
+                UserList::parse(src).map(ServerResponse::PrivilegedUsers)
+            }
             MessageCode::HaveNoParents => todo!(),
             MessageCode::ParentsIP => todo!(),
             MessageCode::ParentMinSpeed => Ok(ServerResponse::ParentMinSpeed(src.get_u32_le())),
             MessageCode::ParentSpeedRatio => Ok(ServerResponse::ParentSpeedRatio(src.get_u32_le())),
-            MessageCode::ParentInactivityTimeout => Ok(ServerResponse::ParentInactivityTimeOut(src.get_u32_le())),
+            MessageCode::ParentInactivityTimeout => {
+                Ok(ServerResponse::ParentInactivityTimeOut(src.get_u32_le()))
+            }
             MessageCode::SearchInactivityTimeout => todo!(),
             MessageCode::MinimumParentsInCache => todo!(),
             MessageCode::DistributedAliveInterval => todo!(),
@@ -160,10 +162,9 @@ impl ServerResponse {
     }
 }
 
-
 fn get_header(src: &mut Cursor<&[u8]>) -> std::io::Result<(usize, MessageCode)> {
-    let message_length = src.read_u32::<LittleEndian>()?;
-    let code = src.read_u32::<LittleEndian>()?;
+    let message_length = src.get_u32_le();
+    let code = src.get_u32_le();
     let code = MessageCode::from(code);
 
     // We can subtract message code from the length since we already know it
@@ -171,4 +172,3 @@ fn get_header(src: &mut Cursor<&[u8]>) -> std::io::Result<(usize, MessageCode)> 
 
     Ok((message_length, code))
 }
-

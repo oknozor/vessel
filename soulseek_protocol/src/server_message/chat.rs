@@ -10,5 +10,3 @@ pub struct ChatMessage {
     pub username: String,
     pub message: String,
 }
-
-

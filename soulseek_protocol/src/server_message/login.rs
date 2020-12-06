@@ -1,13 +1,12 @@
+use crate::server_message::{MessageCode, ParseBytes, ToBytes, STR_LENGTH_PREFIX};
+use std::io::Cursor;
 use std::net::Ipv4Addr;
-use crate::server_message::{ParseBytes, ToBytes, STR_LENGTH_PREFIX, MessageCode};
-use std::io::{Cursor};
-use tokio::io::{AsyncWrite, AsyncWriteExt};
-use std::io::Read;
-use byteorder::ReadBytesExt;
-use tokio::net::TcpStream;
+use tokio::io::AsyncWriteExt;
 use tokio::io::BufWriter;
+use tokio::net::TcpStream;
 
-use crate::{read_string, read_ipv4, write_string};
+use crate::{read_ipv4, read_string, write_string};
+use bytes::Buf;
 
 const VERSION: u32 = 157;
 const MINOR_VERSION: u32 = 19;
@@ -47,12 +46,8 @@ impl ToBytes for LoginRequest {
         let password = self.password.as_bytes().len() as u32 + 4;
         let md5_digest = self.md5_digest.as_bytes().len() as u32 + 4;
 
-        let length = STR_LENGTH_PREFIX
-            + username
-            + password
-            + md5_digest
-            + version_len
-            + minor_version_len;
+        let length =
+            STR_LENGTH_PREFIX + username + password + md5_digest + version_len + minor_version_len;
 
         buffer.write_u32_le(length).await?;
         buffer.write_u32_le(MessageCode::Login as u32).await?;
@@ -90,8 +85,7 @@ impl ParseBytes for LoginResponse {
     type Output = Self;
 
     fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self> {
-        let code = src.read_u8()?;
-        match code {
+        match src.get_u8() {
             0 => {
                 let reason = read_string(src)?;
                 Ok(LoginResponse::Failure { reason })
@@ -108,7 +102,10 @@ impl ParseBytes for LoginResponse {
                     password_md5_digest,
                 })
             }
-            _ => Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "unimplemented")),
+            _ => Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "unimplemented",
+            )),
         }
     }
 }

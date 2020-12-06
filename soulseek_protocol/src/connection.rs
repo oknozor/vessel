@@ -1,10 +1,10 @@
-use tokio::net::TcpStream;
-use tokio::io::{AsyncReadExt, AsyncWriteExt, BufWriter};
-use std::io::{self, Cursor};
-use bytes::{Buf, BytesMut};
 use crate::server_message::request::ServerRequest;
 use crate::server_message::response::ServerResponse;
 use crate::server_message::{ToBytes, HEADER_LEN};
+use bytes::{Buf, BytesMut};
+use std::io::Cursor;
+use tokio::io::{AsyncReadExt, AsyncWriteExt, BufWriter};
+use tokio::net::TcpStream;
 
 #[derive(Debug)]
 pub struct SlskConnection {
@@ -48,7 +48,7 @@ impl SlskConnection {
                 Ok(Some(server_response))
             }
             Err(Incomplete) => Ok(None),
-            Err(e) => Err(e.into()),
+            Err(e) => Err(e),
         }
     }
 

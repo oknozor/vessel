@@ -1,7 +1,7 @@
 use soulseek_protocol::connection::SlskConnection;
-use tokio::net::TcpStream;
-use soulseek_protocol::server_message::request::ServerRequest;
 use soulseek_protocol::server_message::login::LoginRequest;
+use soulseek_protocol::server_message::request::ServerRequest;
+use tokio::net::TcpStream;
 
 #[tokio::main]
 async fn main() -> soulseek_protocol::Result<()> {
@@ -15,7 +15,7 @@ async fn main() -> soulseek_protocol::Result<()> {
 
     loop {
         match connection.read_response().await {
-            Ok(Some(response))  => println!("{:?}", response),
+            Ok(Some(response)) => println!("{:?}", response),
             Ok(None) => println!("non"),
             Err(e) => println!("{}", e),
         };

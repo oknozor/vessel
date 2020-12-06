@@ -3,21 +3,19 @@ extern crate serde_derive;
 #[macro_use]
 extern crate async_trait;
 
-use std::string::FromUtf8Error;
 use std::fmt;
+use std::string::FromUtf8Error;
 
-use std::num::TryFromIntError;
+use bytes::Buf;
 use std::io::{Cursor, Read};
-use byteorder::{LittleEndian, ReadBytesExt};
-use tokio::prelude::{AsyncWrite, AsyncRead};
 use std::net::Ipv4Addr;
+use std::num::TryFromIntError;
 use tokio::io::{AsyncWriteExt, BufWriter};
 use tokio::net::TcpStream;
-use crate::server_message::MessageCode;
 
 pub mod connection;
-pub mod server_message;
 mod peer_message;
+pub mod server_message;
 
 mod distributed_message;
 
@@ -40,19 +38,19 @@ pub async fn write_string(src: &str, buffer: &mut BufWriter<TcpStream>) -> tokio
     Ok(())
 }
 
-pub fn read_string(buffer: &mut Cursor<&[u8]>) -> std::io::Result<String> {
-    let string_len = buffer.read_u32::<LittleEndian>()?;
+pub fn read_string(src: &mut Cursor<&[u8]>) -> std::io::Result<String> {
+    let string_len = src.get_u32_le();
     if string_len > 0 {
         let mut string = vec![0u8; string_len as usize];
-        buffer.read_exact(&mut string)?;
+        src.read_exact(&mut string)?;
         Ok(String::from_utf8(string).unwrap())
     } else {
         Ok("".to_string())
     }
 }
 
-pub fn read_ipv4(buffer: &mut Cursor<&[u8]>) -> std::io::Result<Ipv4Addr> {
-    let ip = buffer.read_u32::<LittleEndian>()?;
+pub fn read_ipv4(src: &mut Cursor<&[u8]>) -> std::io::Result<Ipv4Addr> {
+    let ip = src.get_u32_le();
     Ok(Ipv4Addr::from(ip))
 }
 
@@ -85,7 +83,6 @@ impl From<std::io::Error> for SlskError {
         src.into()
     }
 }
-
 
 impl std::error::Error for SlskError {}
 

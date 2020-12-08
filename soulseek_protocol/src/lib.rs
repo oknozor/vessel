@@ -2,6 +2,8 @@
 extern crate serde_derive;
 #[macro_use]
 extern crate async_trait;
+#[macro_use]
+extern crate tracing;
 
 use std::fmt;
 use std::string::FromUtf8Error;
@@ -12,6 +14,7 @@ use std::net::Ipv4Addr;
 use std::num::TryFromIntError;
 use tokio::io::{AsyncWriteExt, BufWriter};
 use tokio::net::TcpStream;
+use tokio::time::Elapsed;
 
 pub mod connection;
 mod peer_message;
@@ -26,7 +29,8 @@ pub type Error = Box<dyn std::error::Error + Send + Sync>;
 pub enum SlskError {
     /// Not enough data is available to parse a message
     Incomplete,
-
+    /// Timeout waiting for an answer
+    TimeOut(Elapsed),
     /// Invalid message encoding
     Other(crate::Error),
 }
@@ -43,7 +47,7 @@ pub fn read_string(src: &mut Cursor<&[u8]>) -> std::io::Result<String> {
     if string_len > 0 {
         let mut string = vec![0u8; string_len as usize];
         src.read_exact(&mut string)?;
-        Ok(String::from_utf8(string).unwrap())
+        Ok(String::from_utf8_lossy(&string).to_string())
     } else {
         Ok("".to_string())
     }
@@ -91,6 +95,9 @@ impl fmt::Display for SlskError {
         match self {
             SlskError::Incomplete => "stream ended early".fmt(fmt),
             SlskError::Other(err) => err.fmt(fmt),
+            SlskError::TimeOut(elapsed) => {
+                write!(fmt, "timed out after {} reading soulseek stream", elapsed)
+            }
         }
     }
 }

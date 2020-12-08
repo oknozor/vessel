@@ -1,5 +1,5 @@
-use crate::read_string;
 use crate::server_message::ParseBytes;
+use crate::{read_ipv4, read_string};
 use bytes::Buf;
 use std::io::Cursor;
 use std::net::Ipv4Addr;
@@ -71,7 +71,11 @@ impl ParseBytes for PeerAddress {
     type Output = Self;
 
     fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self> {
-        unimplemented!()
+        let username = read_string(src)?;
+        let ip = read_ipv4(src)?;
+        let port = src.get_u32_le();
+
+        Ok(PeerAddress { username, ip, port })
     }
 }
 
@@ -95,7 +99,30 @@ impl ParseBytes for UserAdded {
     type Output = Self;
 
     fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self> {
-        unimplemented!()
+        let code = src.get_u8();
+        let username = read_string(src)?;
+        match code {
+            0 => Ok(UserAdded::NotFound { username }),
+            1 => {
+                let status = src.get_u32_le();
+                let average_speed = src.get_u32_le();
+                let download_number = src.get_u64_le();
+                let files = src.get_u32_le();
+                let dirs = src.get_u32_le();
+                let country_code = read_string(src)?;
+
+                Ok(UserAdded::Ok {
+                    username,
+                    status,
+                    average_speed,
+                    download_number,
+                    files,
+                    dirs,
+                    country_code,
+                })
+            }
+            _ => unreachable!(),
+        }
     }
 }
 

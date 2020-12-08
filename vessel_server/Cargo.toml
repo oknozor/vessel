@@ -1,0 +1,17 @@
+[package]
+name = "vessel_server"
+version = "0.1.0"
+authors = ["Paul Delafosse <paul.delafosse@protonmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+soulseek_protocol = { path = "../soulseek_protocol" }
+vessel_sse = { path = "../vessel_sse" }
+vessel_http = { path = "../vessel_http" }
+futures = "0.3.8"
+tokio = { version = "0.2", features = ["io-util", "net", "macros", "sync" ] }
+tracing = { version = "0.1", default-features = false, features = ["log", "std"] }
+tracing-futures = { version = "0.2", default-features = false, features = ["std-future"] }
+tracing-subscriber = "0.2.7"

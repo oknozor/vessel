@@ -1,5 +1,5 @@
 #[derive(Debug, Serialize, Deserialize)]
-pub struct SendChatMessage {
+pub struct SayInChat {
     pub room: String,
     pub message: String,
 }

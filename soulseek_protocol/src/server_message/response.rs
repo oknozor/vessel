@@ -1,6 +1,5 @@
 use crate::server_message::chat::*;
 use crate::server_message::login::*;
-use crate::server_message::response::ServerResponse::UserRemoved;
 use crate::server_message::room::*;
 use crate::server_message::user::*;
 use crate::server_message::{Header, MessageCode, ParseBytes, HEADER_LEN};
@@ -26,11 +25,41 @@ pub enum ServerResponse {
     UserJoinedRoom(UserJoinedRoom),
     UserLeftRoom(UserRoomEvent),
     RoomJoined(RoomJoined),
+    RoomTickers(RoomTickers),
     RoomLeft(String),
     RoomJoinRequestAck(String),
     ChatMessage(ChatMessage),
     UserStats(UserStats),
     Unknown(u32, u32, Vec<u8>), // length, code, raw bytes,
+}
+
+impl ServerResponse {
+    pub fn kind(&self) -> &str {
+        match self {
+            ServerResponse::LoginResponse(_) => "LoginResponse",
+            ServerResponse::RoomList(_) => "RoomList",
+            ServerResponse::PrivilegedUsers(_) => "PrivilegedUsers",
+            ServerResponse::ParentMinSpeed(_) => "ParentMinSpeed",
+            ServerResponse::ParentSpeedRatio(_) => "ParentSpeedRatio",
+            ServerResponse::ParentInactivityTimeOut(_) => "ParentInactivityTimeOut",
+            ServerResponse::WishlistInterval(_) => "WishlistInterval",
+            ServerResponse::ListenPort(_) => "ListenPort",
+            ServerResponse::PeerAddress(_) => "PeerAddress",
+            ServerResponse::UserStatus(_) => "UserStatus",
+            ServerResponse::UserAdded(_) => "UserAdded",
+            ServerResponse::UserRemoved(_) => "UserRemoved",
+            ServerResponse::RemoveUser(_) => "RemoveUser",
+            ServerResponse::UserJoinedRoom(_) => "UserJoinedRoom",
+            ServerResponse::UserLeftRoom(_) => "UserLeftRoom",
+            ServerResponse::RoomJoined(_) => "RoomJoined",
+            ServerResponse::RoomTickers(_) => "RoomTickers",
+            ServerResponse::RoomLeft(_) => "RoomLeft",
+            ServerResponse::RoomJoinRequestAck(_) => "RoomJoinRequestAck",
+            ServerResponse::ChatMessage(_) => "ChatMessage",
+            ServerResponse::UserStats(_) => "UserStats",
+            ServerResponse::Unknown(_, _, _) => "Unknown",
+        }
+    }
 }
 
 impl ServerResponse {
@@ -64,9 +93,11 @@ impl ServerResponse {
             MessageCode::RemoveUser => UserRoomEvent::parse(src).map(ServerResponse::UserRemoved),
             MessageCode::GetUserStatus => UserStatus::parse(src).map(ServerResponse::UserStatus),
             MessageCode::SayInChatRoom => todo!(),
-            MessageCode::JoinRoom => todo!(),
+            MessageCode::JoinRoom => RoomJoined::parse(src).map(ServerResponse::RoomJoined),
             MessageCode::LeaveRoom => todo!(),
-            MessageCode::UserJoinedRoom => todo!(),
+            MessageCode::UserJoinedRoom => {
+                UserJoinedRoom::parse(src).map(ServerResponse::UserJoinedRoom)
+            }
             MessageCode::UserLeftRoom => todo!(),
             MessageCode::ConnectToPeer => todo!(),
             MessageCode::PrivateMessages => todo!(),
@@ -118,7 +149,7 @@ impl ServerResponse {
             MessageCode::GetSimilarUsers => todo!(),
             MessageCode::GetItemRecommendations => todo!(),
             MessageCode::GetItemSimilarUsers => todo!(),
-            MessageCode::RoomTickers => todo!(),
+            MessageCode::RoomTickers => RoomTickers::parse(src).map(ServerResponse::RoomTickers),
             MessageCode::RoomTickerAdd => todo!(),
             MessageCode::RoomTickerRemove => todo!(),
             MessageCode::SetRoomTicker => todo!(),

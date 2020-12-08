@@ -1,7 +1,9 @@
-use crate::server_message::chat::SendChatMessage;
+use crate::server_message::chat::SayInChat;
 use crate::server_message::login::LoginRequest;
-use crate::server_message::ToBytes;
-use tokio::io::{self, BufWriter};
+use crate::server_message::{MessageCode, ToBytes, HEADER_LEN};
+use crate::write_string;
+use bytes::BufMut;
+use tokio::io::{self, AsyncWriteExt, BufWriter};
 use tokio::net::TcpStream;
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -13,7 +15,7 @@ pub enum ServerRequest {
     AddUser(String),
     RemoveUser(String),
     GetUserStatus(String),
-    SendChatMessage(SendChatMessage),
+    SendChatMessage(SayInChat),
     JoinRoom(String),
     LeaveRoom(String),
     EnablePublicChat,
@@ -23,18 +25,41 @@ pub enum ServerRequest {
     Unimplemented,
 }
 
+impl ServerRequest {
+    pub fn kind(&self) -> &str {
+        match self {
+            ServerRequest::Login(_) => "Login",
+            ServerRequest::SetListenPort(_) => "SetListenPort",
+            ServerRequest::GetPeerAddress(_) => "GetPeerAddress",
+            ServerRequest::AddUser(_) => "AddUser",
+            ServerRequest::RemoveUser(_) => "RemoveUser",
+            ServerRequest::GetUserStatus(_) => "GetUserStatus",
+            ServerRequest::SendChatMessage(_) => "SendChatMessage",
+            ServerRequest::JoinRoom(_) => "JoinRoom",
+            ServerRequest::LeaveRoom(_) => "LeaveRoom",
+            ServerRequest::EnablePublicChat => "EnablePublicChat",
+            ServerRequest::DisablePublicChat => "DisablePublicChat",
+            ServerRequest::GetUserStats(_) => "GetUserStats",
+            ServerRequest::Unimplemented => "Unimplemented",
+        }
+    }
+}
 #[async_trait]
 impl ToBytes for ServerRequest {
     async fn write_to_buf(&self, buffer: &mut BufWriter<TcpStream>) -> io::Result<()> {
         match self {
             ServerRequest::Login(login_request) => login_request.write_to_buf(buffer).await,
             ServerRequest::SetListenPort(_) => todo!(),
-            ServerRequest::GetPeerAddress(_) => todo!(),
+            ServerRequest::GetPeerAddress(username) => {
+                write_str_msg(username, MessageCode::GetPeerAddress, buffer).await
+            }
             ServerRequest::AddUser(_) => todo!(),
             ServerRequest::RemoveUser(_) => todo!(),
             ServerRequest::GetUserStatus(_) => todo!(),
             ServerRequest::SendChatMessage(_) => todo!(),
-            ServerRequest::JoinRoom(_) => todo!(),
+            ServerRequest::JoinRoom(join_room) => {
+                write_str_msg(join_room, MessageCode::JoinRoom, buffer).await
+            }
             ServerRequest::LeaveRoom(_) => todo!(),
             ServerRequest::EnablePublicChat => todo!(),
             ServerRequest::DisablePublicChat => todo!(),
@@ -42,4 +67,17 @@ impl ToBytes for ServerRequest {
             ServerRequest::Unimplemented => todo!(),
         }
     }
+}
+
+pub async fn write_str_msg(
+    src: &str,
+    code: MessageCode,
+    buffer: &mut BufWriter<TcpStream>,
+) -> tokio::io::Result<()> {
+    let bytes = src.as_bytes();
+    let message_len = bytes.len() as u32 + HEADER_LEN;
+    buffer.write_u32_le(message_len).await?;
+    buffer.write_u32_le(code as u32).await?;
+    write_string(src, buffer).await?;
+    Ok(())
 }

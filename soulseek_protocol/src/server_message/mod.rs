@@ -1,5 +1,5 @@
 use std::io::Cursor;
-use tokio::io::BufWriter;
+use tokio::io::{AsyncWrite, BufWriter};
 use tokio::net::TcpStream;
 
 pub mod chat;

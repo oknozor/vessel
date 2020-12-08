@@ -1,2 +1,2 @@
 [workspace]
-members = ["soulseek_protocol"]
+members = ["soulseek_protocol", "vessel_ctl", "vessel_http", "vessel_sse", "vessel_server"]

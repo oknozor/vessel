@@ -1,0 +1,17 @@
+[package]
+name = "vessel_http"
+version = "0.1.0"
+authors = ["Paul Delafosse <paul.delafosse@protonmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+soulseek_protocol = { path = "../soulseek_protocol" }
+tokio = { version = "0.2", features = ["io-util", "net", "macros", "sync"] }
+warp = "0.2.5"
+log = "0.4.11"
+
+[[bin]]
+path = "bin/dummy.rs"
+name = "dummy"

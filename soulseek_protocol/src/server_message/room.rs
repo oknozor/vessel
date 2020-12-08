@@ -76,10 +76,61 @@ pub struct UserJoinedRoom {
 }
 
 impl ParseBytes for UserJoinedRoom {
-    type Output = RoomJoined;
+    type Output = Self;
 
     fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self::Output> {
+        let room = read_string(src)?;
+        let username = read_string(src)?;
+        let status = src.get_u32_le();
+        let avgspeed = src.get_u32_le();
+        let downloadnum = src.get_u64_le();
+        let files = src.get_u32_le();
+        let dirs = src.get_u32_le();
+        let slotsfree = src.get_u32_le();
+        let countrycode = read_string(src)?;
+
+        Ok(Self {
+            room,
+            username,
+            status,
+            avgspeed,
+            downloadnum,
+            files,
+            dirs,
+            slotsfree,
+            countrycode,
+        })
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UserRoomEvent {
+    room_name: String,
+    username: String,
+}
+
+impl ParseBytes for UserRoomEvent {
+    type Output = Self;
+
+    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self> {
+        unimplemented!()
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RoomJoined {
+    room_name: String,
+    users: Vec<RoomUser>,
+    owner: Option<String>,
+    operators: Option<RoomOperators>,
+}
+
+impl ParseBytes for RoomJoined {
+    type Output = Self;
+
+    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self> {
         let room_name = read_string(src)?;
+
         let user_nth = src.get_u32_le();
 
         // Unpack user status
@@ -154,36 +205,6 @@ impl ParseBytes for UserJoinedRoom {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct UserRoomEvent {
-    room_name: String,
-    username: String,
-}
-
-impl ParseBytes for UserRoomEvent {
-    type Output = Self;
-
-    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self> {
-        unimplemented!()
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct RoomJoined {
-    room_name: String,
-    users: Vec<RoomUser>,
-    owner: Option<String>,
-    operators: Option<RoomOperators>,
-}
-
-impl ParseBytes for RoomJoined {
-    type Output = Self;
-
-    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self> {
-        unimplemented!()
-    }
-}
-
 type RoomOperators = Vec<String>;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -199,5 +220,37 @@ impl ParseBytes for RoomUser {
 
     fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self> {
         unimplemented!()
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RoomTickers {
+    room: String,
+    tickers: Vec<Ticker>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Ticker {
+    username: String,
+    ticker: String,
+}
+
+impl ParseBytes for RoomTickers {
+    type Output = Self;
+
+    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self::Output> {
+        let room = read_string(src)?;
+        let number_of_users = src.get_u32_le();
+
+        let mut tickers = Vec::with_capacity(number_of_users as usize);
+
+        for _ in 0..number_of_users {
+            let username = read_string(src)?;
+            let ticker = read_string(src)?;
+
+            tickers.push(Ticker { username, ticker });
+        }
+
+        Ok(RoomTickers { room, tickers })
     }
 }

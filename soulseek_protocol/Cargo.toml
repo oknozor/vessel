@@ -10,14 +10,10 @@ edition = "2018"
 
 md5 = "0.7.0"
 rand = "0.7.3"
-tokio = { version = "0.2", features = ["io-util", "net", "macros", ] }
+tokio = { version = "0.2", features = ["io-util", "net", "macros", "time" ] }
 bytes = "0.5.0"
 serde = "1.0.117"
 serde_derive = "1.0.117"
 serde_json = "1.0.59"
 async-trait = "0.1.42"
 tracing = "0.1.22"
-
-[[example]]
-name = "simple_login"
-path = "example/simple_login.rs"

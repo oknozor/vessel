@@ -8,8 +8,8 @@ use tokio::io::{self, AsyncWriteExt, BufWriter};
 use tokio::net::TcpStream;
 
 #[derive(Debug, Deserialize, Serialize)]
+/// This is undocumented yet, refer to [soulseek protocol documentation on nicotine+](https://nicotine-plus.github.io/nicotine-plus/doc/SLSKPROTOCOL.html#peer-messages)
 pub enum ServerRequest {
-    /// TODO
     Login(LoginRequest),
     SetListenPort(u32),
     GetPeerAddress(String),

@@ -14,6 +14,7 @@ use std::net::Ipv4Addr;
 use std::num::TryFromIntError;
 use tokio::io::{AsyncWriteExt, BufWriter};
 use tokio::net::TcpStream;
+use tokio::time;
 use tokio::time::Elapsed;
 
 pub mod connection;
@@ -30,7 +31,7 @@ pub type Error = Box<dyn std::error::Error + Send + Sync>;
 pub enum SlskError {
     /// Not enough data is available to parse a message
     Incomplete,
-    /// Timeout waiting for an answer
+    /// Timeout waiting for an answer`
     TimeOut(Elapsed),
     /// Invalid message encoding
     Other(crate::Error),

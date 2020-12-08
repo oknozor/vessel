@@ -1,5 +1,5 @@
 <script>
-	let eventsource = new EventSource("http://127.0.0.1:3031/ticks");
+	let eventsource = new EventSource("http://127.0.0.1:3031/events");
 
 	eventsource.onmessage = event => {
 		let eventList = document.querySelector('ul');

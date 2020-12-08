@@ -3,25 +3,25 @@ extern crate log;
 #[macro_use]
 extern crate tokio;
 
-use std::task::{Context, Poll};
+use bytes::Bytes;
+use futures::TryStreamExt;
 use soulseek_protocol::server_message::response::ServerResponse;
+use soulseek_protocol::server_message::MessageCode::BranchRoot;
+use std::collections::HashMap;
 use std::convert::Infallible;
+use std::pin::Pin;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
+use std::task::{Context, Poll};
+use std::thread::yield_now;
 use std::time::Duration;
+use tokio::stream::{Stream, StreamExt};
+use tokio::sync::mpsc;
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::time::interval;
 use warp::http::Method;
-use warp::{Filter, Rejection, Reply};
-use tokio::stream::{StreamExt, Stream};
-use tokio::sync::mpsc;
-use std::sync::{Arc, Mutex};
-use std::collections::HashMap;
 use warp::sse::ServerSentEvent;
-use std::sync::atomic::{Ordering, AtomicUsize};
-use soulseek_protocol::server_message::MessageCode::BranchRoot;
-use std::pin::Pin;
-use bytes::Bytes;
-use futures::TryStreamExt;
-use std::thread::yield_now;
+use warp::{Filter, Rejection, Reply};
 
 struct Client(Receiver<String>);
 
@@ -54,12 +54,9 @@ pub async fn start_sse_listener(mut rx: Receiver<ServerResponse>) {
             Method::HEAD,
         ]);
 
-    let broadcaster = Arc::new(Mutex::new(Broadcaster {
-        clients: vec![]
-    }));
+    let broadcaster = Arc::new(Mutex::new(Broadcaster { clients: vec![] }));
 
     let broadcaster_copy = broadcaster.clone();
-
 
     let event_dispatcher = tokio::task::spawn(async move {
         while let Some(message) = rx.recv().await {
@@ -68,23 +65,33 @@ pub async fn start_sse_listener(mut rx: Receiver<ServerResponse>) {
             let mut broadcaster = broadcaster.lock().unwrap();
 
             for mut client in broadcaster.clients.iter_mut() {
-                client.try_send(message.clone()).expect("failed to send message to sse client");
-            };
-        };
+                client
+                    .try_send(message.clone())
+                    .expect("failed to send message to sse client");
+            }
+        }
     });
 
-    let sse_events = warp::path!("events").and(warp::get()).map(move || {
-        // reply using server-sent events
+    let sse_events = warp::path!("events")
+        .and(warp::get())
+        .map(move || {
+            // reply using server-sent events
 
-        let stream = broadcaster.lock().unwrap().new_client()
-            .map(|msg| msg.map(|msg| warp::sse::json(msg)));
+            let stream = broadcaster
+                .lock()
+                .unwrap()
+                .new_client()
+                .map(|msg| msg.map(|msg| warp::sse::json(msg)));
 
-        warp::sse::reply(warp::sse::keep_alive().stream(stream))
-    })
+            warp::sse::reply(warp::sse::keep_alive().stream(stream))
+        })
         .with(cors)
         .with(warp::log("api"));
 
-    join!(warp::serve(sse_events).run(([127, 0, 0, 1], 3031)), event_dispatcher);
+    join!(
+        warp::serve(sse_events).run(([127, 0, 0, 1], 3031)),
+        event_dispatcher
+    );
 }
 
 impl Broadcaster {
@@ -102,14 +109,10 @@ impl Broadcaster {
     }
 }
 
-
 impl Stream for Client {
     type Item = Result<String, Infallible>;
 
-    fn poll_next(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Option<Self::Item>> {
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         match Pin::new(&mut self.0).poll_next(cx) {
             Poll::Ready(Some(v)) => Poll::Ready(Some(Ok(v))),
             Poll::Ready(None) => Poll::Ready(None),

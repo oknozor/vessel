@@ -10,22 +10,11 @@ pub mod room;
 pub mod user;
 
 pub const HEADER_LEN: u32 = 8;
-pub const STR_LENGTH_PREFIX: u32 = 4;
 
 #[derive(Debug)]
 pub struct Header {
     pub(crate) code: MessageCode,
     pub(crate) message_len: usize,
-}
-
-pub trait ParseBytes {
-    type Output;
-    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self::Output>;
-}
-
-#[async_trait]
-pub trait ToBytes {
-    async fn write_to_buf(&self, buffer: &mut BufWriter<TcpStream>) -> tokio::io::Result<()>;
 }
 
 #[repr(u32)]

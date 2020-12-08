@@ -1,6 +1,7 @@
+use crate::frame::ToBytes;
 use crate::server_message::request::ServerRequest;
 use crate::server_message::response::ServerResponse;
-use crate::server_message::{ToBytes, HEADER_LEN};
+use crate::server_message::HEADER_LEN;
 use crate::SlskError;
 use bytes::{Buf, BytesMut};
 use std::io::Cursor;

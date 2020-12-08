@@ -1,8 +1,9 @@
+use crate::frame::ParseBytes;
 use crate::server_message::chat::*;
 use crate::server_message::login::*;
 use crate::server_message::room::*;
 use crate::server_message::user::*;
-use crate::server_message::{Header, MessageCode, ParseBytes, HEADER_LEN};
+use crate::server_message::{Header, MessageCode, HEADER_LEN};
 use crate::SlskError;
 use bytes::Buf;
 use std::io::Cursor;

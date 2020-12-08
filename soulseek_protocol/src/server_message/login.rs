@@ -1,11 +1,12 @@
-use crate::server_message::{MessageCode, ParseBytes, ToBytes, STR_LENGTH_PREFIX};
+use crate::server_message::MessageCode;
 use std::io::Cursor;
 use std::net::Ipv4Addr;
 use tokio::io::AsyncWriteExt;
 use tokio::io::BufWriter;
 use tokio::net::TcpStream;
 
-use crate::{read_ipv4, read_string, write_string};
+use crate::frame::{ParseBytes, ToBytes};
+use crate::{read_ipv4, read_string, write_string, STR_LENGTH_PREFIX};
 use bytes::Buf;
 
 const VERSION: u32 = 157;

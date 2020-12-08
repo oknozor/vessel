@@ -21,6 +21,7 @@ mod peer_message;
 pub mod server_message;
 
 mod distributed_message;
+mod frame;
 
 pub type Result<T> = std::result::Result<T, SlskError>;
 pub type Error = Box<dyn std::error::Error + Send + Sync>;
@@ -101,3 +102,5 @@ impl fmt::Display for SlskError {
         }
     }
 }
+
+pub const STR_LENGTH_PREFIX: u32 = 4;

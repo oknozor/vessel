@@ -6,7 +6,7 @@ use std::io::Cursor;
 
 type Rooms = Vec<(String, u32)>;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Default)]
 pub struct RoomList {
     rooms: Rooms,
     owned_private_rooms: Rooms,

@@ -41,7 +41,7 @@ impl From<u32> for Status {
 
 type Users = Vec<String>;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Default)]
 pub struct UserList(Users);
 
 impl ParseBytes for UserList {

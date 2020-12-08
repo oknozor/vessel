@@ -6,6 +6,8 @@ extern crate tokio;
 use bytes::Bytes;
 use futures::TryStreamExt;
 use soulseek_protocol::server_message::response::ServerResponse;
+use soulseek_protocol::server_message::room::RoomList;
+use soulseek_protocol::server_message::user::UserList;
 use soulseek_protocol::server_message::MessageCode::BranchRoot;
 use std::collections::HashMap;
 use std::convert::Infallible;
@@ -15,6 +17,7 @@ use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
 use std::thread::yield_now;
 use std::time::Duration;
+use tokio::stream::iter;
 use tokio::stream::{Stream, StreamExt};
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::{Receiver, Sender};
@@ -28,6 +31,9 @@ struct Client(Receiver<String>);
 struct Broadcaster {
     clients: Vec<Sender<String>>,
 }
+
+type CachedRooms = Arc<Mutex<RoomList>>;
+type CachedUsers = Arc<Mutex<UserList>>;
 
 // see : https://github.com/seanmonstar/warp/blob/master/examples/sse_chat.rs
 pub async fn start_sse_listener(mut rx: Receiver<ServerResponse>) {
@@ -54,12 +60,28 @@ pub async fn start_sse_listener(mut rx: Receiver<ServerResponse>) {
             Method::HEAD,
         ]);
 
-    let broadcaster = Arc::new(Mutex::new(Broadcaster { clients: vec![] }));
+    let room_list = Arc::new(Mutex::new(RoomList::default()));
+    let slsk_user_list = Arc::new(Mutex::new(UserList::default()));
 
+    let broadcaster = Arc::new(Mutex::new(Broadcaster { clients: vec![] }));
     let broadcaster_copy = broadcaster.clone();
 
+    // Cache room list and user list to give them to future web clients
+    while let Some(message) = rx.recv().await {
+        match message {
+            ServerResponse::RoomList(rooms) => *room_list.lock().unwrap() = rooms,
+            ServerResponse::PrivilegedUsers(users) => {
+                *slsk_user_list.lock().unwrap() = users;
+                break;
+            }
+            other => debug!("Hanshake message : {:?}", other),
+        }
+    }
+
+    // Dispatch soulseek messages to SSE clients
     let event_dispatcher = tokio::task::spawn(async move {
         while let Some(message) = rx.recv().await {
+            debug!("SSE event : {}", message.kind());
             let message = serde_json::to_string(&message).expect("Serialization error");
             let broadcaster = broadcaster_copy.clone();
             let mut broadcaster = broadcaster.lock().unwrap();
@@ -75,12 +97,11 @@ pub async fn start_sse_listener(mut rx: Receiver<ServerResponse>) {
     let sse_events = warp::path!("events")
         .and(warp::get())
         .map(move || {
-            // reply using server-sent events
-
+            // Stream incoming server event to sse
             let stream = broadcaster
                 .lock()
                 .unwrap()
-                .new_client()
+                .new_client(slsk_user_list.clone(), room_list.clone())
                 .map(|msg| msg.map(|msg| warp::sse::json(msg)));
 
             warp::sse::reply(warp::sse::keep_alive().stream(stream))
@@ -88,14 +109,14 @@ pub async fn start_sse_listener(mut rx: Receiver<ServerResponse>) {
         .with(cors)
         .with(warp::log("api"));
 
-    join!(
+    let _ = join!(
         warp::serve(sse_events).run(([127, 0, 0, 1], 3031)),
         event_dispatcher
     );
 }
 
 impl Broadcaster {
-    fn new_client(&mut self) -> Client {
+    fn new_client(&mut self, users: CachedUsers, rooms: CachedRooms) -> Client {
         info!("sse client connected");
 
         let (tx, rx) = mpsc::channel(100);
@@ -103,6 +124,12 @@ impl Broadcaster {
         tx.clone()
             .try_send("data: connected\n\n".to_string())
             .unwrap();
+
+        let users = serde_json::to_string(&(*users.lock().unwrap())).unwrap();
+        tx.clone().try_send(users).unwrap();
+
+        let rooms = serde_json::to_string(&(*rooms.lock().unwrap())).unwrap();
+        tx.clone().try_send(rooms).unwrap();
 
         self.clients.push(tx);
         Client(rx)

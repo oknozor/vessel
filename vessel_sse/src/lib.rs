@@ -32,8 +32,7 @@ struct Broadcaster {
     clients: Vec<Sender<String>>,
 }
 
-type CachedRooms = Arc<Mutex<RoomList>>;
-type CachedUsers = Arc<Mutex<UserList>>;
+type Cache = Arc<Mutex<Vec<ServerResponse>>>;
 
 // see : https://github.com/seanmonstar/warp/blob/master/examples/sse_chat.rs
 pub async fn start_sse_listener(mut rx: Receiver<ServerResponse>) {
@@ -60,8 +59,9 @@ pub async fn start_sse_listener(mut rx: Receiver<ServerResponse>) {
             Method::HEAD,
         ]);
 
-    let room_list = Arc::new(Mutex::new(RoomList::default()));
-    let slsk_user_list = Arc::new(Mutex::new(UserList::default()));
+    // Soulseek send user list and room list once on connect, we cache this to pass them
+    // to new sse client
+    let cache = Arc::new(Mutex::new(Vec::default()));
 
     let broadcaster = Arc::new(Mutex::new(Broadcaster { clients: vec![] }));
     let broadcaster_copy = broadcaster.clone();
@@ -69,9 +69,15 @@ pub async fn start_sse_listener(mut rx: Receiver<ServerResponse>) {
     // Cache room list and user list to give them to future web clients
     while let Some(message) = rx.recv().await {
         match message {
-            ServerResponse::RoomList(rooms) => *room_list.lock().unwrap() = rooms,
+            ServerResponse::RoomList(rooms) => {
+                let mut cache = cache.lock().unwrap();
+                cache.push(ServerResponse::RoomList(rooms));
+            },
             ServerResponse::PrivilegedUsers(users) => {
-                *slsk_user_list.lock().unwrap() = users;
+                let mut cache = cache.lock().unwrap();
+                cache.push(ServerResponse::PrivilegedUsers(users));
+
+                // Once we get user list we can get out and proceed to the main event loop
                 break;
             }
             other => debug!("Hanshake message : {:?}", other),
@@ -101,7 +107,7 @@ pub async fn start_sse_listener(mut rx: Receiver<ServerResponse>) {
             let stream = broadcaster
                 .lock()
                 .unwrap()
-                .new_client(slsk_user_list.clone(), room_list.clone())
+                .new_client(cache.clone())
                 .map(|msg| msg.map(|msg| warp::sse::json(msg)));
 
             warp::sse::reply(warp::sse::keep_alive().stream(stream))
@@ -116,7 +122,7 @@ pub async fn start_sse_listener(mut rx: Receiver<ServerResponse>) {
 }
 
 impl Broadcaster {
-    fn new_client(&mut self, users: CachedUsers, rooms: CachedRooms) -> Client {
+    fn new_client(&mut self, cache: Cache,) -> Client {
         info!("sse client connected");
 
         let (tx, rx) = mpsc::channel(100);
@@ -125,11 +131,13 @@ impl Broadcaster {
             .try_send("data: connected\n\n".to_string())
             .unwrap();
 
-        let users = serde_json::to_string(&(*users.lock().unwrap())).unwrap();
-        tx.clone().try_send(users).unwrap();
 
-        let rooms = serde_json::to_string(&(*rooms.lock().unwrap())).unwrap();
-        tx.clone().try_send(rooms).unwrap();
+        // get every cached data and push them as a welcome pack to the client
+        let cache = cache.lock().unwrap();
+        for item in cache.iter() {
+            let json = serde_json::to_string(item).unwrap();
+            tx.clone().try_send(json).unwrap();
+        }
 
         self.clients.push(tx);
         Client(rx)

@@ -12,7 +12,7 @@ use tokio::stream::{Stream, StreamExt};
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::{Receiver, Sender};
 use warp::http::Method;
-use warp::{Filter};
+use warp::Filter;
 
 struct Client(Receiver<String>);
 
@@ -60,7 +60,7 @@ pub async fn start_sse_listener(mut rx: Receiver<ServerResponse>) {
             ServerResponse::RoomList(rooms) => {
                 let mut cache = cache.lock().unwrap();
                 cache.push(ServerResponse::RoomList(rooms));
-            },
+            }
             ServerResponse::PrivilegedUsers(users) => {
                 let mut cache = cache.lock().unwrap();
                 cache.push(ServerResponse::PrivilegedUsers(users));
@@ -110,7 +110,7 @@ pub async fn start_sse_listener(mut rx: Receiver<ServerResponse>) {
 }
 
 impl Broadcaster {
-    fn new_client(&mut self, cache: Cache,) -> Client {
+    fn new_client(&mut self, cache: Cache) -> Client {
         info!("sse client connected");
 
         let (tx, rx) = mpsc::channel(100);
@@ -118,7 +118,6 @@ impl Broadcaster {
         tx.clone()
             .try_send("data: connected\n\n".to_string())
             .unwrap();
-
 
         // get every cached data and push them as a welcome pack to the client
         let cache = cache.lock().unwrap();

@@ -10,7 +10,6 @@ use tokio::net::TcpStream;
 use tokio::time::timeout;
 use tokio::time::Duration;
 
-
 const DEFAULT_ADDRESS: &str = "server.slsknet.org:2242";
 
 #[derive(Debug)]

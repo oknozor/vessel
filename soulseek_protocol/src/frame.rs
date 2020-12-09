@@ -16,7 +16,6 @@ pub trait ParseBytes {
     fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self::Output>;
 }
 
-
 /// A utility trait to write soulseek server messages, peer messages and distributed messages
 /// to a TCP stream buffer.
 #[async_trait]

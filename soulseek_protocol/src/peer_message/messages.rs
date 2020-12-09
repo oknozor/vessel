@@ -1,4 +1,4 @@
-use crate::frame::{ToBytes};
+use crate::frame::ToBytes;
 use crate::peer_message::messages::ConnectionType::{DistributedNetwork, FileTransfer, PeerToPeer};
 use crate::peer_message::messages::PeerMessage::PeerInit;
 use crate::peer_message::{Header, MessageCode, HEADER_LEN};

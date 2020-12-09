@@ -14,7 +14,7 @@ pub struct UserStatus {
 impl ParseBytes for UserStatus {
     type Output = Self;
 
-    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self::Output> {
+    fn parse(_src: &mut Cursor<&[u8]>) -> std::io::Result<Self::Output> {
         unimplemented!()
     }
 }

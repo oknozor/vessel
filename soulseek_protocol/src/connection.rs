@@ -10,7 +10,8 @@ use tokio::net::TcpStream;
 use tokio::time::timeout;
 use tokio::time::Duration;
 
-pub const DEFAULT_ADDRESS: &str = "server.slsknet.org:2242";
+
+const DEFAULT_ADDRESS: &str = "server.slsknet.org:2242";
 
 #[derive(Debug)]
 pub struct SlskConnection {
@@ -18,6 +19,7 @@ pub struct SlskConnection {
     buffer: BytesMut,
 }
 
+/// Connect to the official soulseek server at `server.slsknet.org:2242`.
 pub async fn connect() -> SlskConnection {
     // Main stream with the soulseek server
     let stream = TcpStream::connect(DEFAULT_ADDRESS)
@@ -28,19 +30,24 @@ pub async fn connect() -> SlskConnection {
 }
 
 impl SlskConnection {
-    pub fn new(socket: TcpStream) -> SlskConnection {
-        SlskConnection {
-            stream: BufWriter::new(socket),
-            buffer: BytesMut::with_capacity(4 * 1024),
-        }
-    }
-
+    /// Try to read a soulseek message and timeout after 10ms if nothing happened, this method is used
+    /// to avoid blocking when the stream buffer is empty and soulseek is not sending message anymore.
     pub async fn read_response_with_timeout(&mut self) -> crate::Result<Option<ServerResponse>> {
         match timeout(Duration::from_millis(10), self.read_response()).await {
             Ok(read_result) => read_result,
             Err(e) => Err(SlskError::TimeOut(e)),
         }
     }
+
+    /// Attempt to read a message from the soulseek server.
+    /// First parse the message [`Header`], if there are at least as much bytes as the header content
+    /// length, try to parse it, otherwise, try to read more bytes from the soulseek TcpStream buffer.
+    /// **WARNING**  :
+    /// If this function is called when the buffer is empty it will block trying to read the buffer,
+    /// use [`read_response_with_timeout`] to avoid this
+    ///
+    /// [`Header`]: crate::server_message::Header
+    /// [`read_response_with_timeout`]: SlskConnection::read_response_with_timeout
     pub async fn read_response(&mut self) -> crate::Result<Option<ServerResponse>> {
         loop {
             if let Some(server_message) = self.parse_response()? {
@@ -53,6 +60,26 @@ impl SlskConnection {
                     Err("connection reset by peer".into())
                 };
             }
+        }
+    }
+
+    /// Send a [`ServerRequest`] the soulseek server, using `[ToBytes]` to write to the buffer.
+    pub async fn write_request(&mut self, request: ServerRequest) -> tokio::io::Result<()> {
+        request.write_to_buf(&mut self.stream).await?;
+        info!("request sent to soulseek : {}", request.kind());
+        self.stream.flush().await
+    }
+
+    /// Advance the soulseek tcp connection buffer. The amount of byte consumed is `message_len`
+    /// four bytes for the u32 message length prefix and four bytes for the u32 message code prefix.
+    fn consume(&mut self, message_len: usize) {
+        self.buffer.advance(HEADER_LEN as usize + message_len)
+    }
+
+    fn new(socket: TcpStream) -> SlskConnection {
+        SlskConnection {
+            stream: BufWriter::new(socket),
+            buffer: BytesMut::with_capacity(4 * 1024),
         }
     }
 
@@ -70,15 +97,5 @@ impl SlskConnection {
             Err(Incomplete) => Ok(None),
             Err(e) => Err(e),
         }
-    }
-
-    pub async fn write_request(&mut self, request: ServerRequest) -> tokio::io::Result<()> {
-        request.write_to_buf(&mut self.stream).await?;
-        info!("request sent to soulseek : {}", request.kind());
-        self.stream.flush().await
-    }
-
-    fn consume(&mut self, message_len: usize) {
-        self.buffer.advance(HEADER_LEN as usize + message_len)
     }
 }

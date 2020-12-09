@@ -3,28 +3,16 @@ extern crate log;
 #[macro_use]
 extern crate tokio;
 
-use bytes::Bytes;
-use futures::TryStreamExt;
 use soulseek_protocol::server_message::response::ServerResponse;
-use soulseek_protocol::server_message::room::RoomList;
-use soulseek_protocol::server_message::user::UserList;
-use soulseek_protocol::server_message::MessageCode::BranchRoot;
-use std::collections::HashMap;
 use std::convert::Infallible;
 use std::pin::Pin;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
-use std::thread::yield_now;
-use std::time::Duration;
-use tokio::stream::iter;
 use tokio::stream::{Stream, StreamExt};
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::{Receiver, Sender};
-use tokio::time::interval;
 use warp::http::Method;
-use warp::sse::ServerSentEvent;
-use warp::{Filter, Rejection, Reply};
+use warp::{Filter};
 
 struct Client(Receiver<String>);
 
@@ -92,7 +80,7 @@ pub async fn start_sse_listener(mut rx: Receiver<ServerResponse>) {
             let broadcaster = broadcaster_copy.clone();
             let mut broadcaster = broadcaster.lock().unwrap();
 
-            for mut client in broadcaster.clients.iter_mut() {
+            for client in broadcaster.clients.iter_mut() {
                 client
                     .try_send(message.clone())
                     .expect("failed to send message to sse client");
@@ -108,7 +96,7 @@ pub async fn start_sse_listener(mut rx: Receiver<ServerResponse>) {
                 .lock()
                 .unwrap()
                 .new_client(cache.clone())
-                .map(|msg| msg.map(|msg| warp::sse::json(msg)));
+                .map(|msg| msg.map(warp::sse::json));
 
             warp::sse::reply(warp::sse::keep_alive().stream(stream))
         })

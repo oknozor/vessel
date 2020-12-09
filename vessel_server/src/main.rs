@@ -28,7 +28,7 @@ async fn main() -> std::io::Result<()> {
     let soulseek_listener = task::spawn(async move {
         loop {
             // Reveive all soulseek incoming messages, we stop reading from the soulseek connection
-            // on [`SlskError::TimeOut(e)`]
+            // on [`SlskError::TimeOut`]
             while let Ok(Some(response)) = connection.read_response_with_timeout().await {
                 info!("Got response {:?}", response.kind());
                 sse_tx
@@ -48,7 +48,7 @@ async fn main() -> std::io::Result<()> {
         }
     });
 
-    // Start the warp SSE server with a the soulseek mpsc event recevier
+    // Start the warp SSE server with a soulseek mpsc event receiver
     // this task will proxy soulseek events to the web clients
     let sse_server = task::spawn(async {
         vessel_sse::start_sse_listener(sse_rx).await;

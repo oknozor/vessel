@@ -1,7 +1,3 @@
-use std::io::Cursor;
-use tokio::io::{AsyncWrite, BufWriter};
-use tokio::net::TcpStream;
-
 pub mod chat;
 pub mod login;
 pub mod request;
@@ -11,12 +7,36 @@ pub mod user;
 
 pub const HEADER_LEN: u32 = 8;
 
+/// Header for the [`ServerResponse`] enum :
+///
+/// | content length   | message code    |
+/// | :-------------: | :-------------: |
+/// | [u32] (8 bytes) | [u32] (8 bytes) |
+///
+/// We use this to known incoming message length and code before parsing them and consuming the buffer.
+/// It's important to parse header using a [`Cursor`] in order to preserve the buffer while
+/// the whole message has not been received, this way we can reset the cursor and retry later.
+///
+/// **Note** : this is not used to write [`ServerRequest`] since write only once to the buffer.
+///
+/// [`Cursor`]: std::io::Cursor
+/// [`ServerResponse`]: crate::server_message::response::ServerResponse
+/// [`ServerRequest`]: crate::server_message::request::ServerRequest
 #[derive(Debug)]
 pub struct Header {
     pub(crate) code: MessageCode,
     pub(crate) message_len: usize,
 }
 
+/// [u32] enum representation of server message code used by [`ServerRequest`] to query the server and
+/// [`ServerResponse`] to read incoming messages.
+/// **Note** : soulseek protocol is not open source and change might happen in the main server in the future.
+/// [`MessageCode::Unknown`] is used handle unknown message without causing panic on deserialization.
+/// This should be used to track and implement unkown/new messages in the future.
+///
+/// [`ServerRequest`]: crate::server_message::request::ServerRequest
+/// [`MessageCode::Unknown`]: MessageCode::Unknown
+/// [`ServerResponse`]: crate::server_message::response::ServerResponse
 #[repr(u32)]
 #[derive(Debug)]
 pub enum MessageCode {

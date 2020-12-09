@@ -14,7 +14,6 @@ use std::net::Ipv4Addr;
 use std::num::TryFromIntError;
 use tokio::io::{AsyncWriteExt, BufWriter};
 use tokio::net::TcpStream;
-use tokio::time;
 use tokio::time::Elapsed;
 
 pub mod connection;

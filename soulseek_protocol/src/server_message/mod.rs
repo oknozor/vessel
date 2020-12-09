@@ -7,7 +7,7 @@ pub mod user;
 
 pub const HEADER_LEN: u32 = 8;
 
-/// Header for the [`ServerResponse`] enum :
+/// # [`ServerResponse`] header
 ///
 /// | content length   | message code    |
 /// | :-------------: | :-------------: |
@@ -17,7 +17,9 @@ pub const HEADER_LEN: u32 = 8;
 /// It's important to parse header using a [`Cursor`] in order to preserve the buffer while
 /// the whole message has not been received, this way we can reset the cursor and retry later.
 ///
-/// **Note** : this is not used to write [`ServerRequest`] since write only once to the buffer.
+/// **Note** :
+///
+/// this is not used to write [`ServerRequest`] since write only once to the buffer.
 ///
 /// [`Cursor`]: std::io::Cursor
 /// [`ServerResponse`]: crate::server_message::response::ServerResponse
@@ -30,7 +32,9 @@ pub struct Header {
 
 /// [u32] enum representation of server message code used by [`ServerRequest`] to query the server and
 /// [`ServerResponse`] to read incoming messages.
-/// **Note** : soulseek protocol is not open source and change might happen in the main server in the future.
+/// **Note** :
+///
+/// soulseek protocol is not open source and change might happen in the main server in the future.
 /// [`MessageCode::Unknown`] is used handle unknown message without causing panic on deserialization.
 /// This should be used to track and implement unkown/new messages in the future.
 ///

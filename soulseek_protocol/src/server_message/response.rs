@@ -9,7 +9,7 @@ use bytes::Buf;
 use std::io::Cursor;
 
 #[derive(Debug, Deserialize, Serialize)]
-/// This is undocumented yet, refer to [soulseek protocol documentation on nicotine+](https://nicotine-plus.github.io/nicotine-plus/doc/SLSKPROTOCOL.html#peer-messages)
+/// All incoming message from the Soulseek server.
 pub enum ServerResponse {
     LoginResponse(LoginResponse),
     RoomList(RoomList),

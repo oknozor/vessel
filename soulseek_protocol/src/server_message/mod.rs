@@ -5,6 +5,7 @@ pub mod response;
 pub mod room;
 pub mod user;
 
+/// length of a server message header (8 bytes)
 pub const HEADER_LEN: u32 = 8;
 
 /// # [`ServerResponse`] header

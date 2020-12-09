@@ -19,6 +19,12 @@ pub mod connection;
 // pub mod listener;
 // pub mod peer_connection;
 mod peer_message;
+
+/// Contains all the soulseek protocol server message, see [`ServerRequest`] and [`ServerResponse`]
+/// for a detailed explanation of each one.
+///
+///  [`ServerRequest`]: crate::server_message::request:ServerRequest
+///  [`ServerResponse`]: crate::server_message::request::ServerResponse
 pub mod server_message;
 pub mod shutdown;
 

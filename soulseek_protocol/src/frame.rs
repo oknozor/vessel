@@ -1,6 +1,5 @@
 use std::io::Cursor;
-use tokio::io::BufWriter;
-use tokio::net::TcpStream;
+use tokio::io::{BufWriter, AsyncWrite};
 
 /// A utility trait to parse incoming message according to soulseek protocol message definition
 /// **NOTE : ** Since message headers are different depending on the message family, implementor of
@@ -20,13 +19,19 @@ pub trait ParseBytes {
 /// to a TCP stream buffer.
 #[async_trait]
 pub trait ToBytes {
-    /// Write the request to a tcp buffer.
+    /// Write the request to the underlying buffer via [`BufWriter`].
     ///
     /// ## Example :
     /// ```
     /// use soulseek_protocol::server_message::login::LoginRequest;
-    /// let request = LoginRequest::new("username", "password");
+    /// use tokio::io::BufWriter;
     ///
+    /// let request = LoginRequest::new("username", "password");
+    /// let mut buff = BufWriter::new(&mut &[0u8, 1024]);
+    ///
+    /// request.write_to_buf(&mut buff).await.expect("Failed to write to buffer");
     /// ```
-    async fn write_to_buf(&self, buffer: &mut BufWriter<TcpStream>) -> tokio::io::Result<()>;
+    ///
+    /// [`BufWriter`]: tokio::io::BufWriter
+    async fn write_to_buf(&self, buffer: &mut BufWriter<impl AsyncWrite + Unpin + Send>) -> tokio::io::Result<()>;
 }

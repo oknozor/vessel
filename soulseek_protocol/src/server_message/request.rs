@@ -3,8 +3,7 @@ use crate::server_message::chat::SayInChat;
 use crate::server_message::login::LoginRequest;
 use crate::server_message::{MessageCode, HEADER_LEN};
 use crate::write_string;
-use tokio::io::{self, AsyncWriteExt, BufWriter};
-use tokio::net::TcpStream;
+use tokio::io::{self, AsyncWriteExt, BufWriter, AsyncWrite};
 
 #[derive(Debug, Deserialize, Serialize)]
 /// This is undocumented yet, refer to [soulseek protocol documentation on nicotine+](https://nicotine-plus.github.io/nicotine-plus/doc/SLSKPROTOCOL.html#peer-messages)
@@ -46,7 +45,7 @@ impl ServerRequest {
 }
 #[async_trait]
 impl ToBytes for ServerRequest {
-    async fn write_to_buf(&self, buffer: &mut BufWriter<TcpStream>) -> io::Result<()> {
+    async fn write_to_buf(&self, buffer: &mut BufWriter<impl AsyncWrite + Unpin + Send>) -> io::Result<()> {
         match self {
             ServerRequest::Login(login_request) => login_request.write_to_buf(buffer).await,
             ServerRequest::SetListenPort(_) => todo!(),
@@ -72,7 +71,7 @@ impl ToBytes for ServerRequest {
 pub async fn write_str_msg(
     src: &str,
     code: MessageCode,
-    buffer: &mut BufWriter<TcpStream>,
+    buffer: &mut BufWriter<impl AsyncWrite + Unpin + Send>,
 ) -> tokio::io::Result<()> {
     let bytes = src.as_bytes();
     let message_len = bytes.len() as u32 + HEADER_LEN;

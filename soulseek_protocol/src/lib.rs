@@ -12,12 +12,15 @@ use bytes::Buf;
 use std::io::{Cursor, Read};
 use std::net::Ipv4Addr;
 use std::num::TryFromIntError;
-use tokio::io::{AsyncWriteExt, BufWriter, AsyncWrite};
+use tokio::io::{AsyncWrite, AsyncWriteExt, BufWriter};
 use tokio::time::Elapsed;
 
 pub mod connection;
+// pub mod listener;
+// pub mod peer_connection;
 mod peer_message;
 pub mod server_message;
+pub mod shutdown;
 
 mod distributed_message;
 pub mod frame;
@@ -35,7 +38,10 @@ pub enum SlskError {
     Other(crate::Error),
 }
 
-pub async fn write_string(src: &str, buffer: &mut BufWriter<impl AsyncWrite + Unpin + Send>) -> tokio::io::Result<()> {
+pub async fn write_string(
+    src: &str,
+    buffer: &mut BufWriter<impl AsyncWrite + Unpin + Send>,
+) -> tokio::io::Result<()> {
     let bytes = src.as_bytes();
     buffer.write_u32_le(bytes.len() as u32).await?;
     buffer.write(bytes).await?;

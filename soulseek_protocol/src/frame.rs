@@ -1,5 +1,5 @@
 use std::io::Cursor;
-use tokio::io::{BufWriter, AsyncWrite};
+use tokio::io::{AsyncWrite, BufWriter};
 
 /// A utility trait to parse incoming message according to soulseek protocol message definition
 /// **NOTE : ** Since message headers are different depending on the message family, implementor of
@@ -33,5 +33,8 @@ pub trait ToBytes {
     /// ```
     ///
     /// [`BufWriter`]: tokio::io::BufWriter
-    async fn write_to_buf(&self, buffer: &mut BufWriter<impl AsyncWrite + Unpin + Send>) -> tokio::io::Result<()>;
+    async fn write_to_buf(
+        &self,
+        buffer: &mut BufWriter<impl AsyncWrite + Unpin + Send>,
+    ) -> tokio::io::Result<()>;
 }

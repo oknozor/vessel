@@ -1,4 +1,4 @@
-mod messages;
+pub mod messages;
 
 use crate::peer_message::MessageCode::{PeerInit, PierceFireWall, Unknown};
 

@@ -1,8 +1,8 @@
 use crate::server_message::MessageCode;
 use std::io::Cursor;
 use std::net::Ipv4Addr;
-use tokio::io::{AsyncWriteExt, AsyncWrite};
 use tokio::io::BufWriter;
+use tokio::io::{AsyncWrite, AsyncWriteExt};
 
 use crate::frame::{ParseBytes, ToBytes};
 use crate::{read_ipv4, read_string, write_string, STR_LENGTH_PREFIX};
@@ -63,7 +63,10 @@ impl LoginRequest {
 
 #[async_trait]
 impl ToBytes for LoginRequest {
-    async fn write_to_buf(&self, buffer: &mut BufWriter<impl AsyncWrite + Unpin + Send>) -> tokio::io::Result<()> {
+    async fn write_to_buf(
+        &self,
+        buffer: &mut BufWriter<impl AsyncWrite + Unpin + Send>,
+    ) -> tokio::io::Result<()> {
         let version_len = 4;
         let minor_version_len = 4;
 

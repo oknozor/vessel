@@ -6,7 +6,7 @@ use crate::{read_string, write_string};
 use bytes::Buf;
 use std::io::Cursor;
 use std::str::Bytes as StdBytes;
-use tokio::io::{AsyncWriteExt, BufWriter, AsyncWrite};
+use tokio::io::{AsyncWrite, AsyncWriteExt, BufWriter};
 
 pub enum PeerMessage {
     PierceFirewall(u32),
@@ -19,7 +19,10 @@ pub enum PeerMessage {
 
 #[async_trait]
 impl ToBytes for PeerMessage {
-    async fn write_to_buf(&self, buffer: &mut BufWriter<impl AsyncWrite + Unpin + Send>) -> tokio::io::Result<()> {
+    async fn write_to_buf(
+        &self,
+        buffer: &mut BufWriter<impl AsyncWrite + Unpin + Send>,
+    ) -> tokio::io::Result<()> {
         match self {
             PeerMessage::PierceFirewall(token) => {
                 buffer.write_u32_le(HEADER_LEN).await?;

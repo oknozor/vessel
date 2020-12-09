@@ -6,7 +6,7 @@ use crate::write_string;
 use tokio::io::{self, AsyncWrite, AsyncWriteExt, BufWriter};
 
 #[derive(Debug, Deserialize, Serialize)]
-/// This is undocumented yet, refer to [soulseek protocol documentation on nicotine+](https://nicotine-plus.github.io/nicotine-plus/doc/SLSKPROTOCOL.html#peer-messages)
+/// All outgoing message we can send to the soulseek server.
 pub enum ServerRequest {
     ///  **Description** : Send your username, password, and client version.
     ///

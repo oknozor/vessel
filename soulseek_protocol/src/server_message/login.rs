@@ -12,6 +12,25 @@ use bytes::Buf;
 const VERSION: u32 = 157;
 const MINOR_VERSION: u32 = 19;
 
+/// # Login request
+/// Send your username, password, and client version.
+///
+///  ## Protocol message
+/// | Description | Message Length | Message Code | Username Length | Username                | Password Length | Password                |
+/// | ----------- | -------------- | ------------  | --------------- | ----------------------- | --------------- | ----------------------- |
+/// | Human       | `72u32`        | `1u32`        | `8u32`          | `"username"`            | 8               | `"password"`            |
+/// | Hex         | 48 00 00 00    | 01 00 00 00  | 08 00 00 00      | 75 73 65 72 6e 61 6d 65 | 08 00 00 00     | 70 61 73 73 77 6f 72 64 |
+///
+///
+/// | Description | Version     | Length      | Hash                                                                                            | Minor Version |
+/// | ----------- | ----------- | ----------- | ----------------------------------------------------------------------------------------------- | ------------- |
+/// | Human       | `157u32`         | `32u32`| "d51c9a7e9353746a6020f9602d452929"                                                              | 19            |
+/// | Hex         | 9d 00 00 00 | 20 00 00 00 | 64 35 31 63 39 61 37 65 39 33 35 33 37 34 36 61 36 30 32 30 66 39 36 30 32 64 34 35 32 39 32 39 | 13 00 00 00   |
+///
+/// **Note : ** :
+///
+/// Don't create [`LoginRequest`] struct manually, use [`LoginRequest::new`] to generate the md5
+/// digest and use the correct version numbers.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct LoginRequest {
     username: String,
@@ -22,6 +41,13 @@ pub struct LoginRequest {
 }
 
 impl LoginRequest {
+    /// Create a new login request from username and password, this will generate a md5 password hash
+    /// and append the correct minor and major version to the request (see: [`LoginRequest`])
+    ///
+    /// ## Example :
+    /// ```
+    /// let login_request = LoginRequest::new("bob", "hunter2");
+    /// ```
     pub fn new(username: &str, password: &str) -> Self {
         let md5_digest = md5::compute(format!("{}{}", username, password));
         let md5_digest = format!("{:x}", md5_digest);

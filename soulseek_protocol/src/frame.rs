@@ -20,5 +20,13 @@ pub trait ParseBytes {
 /// to a TCP stream buffer.
 #[async_trait]
 pub trait ToBytes {
+    /// Write the request to a tcp buffer.
+    ///
+    /// ## Example :
+    /// ```
+    /// use soulseek_protocol::server_message::login::LoginRequest;
+    /// let request = LoginRequest::new("username", "password");
+    ///
+    /// ```
     async fn write_to_buf(&self, buffer: &mut BufWriter<TcpStream>) -> tokio::io::Result<()>;
 }

@@ -8,11 +8,7 @@ extern crate tracing;
 use std::fmt;
 use std::string::FromUtf8Error;
 
-use bytes::Buf;
-use std::io::{Cursor, Read};
-use std::net::Ipv4Addr;
 use std::num::TryFromIntError;
-use tokio::io::{AsyncWrite, AsyncWriteExt, BufWriter};
 use tokio::time::Elapsed;
 
 pub mod connection;
@@ -30,6 +26,7 @@ pub mod shutdown;
 
 mod distributed_message;
 pub mod frame;
+mod peer_connection;
 
 pub type Result<T> = std::result::Result<T, SlskError>;
 pub type Error = Box<dyn std::error::Error + Send + Sync>;

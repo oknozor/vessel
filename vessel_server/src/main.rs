@@ -3,6 +3,7 @@ extern crate tokio;
 #[macro_use]
 extern crate tracing;
 
+use futures::TryFutureExt;
 use soulseek_protocol::server_message::login::LoginRequest;
 use soulseek_protocol::server_message::request::ServerRequest;
 use soulseek_protocol::server_message::response::ServerResponse;
@@ -62,8 +63,10 @@ async fn main() -> std::io::Result<()> {
     // Once every thing is ready we need to login before talking to the soulseek server
     // Vessel support one and only one user connection, credentials are retrieved from vessel configuration
     let login = task::spawn(async move {
+        let mut listen_port_sender = login_sender.clone();
         login_sender
             .send(ServerRequest::Login(LoginRequest::new("vessel", "lessev")))
+            .and_then(|_| listen_port_sender.send(ServerRequest::SetListenPort(2243)))
             .await
     });
 

@@ -1,5 +1,4 @@
-use crate::frame::ParseBytes;
-use crate::{read_ipv4, read_string};
+use crate::frame::{read_ipv4, read_string, ParseBytes};
 use bytes::Buf;
 use std::io::Cursor;
 use std::net::Ipv4Addr;

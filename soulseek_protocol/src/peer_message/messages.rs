@@ -1,8 +1,7 @@
-use crate::frame::ToBytes;
+use crate::frame::{read_string, write_string, ToBytes};
 use crate::peer_message::messages::ConnectionType::{DistributedNetwork, FileTransfer, PeerToPeer};
 use crate::peer_message::messages::PeerMessage::PeerInit;
 use crate::peer_message::{Header, MessageCode, HEADER_LEN};
-use crate::{read_string, write_string};
 use bytes::Buf;
 use std::io::Cursor;
 use std::str::Bytes as StdBytes;

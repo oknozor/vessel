@@ -67,22 +67,20 @@ impl ServerResponse {
 impl ServerResponse {
     pub fn check(src: &mut Cursor<&[u8]>) -> Result<Header, SlskError> {
         // Check if the buffer contains enough bytes to parse the message error
-        if src.remaining() < 8 {
+        if src.remaining() < HEADER_LEN as usize {
             return Err(SlskError::Incomplete);
         }
 
         // Check if the buffer contains the full message already
-        let (len, code) = get_header(src)?;
-        if src.remaining() < len {
+        let header = Header::read(src)?;
+        if src.remaining() < header.message_len {
             Err(SlskError::Incomplete)
         } else {
             // discard header data
             src.set_position(0);
             src.advance(HEADER_LEN as usize);
-            Ok(Header {
-                code,
-                message_len: len,
-            })
+
+            Ok(header)
         }
     }
 
@@ -193,15 +191,4 @@ impl ServerResponse {
             MessageCode::Unknown => todo!(),
         }
     }
-}
-
-fn get_header(src: &mut Cursor<&[u8]>) -> std::io::Result<(usize, MessageCode)> {
-    let message_length = src.get_u32_le();
-    let code = src.get_u32_le();
-    let code = MessageCode::from(code);
-
-    // We can subtract message code from the length since we already know it
-    let message_length = message_length as usize - 4;
-
-    Ok((message_length, code))
 }

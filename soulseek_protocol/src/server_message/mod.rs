@@ -1,3 +1,6 @@
+use bytes::Buf;
+use std::io::Cursor;
+
 pub mod chat;
 pub mod login;
 pub mod request;
@@ -29,6 +32,19 @@ pub const HEADER_LEN: u32 = 8;
 pub struct Header {
     pub(crate) code: MessageCode,
     pub(crate) message_len: usize,
+}
+
+impl Header {
+    pub fn read(src: &mut Cursor<&[u8]>) -> std::io::Result<Self> {
+        let message_length = src.get_u32_le();
+        let code = src.get_u32_le();
+        let code = MessageCode::from(code);
+
+        // We can subtract message code from the length since we already know it
+        let message_len = message_length as usize - 4;
+
+        Ok(Self { message_len, code })
+    }
 }
 
 /// [u32] enum representation of server message code used by [`ServerRequest`] to query the server and

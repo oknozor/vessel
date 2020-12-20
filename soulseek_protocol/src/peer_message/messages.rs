@@ -2,6 +2,7 @@ use crate::frame::{read_string, write_string, ToBytes};
 use crate::peer_message::messages::ConnectionType::{DistributedNetwork, FileTransfer, PeerToPeer};
 use crate::peer_message::messages::PeerMessage::PeerInit;
 use crate::peer_message::{Header, MessageCode, HEADER_LEN};
+use crate::SlskError;
 use bytes::Buf;
 use std::io::Cursor;
 use std::str::Bytes as StdBytes;
@@ -52,7 +53,26 @@ impl ToBytes for PeerMessage {
 }
 
 impl PeerMessage {
-    fn parse(src: &mut Cursor<&[u8]>, header: Header) -> std::io::Result<Self> {
+    pub fn check(src: &mut Cursor<&[u8]>) -> Result<Header, SlskError> {
+        // Check if the buffer contains enough bytes to parse the message error
+        if src.remaining() < HEADER_LEN as usize {
+            return Err(SlskError::Incomplete);
+        }
+
+        // Check if the buffer contains the full message already
+        let header = Header::read(src)?;
+        if src.remaining() < header.message_len {
+            Err(SlskError::Incomplete)
+        } else {
+            // discard header data
+            src.set_position(0);
+            src.advance(HEADER_LEN as usize);
+
+            Ok(header)
+        }
+    }
+
+    pub(crate) fn parse(src: &mut Cursor<&[u8]>, header: &Header) -> std::io::Result<Self> {
         let message = match header.code {
             MessageCode::PierceFireWall => PeerMessage::PierceFirewall(src.get_u32_le()),
             MessageCode::PeerInit => PeerInit {
@@ -60,10 +80,17 @@ impl PeerMessage {
                 connection_type: ConnectionType::from(read_string(src)?),
                 token: src.get_u32_le(),
             },
-            MessageCode::Unknown => panic!("Unkown message kind, code={}", header.code as u32),
+            MessageCode::Unknown => panic!("Unkown message kind, code"),
         };
 
         Ok(message)
+    }
+
+    pub fn kind(&self) -> &str {
+        match self {
+            PeerMessage::PierceFirewall(_) => "PierceFirewall",
+            PeerMessage::PeerInit { .. } => "PeerInit",
+        }
     }
 }
 

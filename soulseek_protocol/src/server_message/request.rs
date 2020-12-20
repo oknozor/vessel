@@ -1,8 +1,8 @@
+use crate::frame::write_string;
 use crate::frame::ToBytes;
 use crate::server_message::chat::SayInChat;
 use crate::server_message::login::LoginRequest;
 use crate::server_message::{MessageCode, HEADER_LEN};
-use crate::write_string;
 use tokio::io::{self, AsyncWrite, AsyncWriteExt, BufWriter};
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -93,7 +93,9 @@ impl ToBytes for ServerRequest {
     ) -> io::Result<()> {
         match self {
             ServerRequest::Login(login_request) => login_request.write_to_buf(buffer).await,
-            ServerRequest::SetListenPort(_) => todo!(),
+            ServerRequest::SetListenPort(port) => {
+                write_u32_msg(*port, MessageCode::SetListenPort, buffer).await
+            }
             ServerRequest::GetPeerAddress(username) => {
                 write_str_msg(username, MessageCode::GetPeerAddress, buffer).await
             }
@@ -123,5 +125,17 @@ pub async fn write_str_msg(
     buffer.write_u32_le(message_len).await?;
     buffer.write_u32_le(code as u32).await?;
     write_string(src, buffer).await?;
+    Ok(())
+}
+
+pub async fn write_u32_msg(
+    src: u32,
+    code: MessageCode,
+    buffer: &mut BufWriter<impl AsyncWrite + Unpin + Send>,
+) -> tokio::io::Result<()> {
+    let message_len = 4 + HEADER_LEN;
+    buffer.write_u32_le(message_len).await?;
+    buffer.write_u32_le(code as u32).await?;
+    buffer.write_u32_le(src).await?;
     Ok(())
 }

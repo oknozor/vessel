@@ -44,32 +44,6 @@ pub enum SlskError {
     Other(crate::Error),
 }
 
-pub async fn write_string(
-    src: &str,
-    buffer: &mut BufWriter<impl AsyncWrite + Unpin + Send>,
-) -> tokio::io::Result<()> {
-    let bytes = src.as_bytes();
-    buffer.write_u32_le(bytes.len() as u32).await?;
-    buffer.write(bytes).await?;
-    Ok(())
-}
-
-pub fn read_string(src: &mut Cursor<&[u8]>) -> std::io::Result<String> {
-    let string_len = src.get_u32_le();
-    if string_len > 0 {
-        let mut string = vec![0u8; string_len as usize];
-        src.read_exact(&mut string)?;
-        Ok(String::from_utf8_lossy(&string).to_string())
-    } else {
-        Ok("".to_string())
-    }
-}
-
-pub fn read_ipv4(src: &mut Cursor<&[u8]>) -> std::io::Result<Ipv4Addr> {
-    let ip = src.get_u32_le();
-    Ok(Ipv4Addr::from(ip))
-}
-
 impl From<String> for SlskError {
     fn from(src: String) -> SlskError {
         SlskError::Other(src.into())
@@ -113,5 +87,3 @@ impl fmt::Display for SlskError {
         }
     }
 }
-
-pub const STR_LENGTH_PREFIX: u32 = 4;

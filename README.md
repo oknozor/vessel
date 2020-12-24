@@ -1,7 +1,32 @@
 ## Vessel 
+A self-hostable soulseek client. 
 
-**WORK IN PROGESS**
+This is still a **WORK IN PROGESS** and not usable yet.
 
+- [x] soulseek server connection
+   - [ ] server messages (incomplete)
+- [ ] peer connection
+  - [x] peer message (protocol)
+  - [ ] TCP listener
+- [ ] distributed connection
+  - [ ] distributed message (protocol)
+- [ ] server config
+  - [ ] soulseek credentials
+  - [ ] peer connection limit
+  - [ ] download/upload rate limit
+  - [ ] shared folder
+  - [ ] download folder
+- [x] SSE Event
+- [x] HTTP API
+  - [ ] secured 
+  - [ ] error handling
+  - [ ] openapi/swagger doc
+- [ ] UI
+  - [x] SSE connection
+  - [ ] vessel HTTP client
+  - [ ] login
+  - [ ] design
+  
 ## Useful links
 
 - [soulseek protocol messages](https://nicotine-plus.github.io/nicotine-plus/doc/SLSKPROTOCOL.html#server-code-1)

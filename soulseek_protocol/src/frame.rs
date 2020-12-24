@@ -4,11 +4,12 @@ use std::net::Ipv4Addr;
 use tokio::io::{AsyncWrite, AsyncWriteExt, BufWriter};
 
 /// A utility trait to parse incoming message according to soulseek protocol message definition
+///
 /// **NOTE : ** Since message headers are different depending on the message family, implementor of
 /// this trait shall not care about message headers, these are meant to be handled in a top level
 /// structure, typically an enum matching against a pre parsed message code and checking the buffer
 /// length against the message length header.
-/// For instance [`ServerResponse`] header length is 8 bytes while [`PeerMessage`]'s header is 4.
+/// For instance [`ServerResponse`] header length is 8 bytes while [`PeerMessage`]'s header is 5.
 ///
 /// [`ServerResponse`]: crate::server_message::response::ServerResponse
 /// [`PeerMessage`]: crate::peer_message::message::PeerMessage

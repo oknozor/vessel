@@ -1,8 +1,10 @@
 use crate::frame::ParseBytes;
 use crate::server_message::chat::*;
 use crate::server_message::login::*;
+use crate::server_message::peer::{Parent, PeerConnection};
 use crate::server_message::room::*;
 use crate::server_message::user::*;
+use crate::server_message::MessageCode::{ConnectToPeer, SetRoomTicker};
 use crate::server_message::{Header, MessageCode, HEADER_LEN};
 use crate::SlskError;
 use bytes::Buf;
@@ -32,6 +34,8 @@ pub enum ServerResponse {
     RoomJoinRequestAck(String),
     ChatMessage(ChatMessage),
     UserStats(UserStats),
+    ConnectToPeer(PeerConnection),
+    PossibleParents(Vec<Parent>),
     Unknown(u32, u32, Vec<u8>), // length, code, raw bytes,
 }
 
@@ -59,7 +63,9 @@ impl ServerResponse {
             ServerResponse::RoomJoinRequestAck(_) => "RoomJoinRequestAck",
             ServerResponse::ChatMessage(_) => "ChatMessage",
             ServerResponse::UserStats(_) => "UserStats",
+            ServerResponse::ConnectToPeer(_) => "PeerConnection",
             ServerResponse::Unknown(_, _, _) => "Unknown",
+            ServerResponse::PossibleParents(_) => "PossibleParents",
         }
     }
 }
@@ -99,7 +105,9 @@ impl ServerResponse {
                 UserJoinedRoom::parse(src).map(ServerResponse::UserJoinedRoom)
             }
             MessageCode::UserLeftRoom => todo!(),
-            MessageCode::ConnectToPeer => todo!(),
+            MessageCode::ConnectToPeer => {
+                PeerConnection::parse(src).map(ServerResponse::ConnectToPeer)
+            }
             MessageCode::PrivateMessages => todo!(),
             MessageCode::AcknowledgePrivateMessage => todo!(),
             MessageCode::FileSearch => todo!(),
@@ -143,7 +151,7 @@ impl ServerResponse {
             MessageCode::CheckPrivileges => todo!(),
             MessageCode::SearchRequest => todo!(),
             MessageCode::AcceptChildren => todo!(),
-            MessageCode::PossibleParents => todo!(),
+            MessageCode::PossibleParents => Vec::parse(src).map(ServerResponse::PossibleParents),
             MessageCode::WishlistSearch => todo!(),
             MessageCode::WishlistInterval => Ok(ServerResponse::WishlistInterval(src.get_u32_le())),
             MessageCode::GetSimilarUsers => todo!(),

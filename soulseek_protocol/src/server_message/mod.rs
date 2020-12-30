@@ -3,6 +3,7 @@ use std::io::Cursor;
 
 pub mod chat;
 pub mod login;
+pub mod peer;
 pub mod request;
 pub mod response;
 pub mod room;

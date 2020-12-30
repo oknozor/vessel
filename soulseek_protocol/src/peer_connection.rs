@@ -62,7 +62,7 @@ impl PeerConnection {
         self.buffer.advance(HEADER_LEN as usize + message_len)
     }
 
-    fn new(socket: TcpStream) -> PeerConnection {
+    pub(crate) fn new(socket: TcpStream) -> PeerConnection {
         PeerConnection {
             stream: BufWriter::new(socket),
             buffer: BytesMut::with_capacity(4 * 1024),

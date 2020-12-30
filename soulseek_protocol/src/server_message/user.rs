@@ -13,8 +13,16 @@ pub struct UserStatus {
 impl ParseBytes for UserStatus {
     type Output = Self;
 
-    fn parse(_src: &mut Cursor<&[u8]>) -> std::io::Result<Self::Output> {
-        unimplemented!()
+    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self::Output> {
+        let username = read_string(src)?;
+        let status = Status::from(src.get_u32_le());
+        let privileged = src.get_u8() == 1;
+
+        Ok(UserStatus {
+            username,
+            status,
+            privileged,
+        })
     }
 }
 

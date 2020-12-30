@@ -62,6 +62,12 @@ pub enum ServerRequest {
     ///
     /// **Response** : [`ServerResponse::UserStats`][`crate::server_message::response::ServerResponse::UserStats`]
     GetUserStats(String),
+    /// **Description** : We inform the server if we have a distributed parent or not. If not, the server eventually
+    /// sends us a PossibleParents message with a list of 10 possible parents to connect to.
+    ///
+    /// **Response** : no message
+    NoParents(bool),
+
     /// TODO
     Unimplemented,
 }
@@ -91,6 +97,9 @@ impl ToBytes for ServerRequest {
             ServerRequest::EnablePublicChat => todo!(),
             ServerRequest::DisablePublicChat => todo!(),
             ServerRequest::GetUserStats(_) => todo!(),
+            ServerRequest::NoParents(value) => {
+                write_bool_msg(*value, MessageCode::HaveNoParents, buffer).await
+            }
             ServerRequest::Unimplemented => todo!(),
         }
     }
@@ -112,6 +121,7 @@ impl ServerRequest {
             ServerRequest::EnablePublicChat => "EnablePublicChat",
             ServerRequest::DisablePublicChat => "DisablePublicChat",
             ServerRequest::GetUserStats(_) => "GetUserStats",
+            ServerRequest::NoParents(_) => "NoParent",
             ServerRequest::Unimplemented => "Unimplemented",
         }
     }
@@ -130,12 +140,29 @@ pub async fn write_str_msg(
     Ok(())
 }
 
+pub async fn write_bool_msg(
+    src: bool,
+    code: MessageCode,
+    buffer: &mut BufWriter<impl AsyncWrite + Unpin + Send>,
+) -> tokio::io::Result<()> {
+    buffer.write_u32_le(5).await?;
+    buffer.write_u32_le(code as u32).await?;
+
+    if src {
+        buffer.write_u8(1).await?;
+    } else {
+        buffer.write_u8(0).await?;
+    }
+
+    Ok(())
+}
+
 pub async fn write_u32_msg(
     src: u32,
     code: MessageCode,
     buffer: &mut BufWriter<impl AsyncWrite + Unpin + Send>,
 ) -> tokio::io::Result<()> {
-    let message_len = 4 + HEADER_LEN;
+    let message_len = HEADER_LEN;
     buffer.write_u32_le(message_len).await?;
     buffer.write_u32_le(code as u32).await?;
     buffer.write_u32_le(src).await?;

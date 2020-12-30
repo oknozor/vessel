@@ -1,13 +1,13 @@
 use crate::frame::{read_string, write_string, ToBytes};
-use crate::peer_message::messages::ConnectionType::{DistributedNetwork, FileTransfer, PeerToPeer};
+use crate::message_common::ConnectionType;
 use crate::peer_message::messages::PeerMessage::PeerInit;
 use crate::peer_message::{Header, MessageCode, HEADER_LEN};
 use crate::SlskError;
 use bytes::Buf;
 use std::io::Cursor;
-use std::str::Bytes as StdBytes;
 use tokio::io::{AsyncWrite, AsyncWriteExt, BufWriter};
 
+#[derive(Debug)]
 pub enum PeerMessage {
     PierceFirewall(u32),
     PeerInit {
@@ -90,43 +90,6 @@ impl PeerMessage {
         match self {
             PeerMessage::PierceFirewall(_) => "PierceFirewall",
             PeerMessage::PeerInit { .. } => "PeerInit",
-        }
-    }
-}
-
-pub enum ConnectionType {
-    PeerToPeer,
-    FileTransfer,
-    DistributedNetwork,
-}
-
-impl From<String> for ConnectionType {
-    fn from(code: String) -> Self {
-        match code {
-            p if p == "P" => PeerToPeer,
-            f if f == "F" => FileTransfer,
-            d if d == "D" => DistributedNetwork,
-            other => panic!("Unexpected connection type received : {}", other),
-        }
-    }
-}
-
-impl AsRef<str> for ConnectionType {
-    fn as_ref(&self) -> &str {
-        match self {
-            PeerToPeer => "P",
-            FileTransfer => "F",
-            DistributedNetwork => "D",
-        }
-    }
-}
-
-impl ConnectionType {
-    fn bytes(&self) -> StdBytes {
-        match self {
-            PeerToPeer => "P".bytes(),
-            FileTransfer => "F".bytes(),
-            DistributedNetwork => "D".bytes(),
         }
     }
 }

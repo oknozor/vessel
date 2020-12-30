@@ -16,6 +16,11 @@ pub mod connection;
 // pub mod peer_connection;
 mod peer_message;
 
+mod distributed_message;
+pub mod frame;
+pub mod listener;
+pub mod message_common;
+mod peer_connection;
 /// Contains all the soulseek protocol server message, see [`ServerRequest`] and [`ServerResponse`]
 /// for a detailed explanation of each one.
 ///
@@ -23,10 +28,6 @@ mod peer_message;
 ///  [`ServerResponse`]: crate::server_message::request::ServerResponse
 pub mod server_message;
 pub mod shutdown;
-
-mod distributed_message;
-pub mod frame;
-mod peer_connection;
 
 pub type Result<T> = std::result::Result<T, SlskError>;
 pub type Error = Box<dyn std::error::Error + Send + Sync>;

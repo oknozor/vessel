@@ -1,16 +1,13 @@
+use crate::peer_connection::PeerConnection;
+use crate::shutdown::Shutdown;
 /// Code and documentation from this module have been heavily inspired by tokio [mini-redis](https://github.com/tokio-rs/mini-redis/blob/master/src/server.rs)
 /// tutorial.
-
-use crate::{Command, Connection, Db, Shutdown};
-
 use std::future::Future;
 use std::sync::Arc;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{broadcast, mpsc, Semaphore};
 use tokio::time::{self, Duration};
-use tracing::{debug, error, info, instrument};
-use crate::peer_connection::PeerConnection;
-use crate::shutdown::Shutdown;
+use tracing::{debug, error, info};
 
 /// Server listener state. Created in the `run` call. It includes a `run` method
 /// which performs the TCP listening and initialization of per-connection state.
@@ -137,11 +134,6 @@ pub async fn run(listener: TcpListener, shutdown: impl Future) -> crate::Result<
     // All `<async op>` statements are executed concurrently. Once the **first**
     // op completes, its associated `<step to perform with result>` is
     // performed.
-    //
-    // The `select! macro is a foundational building block for writing
-    // asynchronous Rust. See the API docs for more details:
-    //
-    // https://docs.rs/tokio/*/tokio/macro.select.html
     tokio::select! {
         res = server.run() => {
             // If an error is received here, accepting connections from the TCP
@@ -225,7 +217,7 @@ impl PeerListener {
             let mut handler = Handler {
                 // Initialize the connection state. This allocates read/write
                 // buffers to perform redis protocol frame parsing.
-                connection: Connection::new(socket),
+                connection: PeerConnection::new(socket),
 
                 // The connection state needs a handle to the max connections
                 // semaphore. When the handler is done processing the
@@ -266,7 +258,10 @@ impl PeerListener {
             // Perform the accept operation. If a socket is successfully
             // accepted, return it. Otherwise, save the error.
             match self.listener.accept().await {
-                Ok((socket, _)) => return Ok(socket),
+                Ok((socket, _)) => {
+                    info!("{}", socket.peer_addr().unwrap());
+                    return Ok(socket);
+                }
                 Err(err) => {
                     if backoff > 64 {
                         // Accept has failed too many times. Return the error.
@@ -276,7 +271,7 @@ impl PeerListener {
             }
 
             // Pause execution until the back off period elapses.
-            time::sleep(Duration::from_secs(backoff)).await;
+            time::delay_for(Duration::from_secs(backoff)).await;
 
             // Double the back off
             backoff *= 2;
@@ -297,15 +292,14 @@ impl Handler {
     ///
     /// When the shutdown signal is received, the connection is processed until
     /// it reaches a safe state, at which point it is terminated.
-    #[instrument(skip(self))]
     async fn run(&mut self) -> crate::Result<()> {
         // As long as the shutdown signal has not been received, try to read a
         // new request frame.
         while !self.shutdown.is_shutdown() {
             // While reading a request frame, also listen for the shutdown
             // signal.
-            let maybe_frame = tokio::select! {
-                res = self.connection.read_frame() => res?,
+            let maybe_message = tokio::select! {
+                res = self.connection.read_response_with_timeout() => res?,
                 _ = self.shutdown.recv() => {
                     // If a shutdown signal is received, return from `run`.
                     // This will result in the task terminating.
@@ -317,28 +311,12 @@ impl Handler {
             // If `None` is returned from `read_frame()` then the peer closed
             // the socket. There is no further work to do and the task can be
             // terminated.
-            let frame = match maybe_frame {
-                Some(frame) => frame,
+            let peer_message = match maybe_message {
+                Some(peer_message) => peer_message,
                 None => return Ok(()),
             };
 
-            /// TODO : implement ParseBytes for PeerInitMessages,
-            /// TODO : Alo will we receive Distributed messages on the same TCPStream ?
-            // Convert the redis frame into a command struct. This returns an
-            // error if the frame is not a valid redis command or it is an
-            // unsupported command.
-            let cmd = Command::from_frame(frame)?;
-
-            // Logs the `cmd` object. The syntax here is a shorthand provided by
-            // the `tracing` crate. It can be thought of as similar to:
-            //
-            // ```
-            // debug!(cmd = format!("{:?}", cmd));
-            // ```
-            //
-            // `tracing` provides structured logging, so information is "logged"
-            // as key-value pairs.
-            debug!(?cmd);
+            info!("Got Peer Message {:?}", peer_message);
 
             // TODO: How shall we handle incoming commands ? Probably some kind of
             // Act + Respond
@@ -349,8 +327,7 @@ impl Handler {
             // command to write response frames directly to the connection. In
             // the case of pub/sub, multiple frames may be send back to the
             // peer.
-            cmd.apply(&self.db, &mut self.connection, &mut self.shutdown)
-                .await?;
+            // TODO
         }
 
         Ok(())

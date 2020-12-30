@@ -52,6 +52,7 @@ impl SlskConnection {
             if let Some(server_message) = self.parse_response()? {
                 return Ok(Some(server_message));
             };
+
             if 0 == self.stream.read_buf(&mut self.buffer).await? {
                 return if self.buffer.is_empty() {
                     Ok(None)

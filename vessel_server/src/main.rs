@@ -7,6 +7,8 @@ use futures::TryFutureExt;
 use soulseek_protocol::server_message::login::LoginRequest;
 use soulseek_protocol::server_message::request::ServerRequest;
 use soulseek_protocol::server_message::response::ServerResponse;
+use tokio::net::TcpListener;
+use tokio::signal;
 use tokio::sync::mpsc;
 use tokio::task;
 use tracing_subscriber::fmt::format::FmtSpan;
@@ -64,14 +66,31 @@ async fn main() -> std::io::Result<()> {
     // Vessel support one and only one user connection, credentials are retrieved from vessel configuration
     let login = task::spawn(async move {
         let mut listen_port_sender = login_sender.clone();
+        let mut parent_request_sender = login_sender.clone();
         login_sender
             .send(ServerRequest::Login(LoginRequest::new("vessel", "lessev")))
             .and_then(|_| listen_port_sender.send(ServerRequest::SetListenPort(2243)))
+            .and_then(|_| parent_request_sender.send(ServerRequest::NoParents(true)))
             .await
     });
 
+    let listener = TcpListener::bind("127.0.0.1:2243").await?;
+
+    // Listen for peer connection
+    let peer_listener = task::spawn(async move {
+        soulseek_protocol::listener::run(listener, signal::ctrl_c())
+            .await
+            .expect("Unable to run peer listener");
+    });
+
     // Wraps everything with tokio::join so we don't block on servers startup
-    let _ = join!(sse_server, http_server, soulseek_listener, login);
+    let _ = join!(
+        sse_server,
+        http_server,
+        soulseek_listener,
+        login,
+        peer_listener
+    );
 
     // TODO : gracefull shutdown
     Ok(())

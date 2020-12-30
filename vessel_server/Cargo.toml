@@ -11,7 +11,7 @@ soulseek_protocol = { path = "../soulseek_protocol" }
 vessel_sse = { path = "../vessel_sse" }
 vessel_http = { path = "../vessel_http" }
 futures = "0.3.8"
-tokio = { version = "0.2", features = ["io-util", "net", "macros", "sync" ] }
+tokio = { version = "0.2", features = ["io-util", "net", "macros", "sync", "signal"] }
 tracing = { version = "0.1", default-features = false, features = ["log", "std"] }
 tracing-futures = { version = "0.2", default-features = false, features = ["std-future"] }
 tracing-subscriber = "0.2.7"

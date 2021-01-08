@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@bjornlu/svelte-router": "^0.3.2",
+    "moment": "^2.29.1",
     "sirv-cli": "^1.0.0"
   }
 }

@@ -1,5 +1,6 @@
 <script>
     import './main.css';
+    import './GlobalStyle.svelte'
     import Navbar from "./Navbar.svelte";
     let eventsource = new EventSource("http://127.0.0.1:3031/events");
 
@@ -27,7 +28,6 @@
 </root>
 
 <style>
-    @import url("https://cdn.jsdelivr.net/gh/jgthms/minireset.css@master/minireset.min.css");
     @import url('https://rsms.me/inter/inter.css');
 
     main {

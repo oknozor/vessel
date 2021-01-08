@@ -2,16 +2,6 @@
     import './GlobalStyle.svelte'
     import Navbar from "./components/Navbar.svelte";
     import { RouterView } from '@bjornlu/svelte-router'
-
-    let eventsource = new EventSource("http://127.0.0.1:3031/events");
-
-    eventsource.onmessage = event => {
-        let eventList = document.querySelector('ul');
-        let newElement = document.createElement("li");
-
-        newElement.textContent = "message: " + event.data;
-        eventList.appendChild(newElement);
-    }
 </script>
 
 <root>

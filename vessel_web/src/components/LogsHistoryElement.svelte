@@ -1,12 +1,18 @@
 <script>
+    export let date;
+    export let hour;
+    export let title;
+    export let body;
+
+    console.log(date);
 </script>
 
 <li class="tl-item">
     <div class="timestamp">
-        3rd March 2015<br> 7:00 PM
+        Jan 8th 2020<br> {hour}
     </div>
-    <div class="item-title">Start from Shire</div>
-    <div class="item-detail">Don't forget the ring</div>
+    <div class="item-title">{title}</div>
+    <div class="item-detail">{body}</div>
 </li>
 
 <style>
@@ -48,13 +54,14 @@
     .item-detail {
         color: rgba(0, 0, 0, 0.5);
         font-size: 12px;
+        max-width: 50%;
     }
 
     .timestamp {
         color: #8D8D8D;
         position: absolute;
         width: 100px;
-        left: -50%;
+        left: -131px;
         text-align: right;
         font-size: 12px;
     }

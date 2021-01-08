@@ -1,7 +1,8 @@
 <script>
-    import './main.css';
     import './GlobalStyle.svelte'
-    import Navbar from "./Navbar.svelte";
+    import Navbar from "./components/Navbar.svelte";
+    import { RouterView } from '@bjornlu/svelte-router'
+
     let eventsource = new EventSource("http://127.0.0.1:3031/events");
 
     eventsource.onmessage = event => {
@@ -18,11 +19,9 @@
     <main>
         <div style="display: flex; min-height: 924px;">
             <div class="container">
-                <header>
-                    <h1>Logs</h1>
-                </header>
-                <ul></ul>
+                <RouterView/>
             </div>
+
         </div>
     </main>
 </root>
@@ -44,26 +43,7 @@
         flex-direction: column;
     }
 
-    header {
-        display: flex;
-        flex-direction: column;
-        -moz-box-align: center;
-        align-items: center;
-        margin-bottom: 48px;
-    }
 
-    h1 {
-        box-sizing: border-box;
-        margin: 0px;
-        min-width: 0px;
-        color: #181922;
-        font-size: 24px;
-        font-weight: 400;
-        line-height: 1.3;
-        letter-spacing: -0.7px;
-        font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
-        padding: 0;
-    }
 
     ul {
         display: flex;

@@ -1,30 +1,28 @@
 <script>
+    import {onMount} from 'svelte';
+    import LogsHistoryElement from "./LogsHistoryElement.svelte";
+    import {createChannelStore} from "../store";
+    // let eventsource = new EventSource("http://127.0.0.1:3031/events");
+
+    let ul;
+    let logEvents = [];
+
+    onMount(() => {
+        const store = createChannelStore();
+
+        store.subscribe(incomingMessages => {
+            logEvents = incomingMessages;
+        });
+
+        return store.close;
+    })
 </script>
 
 <div class="history-tl-container">
-    <ul class="tl">
-        <li class="tl-item">
-            <div class="timestamp">
-                3rd March 2015<br> 7:00 PM
-            </div>
-            <div class="item-title">Start from Shire</div>
-            <div class="item-detail">Don't forget the ring</div>
-        </li>
-        <li class="tl-item">
-            <div class="timestamp">
-                19th March 2015<br> 3:00 PM
-            </div>
-            <div class="item-title">Kill some Orcs</div>
-            <div class="item-detail">Don't enter the caves!!</div>
-        </li>
-        <li class="tl-item">
-            <div class="timestamp">
-                1st June 2015<br> 7:00 PM
-            </div>
-            <div class="item-title">Throw that goddamn ring in the lava</div>
-            <div class="item-detail">Also, throw that Gollum too</div>
-        </li>
-
+    <ul class="tl" bind:this={ul}>
+        {#each logEvents as logEvent}
+        <LogsHistoryElement {...logEvent}/>
+        {/each}
     </ul>
 
 </div>
@@ -52,18 +50,6 @@
 
     li:last-child {
         border-left: 0;
-
-
-
-
-
-
-
-
-
-
-
-
     }
 
     li::before {

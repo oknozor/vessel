@@ -8,6 +8,10 @@ export const createChannelStore = () => {
         `http://127.0.0.1:3031/events`,
     );
 
+    eventSource.onerror = e => {
+        console.log("Event source is broken", e);
+    }
+
     eventSource.onmessage = e => {
         const eventPayload = e.data
             .replaceAll("\\\"", "\"")

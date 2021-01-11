@@ -28,7 +28,7 @@
         width: 100%;
         box-sizing: border-box;
         margin: 0px auto;
-        padding: 48px 0px;
+        padding: 0;
         display: flex;
         flex-direction: column;
     }

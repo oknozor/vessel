@@ -1,11 +1,13 @@
 <script>
     import './GlobalStyle.svelte'
     import Navbar from "./components/Navbar.svelte";
-    import { RouterView } from '@bjornlu/svelte-router'
+    import {RouterView} from '@bjornlu/svelte-router'
+    import StatusBar from "./components/StatusBar.svelte";
 </script>
 
 <root>
     <Navbar/>
+    <StatusBar/>
     <main>
         <div style="display: flex; min-height: 924px;">
             <div class="container">

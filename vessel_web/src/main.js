@@ -7,7 +7,6 @@ import SearchPage from './pages/SearchPage.svelte';
 import InterestsPage from './pages/InterestsPage.svelte';
 
 initHashRouter([
-	{path: '', redirect: '/logs'},
 	{path: '/downloads', component: DownloadsPage},
 	{path: '/uploads', component: UploadsPage},
 	{path: '/search', component: SearchPage},

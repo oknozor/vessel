@@ -6,4 +6,8 @@
         font-family: "Inter", serif;
     }
 
+    :global(a:link), :global(a:visited) {
+        text-decoration: none
+    }
+
 </style>

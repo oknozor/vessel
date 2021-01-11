@@ -20,9 +20,14 @@
 
 <div class="history-tl-container">
     <ul class="tl" bind:this={ul}>
-        {#each logEvents as logEvent}
-        <LogsHistoryElement {...logEvent}/>
-        {/each}
+        {#if logEvents.length > 0}
+            {#each logEvents as logEvent}
+            <LogsHistoryElement {...logEvent}/>
+            {/each}
+        {:else}
+            No logs.
+        {/if}
+
     </ul>
 
 </div>

@@ -11,7 +11,8 @@
         flex-direction: column;
         -moz-box-align: center;
         align-items: center;
-        margin-bottom: 48px;
+        padding-bottom: 48px;
+        padding-top: 48px;
     }
 
     h1 {

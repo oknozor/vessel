@@ -1,5 +1,4 @@
 <script>
-    import './GlobalStyle.svelte'
     import Navbar from "./components/Navbar.svelte";
     import {RouterView} from '@bjornlu/svelte-router'
     import StatusBar from "./components/StatusBar.svelte";
@@ -9,20 +8,22 @@
     <Navbar/>
     <StatusBar/>
     <main>
-        <div style="display: flex; min-height: 924px;">
+        <div class="container-wrapper">
             <div class="container">
                 <RouterView/>
             </div>
-
         </div>
     </main>
 </root>
 
 <style>
-    @import url('https://rsms.me/inter/inter.css');
-
     main {
         padding-left: 250px;
+    }
+
+    .container-wrapper {
+        display: flex;
+        min-height: 924px;
     }
 
     .container {
@@ -34,8 +35,6 @@
         display: flex;
         flex-direction: column;
     }
-
-
 
     ul {
         display: flex;

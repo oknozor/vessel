@@ -40,8 +40,7 @@
 
     .search-logo {
         position: absolute;
-        top: -15px;
-        left: -30px;
+        padding-left: 4px;
         width: 44px;
         height: 44px;
         display: flex;
@@ -49,7 +48,6 @@
         align-items: center;
         -moz-box-pack: center;
         justify-content: center;
-        color: #181922;
         pointer-events: none;
     }
 

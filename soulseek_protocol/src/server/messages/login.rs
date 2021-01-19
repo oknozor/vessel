@@ -1,4 +1,4 @@
-use crate::server_message::MessageCode;
+use crate::server::messages::MessageCode;
 use std::io::Cursor;
 use std::net::Ipv4Addr;
 use tokio::io::BufWriter;

@@ -6,28 +6,25 @@ extern crate async_trait;
 extern crate tracing;
 
 use std::fmt;
+use std::num::TryFromIntError;
 use std::string::FromUtf8Error;
 
-use std::num::TryFromIntError;
 use tokio::time::Elapsed;
 
-pub mod connection;
+pub mod peers;
+
 // pub mod listener;
 // pub mod peer_connection;
-mod peer_message;
 
 mod distributed_message;
 pub mod frame;
-pub mod listener;
 pub mod message_common;
-mod peer_connection;
 /// Contains all the soulseek protocol server message, see [`ServerRequest`] and [`ServerResponse`]
 /// for a detailed explanation of each one.
 ///
-///  [`ServerRequest`]: crate::server_message::request:ServerRequest
-///  [`ServerResponse`]: crate::server_message::request::ServerResponse
-pub mod server_message;
-pub mod shutdown;
+///  [`ServerRequest`]: crate::server.messages::request:ServerRequest
+///  [`ServerResponse`]: crate::server.messages::request::ServerResponse
+pub mod server;
 
 pub type Result<T> = std::result::Result<T, SlskError>;
 pub type Error = Box<dyn std::error::Error + Send + Sync>;

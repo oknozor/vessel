@@ -3,7 +3,7 @@ extern crate log;
 #[macro_use]
 extern crate tokio;
 
-use soulseek_protocol::server_message::response::ServerResponse;
+use soulseek_protocol::server::messages::response::ServerResponse;
 use std::convert::Infallible;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};

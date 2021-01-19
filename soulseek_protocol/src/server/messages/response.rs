@@ -1,11 +1,11 @@
 use crate::frame::ParseBytes;
-use crate::server_message::chat::*;
-use crate::server_message::login::*;
-use crate::server_message::peer::{Parent, PeerConnection};
-use crate::server_message::room::*;
-use crate::server_message::user::*;
-use crate::server_message::MessageCode::{ConnectToPeer, SetRoomTicker};
-use crate::server_message::{Header, MessageCode, HEADER_LEN};
+use crate::server::messages::chat::*;
+use crate::server::messages::login::*;
+use crate::server::messages::peer::{Parent, PeerConnection};
+use crate::server::messages::room::*;
+use crate::server::messages::user::*;
+use crate::server::messages::MessageCode::{ConnectToPeer, SetRoomTicker};
+use crate::server::messages::{Header, MessageCode, HEADER_LEN};
 use crate::SlskError;
 use bytes::Buf;
 use std::io::Cursor;
@@ -118,7 +118,7 @@ impl ServerResponse {
             MessageCode::SharedFoldersAndFiles => todo!(),
             MessageCode::GetUserStats => todo!(),
             MessageCode::QueuedDownloads => todo!(),
-            MessageCode::KickedfromServer => todo!(),
+            MessageCode::KickedFromServer => todo!(),
             MessageCode::UserSearch => todo!(),
             MessageCode::InterestAdd => todo!(),
             MessageCode::InterestRemove => todo!(),

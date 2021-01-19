@@ -27,8 +27,8 @@ pub const HEADER_LEN: u32 = 8;
 /// this is not used to write [`ServerRequest`] since write only once to the buffer.
 ///
 /// [`Cursor`]: std::io::Cursor
-/// [`ServerResponse`]: crate::server_message::response::ServerResponse
-/// [`ServerRequest`]: crate::server_message::request::ServerRequest
+/// [`ServerResponse`]: crate::server.messages::response::ServerResponse
+/// [`ServerRequest`]: crate::server.messages::request::ServerRequest
 #[derive(Debug)]
 pub struct Header {
     pub(crate) code: MessageCode,
@@ -56,9 +56,9 @@ impl Header {
 /// [`MessageCode::Unknown`] is used handle unknown message without causing panic on deserialization.
 /// This should be used to track and implement unkown/new messages in the future.
 ///
-/// [`ServerRequest`]: crate::server_message::request::ServerRequest
+/// [`ServerRequest`]: crate::server.messages::request::ServerRequest
 /// [`MessageCode::Unknown`]: MessageCode::Unknown
-/// [`ServerResponse`]: crate::server_message::response::ServerResponse
+/// [`ServerResponse`]: crate::server.messages::response::ServerResponse
 #[repr(u32)]
 #[derive(Debug)]
 pub enum MessageCode {
@@ -84,7 +84,7 @@ pub enum MessageCode {
     SharedFoldersAndFiles = 35,
     GetUserStats = 36,
     QueuedDownloads = 40,
-    KickedfromServer = 41,
+    KickedFromServer = 41,
     UserSearch = 42,
     InterestAdd = 51,
     InterestRemove = 52,
@@ -186,7 +186,7 @@ impl From<u32> for MessageCode {
             35 => MessageCode::SharedFoldersAndFiles,
             36 => MessageCode::GetUserStats,
             40 => MessageCode::QueuedDownloads,
-            41 => MessageCode::KickedfromServer,
+            41 => MessageCode::KickedFromServer,
             42 => MessageCode::UserSearch,
             51 => MessageCode::InterestAdd,
             52 => MessageCode::InterestRemove,

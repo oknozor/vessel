@@ -1,11 +1,49 @@
-use crate::frame::{read_string, write_string, ToBytes};
-use crate::message_common::ConnectionType;
-use crate::peer_message::messages::PeerMessage::PeerInit;
-use crate::peer_message::{Header, MessageCode, HEADER_LEN};
-use crate::SlskError;
+use crate::peers::messages::MessageCode::{PeerInit, PierceFireWall, Unknown};
 use bytes::Buf;
 use std::io::Cursor;
+use crate::frame::{read_string, write_string, ToBytes};
+use crate::message_common::ConnectionType;
+use crate::SlskError;
 use tokio::io::{AsyncWrite, AsyncWriteExt, BufWriter};
+
+pub(crate) const HEADER_LEN: u32 = 5;
+
+#[derive(Debug)]
+pub struct Header {
+    pub(crate) code: MessageCode,
+    pub(crate) message_len: usize,
+}
+
+impl Header {
+    pub fn read(src: &mut Cursor<&[u8]>) -> std::io::Result<Self> {
+        let message_length = src.get_u32_le();
+        let code = src.get_u8();
+        let code = MessageCode::from(code);
+
+        // We can subtract message code from the length since we already know it
+        let message_len = message_length as usize - 1;
+
+        Ok(Self { message_len, code })
+    }
+}
+
+#[repr(u8)]
+#[derive(Debug)]
+pub enum MessageCode {
+    PierceFireWall = 0,
+    PeerInit = 1,
+    Unknown,
+}
+
+impl From<u8> for MessageCode {
+    fn from(code: u8) -> Self {
+        match code {
+            0 => PierceFireWall,
+            1 => PeerInit,
+            _ => Unknown,
+        }
+    }
+}
 
 #[derive(Debug)]
 pub enum PeerMessage {
@@ -75,7 +113,7 @@ impl PeerMessage {
     pub(crate) fn parse(src: &mut Cursor<&[u8]>, header: &Header) -> std::io::Result<Self> {
         let message = match header.code {
             MessageCode::PierceFireWall => PeerMessage::PierceFirewall(src.get_u32_le()),
-            MessageCode::PeerInit => PeerInit {
+            MessageCode::PeerInit => PeerMessage::PeerInit {
                 username: read_string(src)?,
                 connection_type: ConnectionType::from(read_string(src)?),
                 token: src.get_u32_le(),

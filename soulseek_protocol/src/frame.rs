@@ -11,8 +11,8 @@ use tokio::io::{AsyncWrite, AsyncWriteExt, BufWriter};
 /// length against the message length header.
 /// For instance [`ServerResponse`] header length is 8 bytes while [`PeerMessage`]'s header is 5.
 ///
-/// [`ServerResponse`]: crate::server_message::response::ServerResponse
-/// [`PeerMessage`]: crate::peer_message::message::PeerMessage
+/// [`ServerResponse`]: crate::server.messages::response::ServerResponse
+/// [`PeerMessage`]: crate::peers::messages::PeerMessage
 pub trait ParseBytes {
     type Output;
     fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self::Output>;
@@ -26,7 +26,7 @@ pub trait ToBytes {
     ///
     /// ## Example :
     /// ```
-    /// use soulseek_protocol::server_message::login::LoginRequest;
+    /// use soulseek_protocol::server::messages::login::LoginRequest;
     /// use tokio::io::BufWriter;
     ///
     /// let request = LoginRequest::new("username", "password");

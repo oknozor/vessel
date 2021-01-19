@@ -4,9 +4,9 @@ extern crate tokio;
 extern crate tracing;
 
 use futures::TryFutureExt;
-use soulseek_protocol::server_message::login::LoginRequest;
-use soulseek_protocol::server_message::request::ServerRequest;
-use soulseek_protocol::server_message::response::ServerResponse;
+use soulseek_protocol::server::messages::login::LoginRequest;
+use soulseek_protocol::server::messages::request::ServerRequest;
+use soulseek_protocol::server::messages::response::ServerResponse;
 use tokio::net::TcpListener;
 use tokio::signal;
 use tokio::sync::mpsc;
@@ -24,7 +24,7 @@ async fn main() -> std::io::Result<()> {
 
     let (http_tx, mut http_rx) = mpsc::channel::<ServerRequest>(32);
     let (mut sse_tx, sse_rx) = mpsc::channel::<ServerResponse>(32);
-    let mut connection = soulseek_protocol::connection::connect().await;
+    let mut connection = soulseek_protocol::server::connection::connect().await;
     let mut login_sender = http_tx.clone();
 
     // listen for incoming client commands and forward soulseek message to the sse service
@@ -34,10 +34,15 @@ async fn main() -> std::io::Result<()> {
             // on [`SlskError::TimeOut`]
             while let Ok(Some(response)) = connection.read_response_with_timeout().await {
                 info!("Got response {:?}", response.kind());
-                sse_tx
-                    .send(response)
-                    .await
-                    .expect("Unable to send message to sse listener");
+                match response {
+                    ServerResponse::PossibleParents(parents) => debug!("{:?}", parents),
+                    response => {
+                        sse_tx
+                            .send(response)
+                            .await
+                            .expect("Unable to send message to sse listener");
+                    }
+                }
             }
 
             // We try once to receive a command
@@ -78,7 +83,7 @@ async fn main() -> std::io::Result<()> {
 
     // Listen for peer connection
     let peer_listener = task::spawn(async move {
-        soulseek_protocol::listener::run(listener, signal::ctrl_c())
+        soulseek_protocol::peers::listener::run(listener, signal::ctrl_c())
             .await
             .expect("Unable to run peer listener");
     });

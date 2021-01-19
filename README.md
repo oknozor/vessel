@@ -77,7 +77,7 @@ npm run dev
   cargo doc --workspace
   cargo doc --open
   ```
-  And browse to `soulseek_protocol/server_message/request/enum.ServerRequest.html`
+  And browse to `soulseek_protocol/server.server::messages/request/enum.ServerRequest.html`
 
   
 - [vessel_server](vessel_server) :

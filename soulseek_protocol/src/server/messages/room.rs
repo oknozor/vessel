@@ -1,6 +1,6 @@
 use crate::frame::read_string;
 use crate::frame::ParseBytes;
-use crate::server_message::user::{Status, UserData};
+use crate::server::messages::user::{Status, UserData};
 use bytes::Buf;
 use std::io::Cursor;
 

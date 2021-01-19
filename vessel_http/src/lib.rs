@@ -1,11 +1,11 @@
 #[macro_use]
 extern crate log;
 
-use soulseek_protocol::server_message::request::ServerRequest;
+use soulseek_protocol::server::messages::request::ServerRequest;
 use std::sync::Mutex;
 use tokio::sync::mpsc;
 
-use soulseek_protocol::server_message::chat::SayInChat;
+use soulseek_protocol::server::messages::chat::SayInChat;
 use std::sync::Arc;
 use warp::Filter;
 

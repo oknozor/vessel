@@ -16,7 +16,22 @@
     </main>
 </root>
 
-<style>
+<style global>
+    @import url("https://cdn.jsdelivr.net/gh/jgthms/minireset.css@master/minireset.min.css");
+    @import url('https://rsms.me/inter/inter.css');
+
+    @tailwind base;
+    @tailwind components;
+    @tailwind utilities;
+
+    body {
+        font-family: "Inter", serif;
+    }
+
+    a:link, a:visited {
+        text-decoration: none
+    }
+
     main {
         padding-left: 250px;
     }

@@ -10,7 +10,9 @@ module.exports = {
     extend: {},
   },
   variants: {
-    extend: {},
+    extend: {
+      transitionTimingFunction: ['hover', 'focus'],
+    },
   },
   plugins: [],
 }

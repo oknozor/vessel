@@ -5,7 +5,7 @@
 </script>
 
 <root>
-    <Navbar/>
+    <Navbar style="display: none" class="sm:hidden md:hidden"/>
     <StatusBar/>
     <main>
         <div class="container-wrapper">

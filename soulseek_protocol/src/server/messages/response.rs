@@ -1,10 +1,9 @@
 use crate::frame::ParseBytes;
 use crate::server::messages::chat::*;
 use crate::server::messages::login::*;
-use crate::server::messages::peer::{Parent, PeerConnection};
+use crate::server::messages::peer::{Parent, PeerConnectionRequest};
 use crate::server::messages::room::*;
 use crate::server::messages::user::*;
-use crate::server::messages::MessageCode::{ConnectToPeer, SetRoomTicker};
 use crate::server::messages::{Header, MessageCode, HEADER_LEN};
 use crate::SlskError;
 use bytes::Buf;
@@ -33,8 +32,9 @@ pub enum ServerResponse {
     RoomLeft(String),
     RoomJoinRequestAck(String),
     ChatMessage(ChatMessage),
+    PrivateMessage(PrivateMessage),
     UserStats(UserStats),
-    ConnectToPeer(PeerConnection),
+    ConnectToPeer(PeerConnectionRequest),
     PossibleParents(Vec<Parent>),
     Unknown(u32, u32, Vec<u8>), // length, code, raw bytes,
 }
@@ -64,8 +64,9 @@ impl ServerResponse {
             ServerResponse::ChatMessage(_) => "ChatMessage",
             ServerResponse::UserStats(_) => "UserStats",
             ServerResponse::ConnectToPeer(_) => "PeerConnection",
-            ServerResponse::Unknown(_, _, _) => "Unknown",
             ServerResponse::PossibleParents(_) => "PossibleParents",
+            ServerResponse::Unknown(_, _, _) => "Unknown",
+            ServerResponse::PrivateMessage(_) => "PrivateMessage",
         }
     }
 }
@@ -106,9 +107,11 @@ impl ServerResponse {
             }
             MessageCode::UserLeftRoom => todo!(),
             MessageCode::ConnectToPeer => {
-                PeerConnection::parse(src).map(ServerResponse::ConnectToPeer)
+                PeerConnectionRequest::parse(src).map(ServerResponse::ConnectToPeer)
             }
-            MessageCode::PrivateMessages => todo!(),
+            MessageCode::PrivateMessages => {
+                PrivateMessage::parse(src).map(ServerResponse::PrivateMessage)
+            }
             MessageCode::AcknowledgePrivateMessage => todo!(),
             MessageCode::FileSearch => todo!(),
             MessageCode::SetOnlineStatus => todo!(),

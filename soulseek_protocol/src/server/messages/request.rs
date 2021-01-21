@@ -2,6 +2,7 @@ use crate::frame::write_string;
 use crate::frame::ToBytes;
 use crate::server::messages::chat::SayInChat;
 use crate::server::messages::login::LoginRequest;
+use crate::server::messages::peer::RequestConnectionToPeer;
 use crate::server::messages::{MessageCode, HEADER_LEN};
 use tokio::io::{self, AsyncWrite, AsyncWriteExt, BufWriter};
 
@@ -67,6 +68,10 @@ pub enum ServerRequest {
     ///
     /// **Response** : no message
     NoParents(bool),
+    /// **Description** : Either we ask server to tell someone else we want to establish a connection with them.
+    ///
+    /// **Response** : [`ServerResponse::ConnectToPeer`][`crate::server.messages::response::ServerResponse::ConnectToPeer`]
+    ConnectToPeer(RequestConnectionToPeer),
 
     /// TODO
     Unimplemented,
@@ -101,6 +106,9 @@ impl ToBytes for ServerRequest {
                 write_bool_msg(*value, MessageCode::HaveNoParents, buffer).await
             }
             ServerRequest::Unimplemented => todo!(),
+            ServerRequest::ConnectToPeer(connection_request) => {
+                connection_request.write_to_buf(buffer).await
+            }
         }
     }
 }
@@ -123,6 +131,7 @@ impl ServerRequest {
             ServerRequest::GetUserStats(_) => "GetUserStats",
             ServerRequest::NoParents(_) => "NoParent",
             ServerRequest::Unimplemented => "Unimplemented",
+            ServerRequest::ConnectToPeer(_) => "ConnectToPeer",
         }
     }
 }

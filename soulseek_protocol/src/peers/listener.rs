@@ -1,59 +1,27 @@
 /// Code and documentation from this module have been heavily inspired by tokio [mini-redis](https://github.com/tokio-rs/mini-redis/blob/master/src/server.rs)
 /// tutorial.
 use std::future::Future;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{broadcast, mpsc, Semaphore};
 use tokio::time::{self, Duration};
 use tracing::{error, info};
 
-use crate::peers::connection::PeerConnection;
+use crate::message_common::ConnectionType;
+use crate::peers::connection::Connection;
 use crate::peers::handler::Handler;
+use crate::peers::messages::PeerConnectionMessage;
 use crate::peers::shutdown::Shutdown;
-
-/// Server listener state. Created in the `run` call. It includes a `run` method
-/// which performs the TCP listening and initialization of per-connection state.
-#[derive(Debug)]
-struct PeerListener {
-    /// TCP listener supplied by the `run` caller.
-    listener: TcpListener,
-
-    /// Limit the max number of connections.
-    ///
-    /// A `Semaphore` is used to limit the max number of connections. Before
-    /// attempting to accept a new connection, a permit is acquired from the
-    /// semaphore. If none are available, the listener waits for one.
-    ///
-    /// When handlers complete processing a connection, the permit is returned
-    /// to the semaphore.
-    limit_connections: Arc<Semaphore>,
-
-    /// Broadcasts a shutdown signal to all active connections.
-    ///
-    /// The initial `shutdown` trigger is provided by the `run` caller. The
-    /// server is responsible for gracefully shutting down active connections.
-    /// When a connection task is spawned, it is passed a broadcast receiver
-    /// handle. When a graceful shutdown is initiated, a `()` value is sent via
-    /// the broadcast::Sender. Each active connection receives it, reaches a
-    /// safe terminal state, and completes the task.
-    notify_shutdown: broadcast::Sender<()>,
-
-    /// Used as part of the graceful shutdown process to wait for client
-    /// connections to complete processing.
-    ///
-    /// Tokio channels are closed once all `Sender` handles go out of scope.
-    /// When a channel is closed, the receiver receives `None`. This is
-    /// leveraged to detect all connection handlers completing. When a
-    /// connection handler is initialized, it is assigned a clone of
-    /// `shutdown_complete_tx`. When the listener shuts down, it drops the
-    /// sender held by this `shutdown_complete_tx` field. Once all handler tasks
-    /// complete, all clones of the `Sender` are also dropped. This results in
-    /// `shutdown_complete_rx.recv()` completing with `None`. At this point, it
-    /// is safe to exit the server process.
-    shutdown_complete_rx: mpsc::Receiver<()>,
-    shutdown_complete_tx: mpsc::Sender<()>,
-}
+use crate::server::messages::peer::{Parent, PeerConnectionRequest};
+use crate::{Error, SlskError};
+use std::collections::HashMap;
+use tokio::stream::StreamExt;
+use tokio::sync::broadcast::Sender;
+use tokio::sync::mpsc::Receiver;
+use tokio::time::timeout;
+use std::net::Ipv4Addr;
+use crate::server::messages::request::ServerRequest;
 
 /// Maximum number of concurrent connections the peer server will accept.
 ///
@@ -62,6 +30,86 @@ struct PeerListener {
 ///
 /// TODO : Make this value configurable
 const MAX_CONNECTIONS: usize = 2048;
+
+struct GlobalConnectionHandler {
+    parent_connection: Arc<Mutex<Vec<Parent>>>,
+    peer_listener: PeerListener,
+    peer_connection_outgoing_tx: mpsc::Sender<ServerRequest>,
+    limit_connections: Arc<Semaphore>,
+    notify_shutdown: broadcast::Sender<()>,
+    shutdown_complete_rx: mpsc::Receiver<()>,
+    shutdown_complete_tx: mpsc::Sender<()>,
+}
+
+impl GlobalConnectionHandler {
+    async fn run(
+        &mut self,
+        mut peer_connection_rx: Receiver<PeerConnectionRequest>,
+        mut possible_parent_rx: Receiver<Vec<Parent>>,
+    ) -> crate::Result<()> {
+        let limit_connections = self.limit_connections.clone();
+        let notify_shutdown = self.notify_shutdown.clone();
+        let shutdown_complete_tx = self.shutdown_complete_tx.clone();
+        let parent_connections = self.parent_connection.clone();
+
+        let parent = Parent {
+            username: "adamka".to_string(),
+            ip: Ipv4Addr::new(188, 156, 110, 114),
+            port: 2234,
+        };
+
+        let mut handler = connect_to_peer(limit_connections.clone(), notify_shutdown.clone(), shutdown_complete_tx.clone(), &parent).await;
+        handler?.run(self.peer_connection_outgoing_tx.clone()).await;
+
+        tokio::join!(
+        // self.listen(),
+        connect_to_parents(
+            limit_connections,
+            notify_shutdown,
+            shutdown_complete_tx,
+            parent_connections,
+            &mut possible_parent_rx
+        )
+        );
+        Ok(())
+    }
+
+    async fn listen(&mut self) -> crate::Result<()> {
+        info!("accepting inbound connections");
+
+        loop {
+            self.limit_connections.acquire().await.forget();
+            debug!("Waiting for new connections");
+            let socket = self.peer_listener.accept().await?;
+            debug!("New connection accepted");
+
+            // Create the necessary per-connection handler state.
+            let mut handler = Handler {
+                username: None,
+                connection: Connection::new(socket),
+                limit_connections: self.limit_connections.clone(),
+                shutdown: Shutdown::new(self.notify_shutdown.subscribe()),
+                _shutdown_complete: self.shutdown_complete_tx.clone(),
+            };
+
+            debug!("Spawning new distributed connection");
+            let peer_connection_outgoing_tx = self.peer_connection_outgoing_tx.clone();
+            tokio::spawn(async move {
+                if let Err(err) = handler.run(peer_connection_outgoing_tx).await {
+                    error!(cause = ?err, "connection error");
+                }
+            });
+        }
+    }
+}
+
+/// Server listener state. Created in the `run` call. It includes a `run` method
+/// which performs the TCP listening and initialization of per-connection state.
+#[derive(Debug)]
+struct PeerListener {
+    /// TCP listener supplied by the `run` caller.
+    listener: TcpListener,
+}
 
 /// Run the soulseek peer server.
 ///
@@ -72,67 +120,55 @@ const MAX_CONNECTIONS: usize = 2048;
 ///
 /// `tokio::signal::ctrl_c()` can be used as the `shutdown` argument. This will
 /// listen for a SIGINT signal.
-pub async fn run(listener: TcpListener, shutdown: impl Future) -> crate::Result<()> {
-    // When the provided `shutdown` future completes, we must send a shutdown
-    // message to all active connections. We use a broadcast channel for this
-    // purpose. The call below ignores the receiver of the broadcast pair, and when
-    // a receiver is needed, the subscribe() method on the sender is used to create
-    // one.
+pub async fn run(
+    listener: TcpListener,
+    shutdown: impl Future,
+    peer_connection_rx: Receiver<PeerConnectionRequest>,
+    mut logged_in_rx: mpsc::Receiver<()>,
+    peer_connection_outgoing_tx: mpsc::Sender<ServerRequest>,
+    possible_parent_rx: Receiver<Vec<Parent>>,
+) -> crate::Result<()> {
+
+    debug!("Waiting for user to be logged in");
+    while let None = logged_in_rx.recv().await {
+        // Waiting for login
+
+    }
+    debug!("User logged in, launching peer listener");
+
+
     let (notify_shutdown, _) = broadcast::channel(1);
     let (shutdown_complete_tx, shutdown_complete_rx) = mpsc::channel(1);
 
     // Initialize the listener state
-    let mut server = PeerListener {
-        listener,
+    let mut server = GlobalConnectionHandler {
+        parent_connection: Arc::new(Mutex::new(vec![])),
+        peer_listener: PeerListener { listener },
+        peer_connection_outgoing_tx,
         limit_connections: Arc::new(Semaphore::new(MAX_CONNECTIONS)),
         notify_shutdown,
         shutdown_complete_tx,
         shutdown_complete_rx,
     };
 
-    // Concurrently run the server and listen for the `shutdown` signal. The
-    // server task runs until an error is encountered, so under normal
-    // circumstances, this `select!` statement runs until the `shutdown` signal
-    // is received.
-    //
-    // `select!` statements are written in the form of:
-    //
-    // ```
-    // <result of async op> = <async op> => <step to perform with result>
-    // ```
-    //
-    // All `<async op>` statements are executed concurrently. Once the **first**
-    // op completes, its associated `<step to perform with result>` is
-    // performed.
     tokio::select! {
-        res = server.run() => {
-            // If an error is received here, accepting connections from the TCP
-            // listener failed multiple times and the server is giving up and
-            // shutting down.
-            //
-            // Errors encountered when handling individual connections do not
-            // bubble up to this point.
+        res = server.run(peer_connection_rx, possible_parent_rx) => {
             if let Err(err) = res {
                 error!(cause = %err, "failed to accept");
             }
         }
         err = shutdown => {
-            // The shutdown signal has been received.
             info!("shutting down");
         }
     }
 
-    // Extract the `shutdown_complete` receiver and transmitter
-    // explicitly drop `shutdown_transmitter`. This is important, as the
-    // `.await` below would otherwise never complete.
-    let PeerListener {
+    let GlobalConnectionHandler {
         mut shutdown_complete_rx,
         shutdown_complete_tx,
+        peer_connection_outgoing_tx,
         notify_shutdown,
         ..
     } = server;
-    // When `notify_shutdown` is dropped, all tasks which have `subscribe`d will
-    // receive the shutdown signal and can exit
     drop(notify_shutdown);
     // Drop final `Sender` so the `Receiver` below can complete
     drop(shutdown_complete_tx);
@@ -147,72 +183,6 @@ pub async fn run(listener: TcpListener, shutdown: impl Future) -> crate::Result<
 }
 
 impl PeerListener {
-    /// Run the server
-    ///
-    /// Listen for inbound connections. For each inbound connection, spawn a
-    /// task to process that connection.
-    ///
-    /// # Errors
-    ///
-    /// Returns `Err` if accepting returns an error. This can happen for a
-    /// number reasons that resolve over time. For example, if the underlying
-    /// operating system has reached an internal limit for max number of
-    /// sockets, accept will fail.
-    ///
-    /// The process is not able to detect when a transient error resolves
-    /// itself. One strategy for handling this is to implement a back off
-    /// strategy, which is what we do here.
-    async fn run(&mut self) -> crate::Result<()> {
-        info!("accepting inbound connections");
-
-        loop {
-            // Wait for a permit to become available
-            //
-            // `acquire` returns a permit that is bound via a lifetime to the
-            // semaphore. When the permit value is dropped, it is automatically
-            // returned to the semaphore. This is convenient in many cases.
-            // However, in this case, the permit must be returned in a different
-            // task than it is acquired in (the handler task). To do this, we
-            // "forget" the permit, which drops the permit value **without**
-            // incrementing the semaphore's permits. Then, in the handler task
-            // we manually add a new permit when processing completes.
-            self.limit_connections.acquire().await.forget();
-
-            // Accept a new socket. This will attempt to perform error handling.
-            // The `accept` method internally attempts to recover errors, so an
-            // error here is non-recoverable.
-            let socket = self.accept().await?;
-
-            // Create the necessary per-connection handler state.
-            let mut handler = Handler {
-                // Initialize the connection state. This allocates read/write
-                // buffers to perform redis protocol frame parsing.
-                connection: PeerConnection::new(socket),
-
-                // The connection state needs a handle to the max connections
-                // semaphore. When the handler is done processing the
-                // connection, a permit is added back to the semaphore.
-                limit_connections: self.limit_connections.clone(),
-
-                // Receive shutdown notifications.
-                shutdown: Shutdown::new(self.notify_shutdown.subscribe()),
-
-                // Notifies the receiver half once all clones are
-                // dropped.
-                _shutdown_complete: self.shutdown_complete_tx.clone(),
-            };
-
-            // Spawn a new task to process the connections. Tokio tasks are like
-            // asynchronous green threads and are executed concurrently.
-            tokio::spawn(async move {
-                // Process the connection. If an error is encountered, log it.
-                if let Err(err) = handler.run().await {
-                    error!(cause = ?err, "connection error");
-                }
-            });
-        }
-    }
-
     /// Accept an inbound connection.
     ///
     /// Errors are handled by backing off and retrying. An exponential backoff
@@ -246,5 +216,84 @@ impl PeerListener {
             // Double the back off
             backoff *= 2;
         }
+    }
+}
+
+async fn connect_to_parents(
+    limit_connections: Arc<Semaphore>,
+    notify_shutdown: Sender<()>,
+    shutdown_complete_tx: mpsc::Sender<()>,
+    parent_connections: Arc<Mutex<Vec<Parent>>>,
+    possible_parent_rx: &mut Receiver<Vec<Parent>>,
+) {
+    let mut connections = parent_connections.clone();
+
+    while let Some(parents) = possible_parent_rx.recv().await {
+        debug!("{:?}", parents);
+        // for parent in parents {
+        //     let mut connections = Arc::clone(&connections);
+        //     let mut handler = connect_to_peer(
+        //         limit_connections.clone(),
+        //         notify_shutdown.clone(),
+        //         shutdown_complete_tx.clone(),
+        //         &parent,
+        //     )
+        //         .await;
+        //     match handler {
+        //         Ok(mut handler) => {
+        //             let mut connections = connections.lock().expect("unable to acquire lock on parent connections");
+        //             connections.push(parent.clone());
+        //             info!("connected to parent:  {:?}", parent.get_address());
+        //             info!("{} active parent connection", connections.len());
+
+        //             tokio::spawn(async move {
+        //                 // Process the connection. If an error is encountered, log it.
+        //                 match handler.run(None).await {
+        //                     Ok(()) => {}
+        //                     Err(err) => error!(cause = ?err, "connection error"),
+        //                 }
+        //             });
+        //         }
+        //         Err(e) => error!("Unable to establish direct connection to peer, either port is closed or user is disconnected"),
+        //     }
+        // }
+    }
+}
+
+async fn connect_to_peer(
+    limit_connections: Arc<Semaphore>,
+    notify_shutdown: Sender<()>,
+    shutdown_complete_tx: mpsc::Sender<()>,
+    user: &Parent,
+) -> crate::Result<Handler> {
+    limit_connections.acquire().await.forget();
+
+    // Accept a new socket. This will attempt to perform error handling.
+    // The `accept` method internally attempts to recover errors, so an
+    // error here is non-recoverable.
+    debug!(
+        "Trying direct connection to peer at : {:?}",
+        user.get_address()
+    );
+
+    if let Ok(Ok(socket)) = timeout(
+        Duration::from_millis(2000),
+        TcpStream::connect(user.get_address()),
+    ).await
+    {
+        info!("connected");
+        Ok(Handler {
+            username: Some(user.username.clone()),
+            connection: Connection::new(socket),
+            limit_connections: limit_connections.clone(),
+            shutdown: Shutdown::new(notify_shutdown.subscribe()),
+            _shutdown_complete: shutdown_complete_tx.clone(),
+        })
+    } else {
+        error!("timeout connection to peer : {:?}", user);
+        Err(SlskError::from(format!(
+            "Unable to connect to {:?}, falling back to indirect connection",
+            user.get_address()
+        )))
     }
 }

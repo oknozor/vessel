@@ -80,6 +80,7 @@ impl ServerResponse {
 
         // Check if the buffer contains the full message already
         let header = Header::read(src)?;
+
         if src.remaining() < header.message_len {
             Err(SlskError::Incomplete)
         } else {

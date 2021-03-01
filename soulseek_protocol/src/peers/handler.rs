@@ -1,19 +1,16 @@
 use std::sync::Arc;
+
+use rand::random;
+use tokio::sync::mpsc::Sender;
 use tokio::sync::{mpsc, Semaphore};
 
-use crate::peers::connection::Connection;
-use crate::peers::messages::{PeerConnectionMessage, PeerMessage};
-use crate::peers::shutdown::Shutdown;
-use crate::server::messages::peer::{PeerConnectionRequest, RequestConnectionToPeer};
 use crate::message_common::ConnectionType;
-use crate::peers::messages::PeerPacket;
-use rand::random;
-use tokio::time::Duration;
-use crate::SlskError;
-use crate::peers::messages::PeerConnectionMessage::PierceFirewall;
-use tokio::sync::mpsc::Sender;
+use crate::peers::connection::Connection;
+use crate::peers::messages::PeerRequestPacket;
+use crate::peers::messages::{PeerConnectionMessage, PeerResponsePacket};
+use crate::peers::request::PeerRequest;
+use crate::peers::shutdown::Shutdown;
 use crate::server::messages::request::ServerRequest;
-use std::net::Ipv4Addr;
 
 #[derive(Debug)]
 pub struct Handler {
@@ -25,22 +22,30 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub(crate) async fn run(&mut self, mut peer_connection_outgoing_tx: Sender<ServerRequest>) -> crate::Result<()> {
+    pub(crate) async fn run(
+        &mut self,
+        peer_connection_outgoing_tx: Sender<ServerRequest>,
+    ) -> crate::Result<()> {
         debug!("sending peer init");
         let token = random();
 
-
-        self.connection.write_request(PeerPacket::ConnectionMessage(PeerConnectionMessage::PeerInit {
-            username: "vessel".to_string(),
-            connection_type: ConnectionType::PeerToPeer,
-            token,
-        })).await?;
+        self.connection
+            .write_request(PeerRequestPacket::ConnectionMessage(
+                PeerConnectionMessage::PeerInit {
+                    username: "vessel".to_string(),
+                    connection_type: ConnectionType::PeerToPeer,
+                    token,
+                },
+            ))
+            .await?;
 
         // Fixme : handle fallback connection here
 
         self.connection.connection_type = Some(ConnectionType::PeerToPeer);
 
-        self.connection.write_request(PeerPacket::Message(PeerMessage::UserInfoRequest)).await?;
+        self.connection
+            .write_request(PeerRequestPacket::Message(PeerRequest::UserInfoRequest))
+            .await?;
 
         while !self.shutdown.is_shutdown() {
             // While reading a request frame, also listen for the shutdown
@@ -56,9 +61,11 @@ impl Handler {
 
             if let Ok(message) = maybe_message {
                 match message {
-                    PeerPacket::ConnectionMessage(message) => info!("Got connection message : {:?}", &message),
-                    PeerPacket::Message(message) => info!("Got message : {:?}", &message),
-                    PeerPacket::None => {}
+                    PeerResponsePacket::ConnectionMessage(message) => {
+                        info!("Got connection message : {:?}", &message)
+                    }
+                    PeerResponsePacket::Message(message) => info!("Got message : {:?}", &message),
+                    PeerResponsePacket::None => {}
                 }
             }
         }

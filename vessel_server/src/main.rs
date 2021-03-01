@@ -26,7 +26,8 @@ async fn main() -> std::io::Result<()> {
     let (http_tx, mut http_rx) = mpsc::channel::<ServerRequest>(32);
     let (mut sse_tx, sse_rx) = mpsc::channel::<ServerResponse>(32);
     let (mut peer_listener_tx, peer_connection_rx) = mpsc::channel::<PeerConnectionRequest>(32);
-    let (peer_connection_outgoing_tx, mut peer_connection_outgoing_rx) = mpsc::channel::<ServerRequest>(32);
+    let (peer_connection_outgoing_tx, mut peer_connection_outgoing_rx) =
+        mpsc::channel::<ServerRequest>(32);
     let (mut possible_parent_tx, possible_parent_rx) = mpsc::channel::<Vec<Parent>>(32);
     let mut connection = soulseek_protocol::server::connection::connect().await;
     let mut login_sender = http_tx.clone();
@@ -45,7 +46,10 @@ async fn main() -> std::io::Result<()> {
                 );
                 match response {
                     ServerResponse::ConnectToPeer(connection_request) => {
-                        info!("connect to peer request from server : {:?} ", connection_request);
+                        info!(
+                            "connect to peer request from server : {:?} ",
+                            connection_request
+                        );
                         peer_listener_tx
                             .send(connection_request)
                             .await
@@ -61,7 +65,10 @@ async fn main() -> std::io::Result<()> {
                     }
 
                     ServerResponse::PrivilegedUsers(_) => {
-                        logged_in_tx.send(()).await.expect("error sending connection status to peer listener");
+                        logged_in_tx
+                            .send(())
+                            .await
+                            .expect("error sending connection status to peer listener");
                     }
 
                     response => {

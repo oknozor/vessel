@@ -1,10 +1,14 @@
+use std::io::Cursor;
+
+use bytes::Buf;
+use tokio::io::{AsyncWrite, AsyncWriteExt, BufWriter};
+
 use crate::frame::{read_string, write_string, ToBytes};
 use crate::message_common::ConnectionType;
 use crate::peers::messages::InitMessageCode::{PeerInit, PierceFireWall, Unknown};
+use crate::peers::request::PeerRequest;
+use crate::peers::response::PeerResponse;
 use crate::SlskError;
-use bytes::Buf;
-use std::io::Cursor;
-use tokio::io::{AsyncWrite, AsyncWriteExt, BufWriter};
 
 pub(crate) const CONNECTION_MSG_HEADER_LEN: u32 = 5;
 pub(crate) const PEER_MSG_HEADER_LEN: u32 = 8;
@@ -22,8 +26,15 @@ pub struct PeerMessageHeader {
 }
 
 #[derive(Debug)]
-pub enum PeerPacket {
-    Message(PeerMessage),
+pub enum PeerRequestPacket {
+    Message(PeerRequest),
+    ConnectionMessage(PeerConnectionMessage),
+    None,
+}
+
+#[derive(Debug)]
+pub enum PeerResponsePacket {
+    Message(PeerResponse),
     ConnectionMessage(PeerConnectionMessage),
     None,
 }
@@ -130,27 +141,320 @@ pub enum PeerConnectionMessage {
     },
 }
 
-/// TODO
 #[derive(Debug)]
-pub enum PeerMessage {
-    SharesRequest,
-    SharesReply,
-    SearchRequest,
-    SearchReply,
-    UserInfoRequest,
-    UserInfoReply,
-    FolderContentsRequest,
-    FolderContentsReply,
-    TransferRequest,
-    TransferReply,
-    UploadPlaceholder,
-    QueueDownload,
-    PlaceInQueueReply,
-    UploadFailed,
-    QueueFailed,
-    PlaceInQueueRequest,
-    UploadQueueNotification,
-    Unknown,
+pub struct Attribute {
+    pub place: u32,
+    pub attribute: u32,
+}
+
+#[async_trait]
+impl ToBytes for Attribute {
+    async fn write_to_buf(
+        &self,
+        buffer: &mut BufWriter<impl AsyncWrite + Unpin + Send>,
+    ) -> tokio::io::Result<()> {
+        buffer.write_u32_le(self.attribute).await?;
+        buffer.write_u32_le(self.place).await?;
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+struct Directory {
+    pub name: String,
+    pub files: Vec<File>,
+}
+
+#[async_trait]
+impl ToBytes for Directory {
+    async fn write_to_buf(
+        &self,
+        buffer: &mut BufWriter<impl AsyncWrite + Unpin + Send>,
+    ) -> tokio::io::Result<()> {
+        todo!()
+    }
+}
+
+#[derive(Debug)]
+struct File {
+    pub name: String,
+    pub size: u64,
+    pub extension: String,
+    pub attributes: Vec<Attribute>,
+}
+
+#[async_trait]
+impl ToBytes for File {
+    async fn write_to_buf(
+        &self,
+        buffer: &mut BufWriter<impl AsyncWrite + Unpin + Send>,
+    ) -> tokio::io::Result<()> {
+        todo!()
+    }
+}
+
+#[derive(Debug)]
+pub struct SearchRequest {
+    pub ticket: u32,
+    pub query: String,
+}
+
+#[async_trait]
+impl ToBytes for SearchRequest {
+    async fn write_to_buf(
+        &self,
+        buffer: &mut BufWriter<impl AsyncWrite + Unpin + Send>,
+    ) -> tokio::io::Result<()> {
+        let length = 4 + 4 + self.query.bytes().len() as u32;
+        buffer.write_u32_le(length).await?;
+        buffer
+            .write_u32_le(MessageCode::SearchRequest as u32)
+            .await?;
+        buffer.write_u32_le(self.ticket).await?;
+        write_string(&self.query, buffer).await?;
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+pub struct SearchReply {
+    pub username: String,
+    pub ticket: u32,
+    pub size: u64,
+    pub ext: String,
+    pub attributes: Vec<Attribute>,
+    pub slot_free: bool,
+    pub average_speed: u32,
+    pub queue_length: u64,
+}
+
+#[async_trait]
+impl ToBytes for SearchReply {
+    async fn write_to_buf(
+        &self,
+        buffer: &mut BufWriter<impl AsyncWrite + Unpin + Send>,
+    ) -> tokio::io::Result<()> {
+        let length = self.username.bytes().len() as u32
+            + 8
+            + self.ext.bytes().len() as u32
+            + 4
+            + self.attributes.len() as u32 * 8
+            + 1
+            + 4
+            + 8;
+        buffer.write_u32_le(length).await?;
+        buffer.write_u32_le(MessageCode::SearchReply as u32).await?;
+        write_string(&self.username, buffer).await?;
+        buffer.write_u32_le(self.ticket).await?;
+        buffer.write_u64_le(self.size).await?;
+        buffer.write_u32_le(self.attributes.len() as u32).await?;
+
+        for attribute in &self.attributes {
+            attribute.write_to_buf(buffer).await?;
+        }
+
+        let slot_free = if self.slot_free { 1u8 } else { 0u8 };
+        buffer.write_u8(slot_free);
+
+        buffer.write_u32_le(self.average_speed).await?;
+        buffer.write_u64_le(self.queue_length).await?;
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+pub struct UserInfo {
+    pub description: String,
+    pub picture: Option<String>,
+    pub total_upload: u32,
+    pub queue_size: u32,
+    pub slots_free: bool,
+}
+
+#[async_trait]
+impl ToBytes for UserInfo {
+    async fn write_to_buf(
+        &self,
+        buffer: &mut BufWriter<impl AsyncWrite + Unpin + Send>,
+    ) -> tokio::io::Result<()> {
+        let picture_len = if let Some(picture) = &self.picture {
+            picture.len() as u32
+        } else {
+            0
+        };
+
+        let length = 4 + self.description.bytes().len() as u32 + 1 + picture_len + 4 + 4 + 1;
+
+        buffer.write_u32_le(length).await?;
+        buffer
+            .write_u32_le(MessageCode::UserInfoReply as u32)
+            .await?;
+        write_string(&self.description, buffer).await?;
+        buffer.write_u32_le(self.total_upload).await?;
+        buffer.write_u32_le(self.queue_size).await?;
+        let slot_free = if self.slots_free { 1 } else { 0 };
+        buffer.write_u8(slot_free).await?;
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+pub struct FolderContentsRequest {
+    files: Vec<String>,
+}
+
+#[async_trait]
+impl ToBytes for FolderContentsRequest {
+    async fn write_to_buf(
+        &self,
+        buffer: &mut BufWriter<impl AsyncWrite + Unpin + Send>,
+    ) -> tokio::io::Result<()> {
+        let mut files_size = 0;
+        for file in &self.files {
+            files_size += 4;
+            files_size += file.bytes().len() as u32;
+        }
+
+        let length = 4 + self.files.len() as u32 + files_size;
+
+        buffer.write_u32_le(length).await?;
+        buffer
+            .write_u32_le(MessageCode::FolderContentsRequest as u32)
+            .await?;
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+pub struct FolderContentsReply {
+    dirs: Vec<Directory>,
+}
+
+#[async_trait]
+impl ToBytes for FolderContentsReply {
+    async fn write_to_buf(
+        &self,
+        buffer: &mut BufWriter<impl AsyncWrite + Unpin + Send>,
+    ) -> tokio::io::Result<()> {
+        todo!()
+    }
+}
+
+#[derive(Debug)]
+pub struct TransferRequest {
+    direction: u32,
+    ticket: u32,
+    filename: String,
+    file_size: Option<u64>,
+}
+
+#[async_trait]
+impl ToBytes for TransferRequest {
+    async fn write_to_buf(
+        &self,
+        buffer: &mut BufWriter<impl AsyncWrite + Unpin + Send>,
+    ) -> tokio::io::Result<()> {
+        todo!()
+    }
+}
+
+#[derive(Debug)]
+pub struct PlaceInQueueReply {
+    filename: String,
+    place: String,
+}
+
+#[async_trait]
+impl ToBytes for PlaceInQueueReply {
+    async fn write_to_buf(
+        &self,
+        buffer: &mut BufWriter<impl AsyncWrite + Unpin + Send>,
+    ) -> tokio::io::Result<()> {
+        todo!()
+    }
+}
+
+#[derive(Debug)]
+pub struct UploadFailed {
+    filename: String,
+}
+
+#[async_trait]
+impl ToBytes for UploadFailed {
+    async fn write_to_buf(
+        &self,
+        buffer: &mut BufWriter<impl AsyncWrite + Unpin + Send>,
+    ) -> tokio::io::Result<()> {
+        todo!()
+    }
+}
+
+#[derive(Debug)]
+pub struct QueueFailed {
+    filename: String,
+    reason: String,
+}
+
+#[async_trait]
+impl ToBytes for QueueFailed {
+    async fn write_to_buf(
+        &self,
+        buffer: &mut BufWriter<impl AsyncWrite + Unpin + Send>,
+    ) -> tokio::io::Result<()> {
+        todo!()
+    }
+}
+
+#[derive(Debug)]
+pub struct PlaceInQueueRequest {
+    filename: String,
+}
+
+#[async_trait]
+impl ToBytes for PlaceInQueueRequest {
+    async fn write_to_buf(
+        &self,
+        buffer: &mut BufWriter<impl AsyncWrite + Unpin + Send>,
+    ) -> tokio::io::Result<()> {
+        todo!()
+    }
+}
+
+#[derive(Debug)]
+pub struct QueueDownload {
+    filename: String,
+}
+
+#[async_trait]
+impl ToBytes for QueueDownload {
+    async fn write_to_buf(
+        &self,
+        buffer: &mut BufWriter<impl AsyncWrite + Unpin + Send>,
+    ) -> tokio::io::Result<()> {
+        todo!()
+    }
+}
+
+#[derive(Debug)]
+pub enum TransferReply {
+    TransferReplyOk {
+        ticket: String,
+        file_size: Option<u64>,
+    },
+    TransferRejected {
+        ticket: String,
+        reason: String,
+    },
+}
+
+#[async_trait]
+impl ToBytes for TransferReply {
+    async fn write_to_buf(
+        &self,
+        buffer: &mut BufWriter<impl AsyncWrite + Unpin + Send>,
+    ) -> tokio::io::Result<()> {
+        todo!()
+    }
 }
 
 #[async_trait]
@@ -162,7 +466,9 @@ impl ToBytes for PeerConnectionMessage {
         match self {
             PeerConnectionMessage::PierceFirewall(token) => {
                 buffer.write_u32_le(CONNECTION_MSG_HEADER_LEN).await?;
-                buffer.write_u8(InitMessageCode::PierceFireWall as u8).await?;
+                buffer
+                    .write_u8(InitMessageCode::PierceFireWall as u8)
+                    .await?;
                 buffer.write_u32_le(*token).await?;
             }
             PeerConnectionMessage::PeerInit {
@@ -173,7 +479,9 @@ impl ToBytes for PeerConnectionMessage {
                 let username_len = username.bytes().len() as u32 + 4;
                 let connection_type_len = connection_type.bytes().len() as u32 + 4;
 
-                buffer.write_u32_le(1 + username_len + connection_type_len + 4).await?;
+                buffer
+                    .write_u32_le(1 + username_len + connection_type_len + 4)
+                    .await?;
                 buffer.write_u8(InitMessageCode::PeerInit as u8).await?;
                 write_string(&username, buffer).await?;
                 write_string(connection_type.as_ref(), buffer).await?;
@@ -183,113 +491,6 @@ impl ToBytes for PeerConnectionMessage {
         }
 
         Ok(())
-    }
-}
-
-#[async_trait]
-impl ToBytes for PeerMessage {
-    async fn write_to_buf(&self, buffer: &mut BufWriter<impl AsyncWrite + Unpin + Send>) -> tokio::io::Result<()> {
-        match self {
-            PeerMessage::SharesRequest => {}
-            PeerMessage::SharesReply => {}
-            PeerMessage::SearchRequest => {}
-            PeerMessage::SearchReply => {}
-            PeerMessage::UserInfoRequest => {
-                buffer.write_u32_le(4).await?;
-                buffer.write_u32_le(MessageCode::UserInfoRequest as u32).await?;
-            }
-            PeerMessage::UserInfoReply => {}
-            PeerMessage::FolderContentsRequest => {}
-            PeerMessage::FolderContentsReply => {}
-            PeerMessage::TransferRequest => {}
-            PeerMessage::TransferReply => {}
-            PeerMessage::UploadPlaceholder => {}
-            PeerMessage::QueueDownload => {}
-            PeerMessage::PlaceInQueueReply => {}
-            PeerMessage::UploadFailed => {}
-            PeerMessage::QueueFailed => {}
-            PeerMessage::PlaceInQueueRequest => {}
-            PeerMessage::UploadQueueNotification => {}
-            PeerMessage::Unknown => {}
-        }
-
-        Ok(())
-    }
-}
-
-impl PeerMessage {
-    pub fn check(src: &mut Cursor<&[u8]>) -> Result<PeerMessageHeader, SlskError> {
-        // Check if the buffer contains enough bytes to parse the message error
-        if src.remaining() < PEER_MSG_HEADER_LEN as usize {
-            return Err(SlskError::Incomplete);
-        }
-
-        // Check if the buffer contains the full message already
-        let header = PeerMessageHeader::read(src)?;
-        debug!("HEADER : {:?}", header);
-        println!("remaning < msg len : {}", src.remaining() < header.message_len);
-
-        if src.remaining() < header.message_len {
-            Err(SlskError::Incomplete)
-        } else {
-            // discard header data
-            src.set_position(0);
-            src.advance(PEER_MSG_HEADER_LEN as usize);
-
-            Ok(header)
-        }
-    }
-
-    pub(crate) fn parse(
-        src: &mut Cursor<&[u8]>,
-        header: &PeerMessageHeader,
-    ) -> std::io::Result<Self> {
-        info!("PARSING INCOMING PEER MESSAGE ");
-        let message = match header.code {
-            MessageCode::SharesRequest => PeerMessage::SharesRequest,
-            MessageCode::SharesReply => PeerMessage::SharesReply,
-            MessageCode::SearchRequest => PeerMessage::SearchRequest,
-            MessageCode::SearchReply => PeerMessage::SearchReply,
-            MessageCode::UserInfoRequest => PeerMessage::UserInfoRequest,
-            MessageCode::UserInfoReply => PeerMessage::UserInfoReply,
-            MessageCode::FolderContentsRequest => PeerMessage::FolderContentsRequest,
-            MessageCode::FolderContentsReply => PeerMessage::FolderContentsReply,
-            MessageCode::TransferRequest => PeerMessage::TransferRequest,
-            MessageCode::TransferReply => PeerMessage::TransferReply,
-            MessageCode::UploadPlacehold => PeerMessage::UploadPlaceholder,
-            MessageCode::QueueDownload => PeerMessage::QueueDownload,
-            MessageCode::PlaceInQueueReply => PeerMessage::PlaceInQueueReply,
-            MessageCode::UploadFailed => PeerMessage::UploadFailed,
-            MessageCode::QueueFailed => PeerMessage::QueueFailed,
-            MessageCode::PlaceInQueueRequest => PeerMessage::PlaceInQueueRequest,
-            MessageCode::UploadQueueNotification => PeerMessage::UploadQueueNotification,
-            MessageCode::Unknown => PeerMessage::Unknown,
-        };
-
-        Ok(message)
-    }
-
-    pub fn kind(&self) -> &str {
-        match self {
-            PeerMessage::SharesRequest => "SharesRequest",
-            PeerMessage::SharesReply => "SharesReply",
-            PeerMessage::SearchRequest => "SearchRequest",
-            PeerMessage::SearchReply => "SearchReply",
-            PeerMessage::UserInfoRequest => "UserInfoRequest",
-            PeerMessage::UserInfoReply => "UserInfoReply",
-            PeerMessage::FolderContentsRequest => "FolderContentsRequest",
-            PeerMessage::FolderContentsReply => "FolderContentsReply",
-            PeerMessage::TransferRequest => "TransferRequest",
-            PeerMessage::TransferReply => "TransferReply",
-            PeerMessage::UploadPlaceholder => "UploadPlaceholder",
-            PeerMessage::QueueDownload => "QueueDownload",
-            PeerMessage::PlaceInQueueReply => "PlaceInQueueReply",
-            PeerMessage::UploadFailed => "UploadFailed",
-            PeerMessage::QueueFailed => "QueueFailed",
-            PeerMessage::PlaceInQueueRequest => "PlaceInQueueRequest",
-            PeerMessage::UploadQueueNotification => "UploadQueueNotification",
-            PeerMessage::Unknown => "Unknown",
-        }
     }
 }
 

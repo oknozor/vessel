@@ -8,20 +8,16 @@ use tokio::sync::{broadcast, mpsc, Semaphore};
 use tokio::time::{self, Duration};
 use tracing::{error, info};
 
-use crate::message_common::ConnectionType;
 use crate::peers::connection::Connection;
 use crate::peers::handler::Handler;
-use crate::peers::messages::PeerConnectionMessage;
 use crate::peers::shutdown::Shutdown;
 use crate::server::messages::peer::{Parent, PeerConnectionRequest};
-use crate::{Error, SlskError};
-use std::collections::HashMap;
-use tokio::stream::StreamExt;
+use crate::server::messages::request::ServerRequest;
+use crate::SlskError;
+use std::net::Ipv4Addr;
 use tokio::sync::broadcast::Sender;
 use tokio::sync::mpsc::Receiver;
 use tokio::time::timeout;
-use std::net::Ipv4Addr;
-use crate::server::messages::request::ServerRequest;
 
 /// Maximum number of concurrent connections the peer server will accept.
 ///
@@ -44,7 +40,7 @@ struct GlobalConnectionHandler {
 impl GlobalConnectionHandler {
     async fn run(
         &mut self,
-        mut peer_connection_rx: Receiver<PeerConnectionRequest>,
+        peer_connection_rx: Receiver<PeerConnectionRequest>,
         mut possible_parent_rx: Receiver<Vec<Parent>>,
     ) -> crate::Result<()> {
         let limit_connections = self.limit_connections.clone();
@@ -58,18 +54,24 @@ impl GlobalConnectionHandler {
             port: 2234,
         };
 
-        let mut handler = connect_to_peer(limit_connections.clone(), notify_shutdown.clone(), shutdown_complete_tx.clone(), &parent).await;
+        let handler = connect_to_peer(
+            limit_connections.clone(),
+            notify_shutdown.clone(),
+            shutdown_complete_tx.clone(),
+            &parent,
+        )
+        .await;
         handler?.run(self.peer_connection_outgoing_tx.clone()).await;
 
         tokio::join!(
-        // self.listen(),
-        connect_to_parents(
-            limit_connections,
-            notify_shutdown,
-            shutdown_complete_tx,
-            parent_connections,
-            &mut possible_parent_rx
-        )
+            // self.listen(),
+            connect_to_parents(
+                limit_connections,
+                notify_shutdown,
+                shutdown_complete_tx,
+                parent_connections,
+                &mut possible_parent_rx
+            )
         );
         Ok(())
     }
@@ -128,14 +130,11 @@ pub async fn run(
     peer_connection_outgoing_tx: mpsc::Sender<ServerRequest>,
     possible_parent_rx: Receiver<Vec<Parent>>,
 ) -> crate::Result<()> {
-
     debug!("Waiting for user to be logged in");
     while let None = logged_in_rx.recv().await {
         // Waiting for login
-
     }
     debug!("User logged in, launching peer listener");
-
 
     let (notify_shutdown, _) = broadcast::channel(1);
     let (shutdown_complete_tx, shutdown_complete_rx) = mpsc::channel(1);
@@ -279,7 +278,8 @@ async fn connect_to_peer(
     if let Ok(Ok(socket)) = timeout(
         Duration::from_millis(2000),
         TcpStream::connect(user.get_address()),
-    ).await
+    )
+    .await
     {
         info!("connected");
         Ok(Handler {

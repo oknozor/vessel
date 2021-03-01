@@ -1,16 +1,19 @@
-use crate::frame::ToBytes;
-use crate::message_common::ConnectionType;
-use crate::peers::messages::PEER_MSG_HEADER_LEN;
-use crate::peers::messages::{
-    PeerConnectionMessage, PeerMessage, PeerPacket, CONNECTION_MSG_HEADER_LEN,
-};
-use crate::SlskError;
-use bytes::{Buf, BytesMut};
 use std::io::Cursor;
+
+use bytes::{Buf, BytesMut};
 use tokio::io::{AsyncReadExt, AsyncWriteExt, BufWriter};
 use tokio::net::TcpStream;
 use tokio::time::timeout;
 use tokio::time::Duration;
+
+use crate::frame::ToBytes;
+use crate::message_common::ConnectionType;
+use crate::peers::messages::PEER_MSG_HEADER_LEN;
+use crate::peers::messages::{
+    PeerConnectionMessage, PeerRequestPacket, PeerResponsePacket, CONNECTION_MSG_HEADER_LEN,
+};
+use crate::peers::response::PeerResponse;
+use crate::SlskError;
 
 #[derive(Debug)]
 pub struct Connection {
@@ -22,7 +25,7 @@ pub struct Connection {
 impl Connection {
     /// Try to read a soulseek message and timeout after 10ms if nothing happened, this method is used
     /// to avoid blocking when the stream buffer is empty and soulseek is not sending message anymore.
-    pub async fn read_response_with_timeout(&mut self) -> crate::Result<PeerPacket> {
+    pub async fn read_response_with_timeout(&mut self) -> crate::Result<PeerResponsePacket> {
         match timeout(Duration::from_millis(100), self.read_response()).await {
             Ok(message) => message,
             Err(e) => Err(SlskError::TimeOut(e)),
@@ -38,24 +41,24 @@ impl Connection {
     ///
     /// [`Header`]: crate::peers::messages::Header
     /// [`read_response_with_timeout`]: SlskConnection::read_response_with_timeout
-    pub async fn read_response(&mut self) -> crate::Result<PeerPacket> {
+    pub async fn read_response(&mut self) -> crate::Result<PeerResponsePacket> {
         loop {
             match self.connection_type {
                 Some(_) => {
                     if let Some(message) = self.parse_peer_message()? {
-                        return Ok(PeerPacket::Message(message));
+                        return Ok(PeerResponsePacket::Message(message));
                     }
                 }
                 None => {
                     if let Some(message) = self.parse_connection_message()? {
-                        return Ok(PeerPacket::ConnectionMessage(message));
+                        return Ok(PeerResponsePacket::ConnectionMessage(message));
                     }
                 }
             }
 
             if 0 == self.stream.read_buf(&mut self.buffer).await? {
                 return if self.buffer.is_empty() {
-                    Ok(PeerPacket::None)
+                    Ok(PeerResponsePacket::None)
                 } else {
                     Err("connection reset by peer".into())
                 };
@@ -64,19 +67,18 @@ impl Connection {
     }
 
     /// Send a [`PeerMessage`] the soulseek server, using `[ToBytes]` to write to the buffer.
-    pub async fn write_request(&mut self, message: PeerPacket) -> tokio::io::Result<()> {
+    pub async fn write_request(&mut self, message: PeerRequestPacket) -> tokio::io::Result<()> {
         info!("writing request to peer connection");
         match message {
-            PeerPacket::Message(message) => {
+            PeerRequestPacket::Message(message) => {
                 message.write_to_buf(&mut self.stream).await?;
                 info!("request sent to peer : {}", message.kind());
-            },
-            PeerPacket::ConnectionMessage(message) => {
+            }
+            PeerRequestPacket::ConnectionMessage(message) => {
                 message.write_to_buf(&mut self.stream).await?;
                 info!("request sent to peer : {}", message.kind());
-
-            },
-            _ => unreachable!()
+            }
+            _ => unreachable!(),
         }
 
         self.stream.flush().await
@@ -120,14 +122,16 @@ impl Connection {
         }
     }
 
-    fn parse_peer_message(&mut self) -> crate::Result<Option<PeerMessage>> {
+    fn parse_peer_message(&mut self) -> crate::Result<Option<PeerResponse>> {
         use crate::SlskError::Incomplete;
         let mut buf = Cursor::new(&self.buffer[..]);
 
-        match PeerMessage::check(&mut buf) {
+        match PeerResponse::check(&mut buf) {
             Ok(header) => {
-                debug!("got peer message header");
-                let peer_message = PeerMessage::parse(&mut buf, &header)?;
+                debug!("Incoming peer message header: {:?}", header);
+
+                let peer_message = PeerResponse::parse(&mut buf, &header)?;
+
                 // consume the message bytes
                 self.consume(header.message_len as usize);
                 Ok(Some(peer_message))

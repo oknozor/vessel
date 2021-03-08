@@ -1,23 +1,25 @@
-use crate::frame::read_string;
-use crate::peers::messages::{
-    FolderContentsReply, MessageCode, PeerMessageHeader, PlaceInQueueReply, PlaceInQueueRequest,
-    QueueDownload, QueueFailed, SearchReply, SearchRequest, TransferReply, TransferRequest,
-    UploadFailed, UserInfo, PEER_MSG_HEADER_LEN,
-};
-use crate::SlskError;
-use bytes::Buf;
 use std::io::Cursor;
+
+use bytes::Buf;
+
+use crate::frame::ParseBytes;
+use crate::SlskError;
+use crate::peers::messages::shared_directories::SharedDirectories;
+use crate::peers::messages::search::{SearchRequest, SearchReply};
+use crate::peers::messages::user_info::UserInfo;
+use crate::peers::messages::transfer::{TransferRequest, TransferReply, QueueDownload, PlaceInQueueReply, UploadFailed, QueueFailed, PlaceInQueueRequest};
+use crate::peers::messages::{PeerMessageHeader, PEER_MSG_HEADER_LEN, MessageCode};
 
 #[derive(Debug)]
 pub enum PeerResponse {
     SharesRequest,
-    SharesReply,
+    SharesReply(SharedDirectories),
     SearchRequest(SearchRequest),
     SearchReply(SearchReply),
     UserInfoRequest,
     UserInfoReply(UserInfo),
-    FolderContentsRequest(FolderContentsReply),
-    FolderContentsReply(FolderContentsReply),
+    FolderContentsRequest(SharedDirectories),
+    FolderContentsReply(SharedDirectories),
     TransferRequest(TransferRequest),
     TransferReply(TransferReply),
     UploadPlaceholder,
@@ -36,17 +38,12 @@ impl PeerResponse {
         if src.remaining() < PEER_MSG_HEADER_LEN as usize {
             return Err(SlskError::Incomplete);
         }
-
         // Check if the buffer contains the full message already
         let header = PeerMessageHeader::read(src)?;
 
         if src.remaining() < header.message_len {
             Err(SlskError::Incomplete)
         } else {
-            // discard header data
-            src.set_position(0);
-            src.advance(PEER_MSG_HEADER_LEN as usize);
-
             Ok(header)
         }
     }
@@ -54,7 +51,7 @@ impl PeerResponse {
     pub fn kind(&self) -> &str {
         match self {
             PeerResponse::SharesRequest => "SharesRequest",
-            PeerResponse::SharesReply => "SharesReply",
+            PeerResponse::SharesReply(_) => "SharesReply",
             PeerResponse::SearchRequest(_) => "SearchRequest",
             PeerResponse::SearchReply(_) => "SearchReply",
             PeerResponse::UserInfoRequest => "UserInfoRequest",
@@ -79,37 +76,12 @@ impl PeerResponse {
         header: &PeerMessageHeader,
     ) -> std::io::Result<Self> {
         let message = match header.code {
-            MessageCode::SharesRequest => todo!(),
-            MessageCode::SharesReply => todo!(),
+            MessageCode::SharesRequest => PeerResponse::SharesRequest,
+            MessageCode::SharesReply => SharedDirectories::parse(src).map(PeerResponse::SharesReply)?,
             MessageCode::SearchRequest => todo!(),
             MessageCode::SearchReply => todo!(),
-            MessageCode::UserInfoRequest => todo!(),
-            MessageCode::UserInfoReply => {
-                println!("{:?}", src);
-                let description = read_string(src)?;
-                println!("{}", description);
-                let has_picture = src.get_u8() != 0;
-                println!("{}", has_picture);
-                let picture = if has_picture {
-                    read_string(src).ok()
-                } else {
-                    None
-                };
-                let total_upload = src.get_u32_le();
-                println!("{}", total_upload);
-                let queue_size = src.get_u32_le();
-                println!("{}", queue_size);
-                let slots_free = src.get_u8() == 1;
-                println!("{}", slots_free);
-
-                PeerResponse::UserInfoReply(UserInfo {
-                    description,
-                    picture,
-                    total_upload,
-                    queue_size,
-                    slots_free,
-                })
-            }
+            MessageCode::UserInfoRequest => PeerResponse::UserInfoRequest,
+            MessageCode::UserInfoReply => UserInfo::parse(src).map(PeerResponse::UserInfoReply)?,
             MessageCode::FolderContentsRequest => todo!(),
             MessageCode::FolderContentsReply => todo!(),
             MessageCode::TransferRequest => todo!(),

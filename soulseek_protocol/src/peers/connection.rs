@@ -8,12 +8,12 @@ use tokio::time::Duration;
 
 use crate::frame::ToBytes;
 use crate::message_common::ConnectionType;
+use crate::peers::messages::connection::{CONNECTION_MSG_HEADER_LEN, PeerConnectionMessage};
 use crate::peers::messages::PEER_MSG_HEADER_LEN;
-use crate::peers::messages::{
-    PeerConnectionMessage, PeerRequestPacket, PeerResponsePacket, CONNECTION_MSG_HEADER_LEN,
-};
+use crate::peers::messages::{PeerRequestPacket, PeerResponsePacket};
 use crate::peers::response::PeerResponse;
 use crate::SlskError;
+use std::net::{Ipv4Addr, SocketAddr};
 
 #[derive(Debug)]
 pub struct Connection {
@@ -23,15 +23,6 @@ pub struct Connection {
 }
 
 impl Connection {
-    /// Try to read a soulseek message and timeout after 10ms if nothing happened, this method is used
-    /// to avoid blocking when the stream buffer is empty and soulseek is not sending message anymore.
-    pub async fn read_response_with_timeout(&mut self) -> crate::Result<PeerResponsePacket> {
-        match timeout(Duration::from_millis(100), self.read_response()).await {
-            Ok(message) => message,
-            Err(e) => Err(SlskError::TimeOut(e)),
-        }
-    }
-
     /// Attempt to read a message from the peer connection.
     /// First parse the message [`Header`], if there are at least as much bytes as the header content
     /// length, try to parse it, otherwise, try to read more bytes from the soulseek TcpStream buffer.
@@ -44,10 +35,16 @@ impl Connection {
     pub async fn read_response(&mut self) -> crate::Result<PeerResponsePacket> {
         loop {
             match self.connection_type {
-                Some(_) => {
+                Some(ConnectionType::PeerToPeer) => {
                     if let Some(message) = self.parse_peer_message()? {
-                        return Ok(PeerResponsePacket::Message(message));
+                        return Ok(PeerResponsePacket::Message(message))
                     }
+                }
+                Some(ConnectionType::DistributedNetwork) => {
+                    // TODO
+                }
+                Some(ConnectionType::FileTransfer) => {
+                    // TODO
                 }
                 None => {
                     if let Some(message) = self.parse_connection_message()? {
@@ -60,7 +57,7 @@ impl Connection {
                 return if self.buffer.is_empty() {
                     Ok(PeerResponsePacket::None)
                 } else {
-                    Err("connection reset by peer".into())
+                    Err(crate::SlskError::ConnectionResetByPeer)
                 };
             }
         }
@@ -68,15 +65,14 @@ impl Connection {
 
     /// Send a [`PeerMessage`] the soulseek server, using `[ToBytes]` to write to the buffer.
     pub async fn write_request(&mut self, message: PeerRequestPacket) -> tokio::io::Result<()> {
-        info!("writing request to peer connection");
         match message {
             PeerRequestPacket::Message(message) => {
                 message.write_to_buf(&mut self.stream).await?;
-                info!("request sent to peer : {}", message.kind());
+                info!("Peer request sent to peer : {}", message.kind());
             }
             PeerRequestPacket::ConnectionMessage(message) => {
                 message.write_to_buf(&mut self.stream).await?;
-                info!("request sent to peer : {}", message.kind());
+                info!("Connection request sent to peer : {}", message.kind());
             }
             _ => unreachable!(),
         }
@@ -91,14 +87,15 @@ impl Connection {
         match self.connection_type {
             Some(_) => self
                 .buffer
-                .advance(CONNECTION_MSG_HEADER_LEN as usize + message_len),
+                .advance( message_len),
             None => self
                 .buffer
-                .advance(PEER_MSG_HEADER_LEN as usize + message_len),
+                .advance(message_len),
         }
     }
 
     pub(crate) fn new(socket: TcpStream) -> Connection {
+        let _ = socket.set_keepalive(Some(Duration::from_secs(1)));
         Connection {
             stream: BufWriter::new(socket),
             buffer: BytesMut::with_capacity(4 * 1024),
@@ -112,6 +109,7 @@ impl Connection {
 
         match PeerConnectionMessage::check(&mut buf) {
             Ok(header) => {
+                buf.set_position(CONNECTION_MSG_HEADER_LEN as u64);
                 let connection_message = PeerConnectionMessage::parse(&mut buf, &header)?;
                 // consume the message bytes
                 self.consume(header.message_len);
@@ -130,14 +128,32 @@ impl Connection {
             Ok(header) => {
                 debug!("Incoming peer message header: {:?}", header);
 
+                // Advance the buffer forward to skip header bytes
+                buf.set_position(PEER_MSG_HEADER_LEN as u64);
+
                 let peer_message = PeerResponse::parse(&mut buf, &header)?;
 
                 // consume the message bytes
                 self.consume(header.message_len as usize);
+
                 Ok(Some(peer_message))
             }
             Err(Incomplete) => Ok(None),
             Err(e) => Err(e),
+        }
+    }
+
+    pub fn get_peer_address(&self) -> Ipv4Addr {
+        match &self
+            .stream
+            .get_ref()
+            .peer_addr()
+            .expect("Unable to get peer address")
+        {
+            SocketAddr::V4(address) => address.ip().to_owned(),
+            SocketAddr::V6(_) => {
+                unreachable!()
+            }
         }
     }
 }

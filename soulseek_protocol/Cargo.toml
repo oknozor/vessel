@@ -10,11 +10,17 @@ edition = "2018"
 
 md5 = "0.7.0"
 rand = "0.7.3"
-tokio = { version = "0.2", features = ["io-util", "net", "macros", "time" ] }
+tokio = { version = "0.2", features = ["io-util", "net", "macros", "time", "sync" ] }
 bytes = "0.5.0"
 serde = "1.0.117"
 serde_derive = "1.0.117"
 serde_json = "1.0.59"
 async-trait = "0.1.42"
 tracing = "0.1.22"
-flate2 = { version = "1.0.17", features = ["zlib"], default-features = false }
+flate2 = { version = "1.0.17", features = ["zlib", "tokio"], default-features = false }
+sled = "0.34.6"
+config = "0.11.0"
+lazy_static = "1.4.0"
+
+[dev-dependencies]
+tokio-test = "0.4.1"

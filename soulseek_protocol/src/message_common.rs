@@ -3,7 +3,7 @@ use crate::message_common::ConnectionType::{DistributedNetwork, FileTransfer, Pe
 use std::io::Cursor;
 use std::str::Bytes;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum ConnectionType {
     PeerToPeer,
     FileTransfer,

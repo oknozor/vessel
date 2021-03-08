@@ -1,7 +1,7 @@
 use crate::frame::ParseBytes;
 use crate::server::messages::chat::*;
 use crate::server::messages::login::*;
-use crate::server::messages::peer::{Parent, PeerConnectionRequest};
+use crate::server::messages::peer::{Peer, PeerConnectionRequest};
 use crate::server::messages::room::*;
 use crate::server::messages::user::*;
 use crate::server::messages::{Header, MessageCode, HEADER_LEN};
@@ -35,7 +35,7 @@ pub enum ServerResponse {
     PrivateMessage(PrivateMessage),
     UserStats(UserStats),
     ConnectToPeer(PeerConnectionRequest),
-    PossibleParents(Vec<Parent>),
+    PossibleParents(Vec<Peer>),
     Unknown(u32, u32, Vec<u8>), // length, code, raw bytes,
 }
 

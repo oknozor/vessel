@@ -45,23 +45,23 @@ impl ParseBytes for PeerConnectionRequest {
     }
 }
 
-pub type Parents = Vec<Parent>;
+pub type Parents = Vec<Peer>;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct Parent {
+pub struct Peer {
     pub username: String,
-    pub(crate) ip: Ipv4Addr,
+    pub ip: Ipv4Addr,
     pub(crate) port: u32,
 }
 
-impl Parent {
+impl Peer {
     pub fn get_address(&self) -> String {
         format!("{}:{}", self.ip, self.port)
     }
 }
 
-impl ParseBytes for Vec<Parent> {
-    type Output = Vec<Parent>;
+impl ParseBytes for Vec<Peer> {
+    type Output = Vec<Peer>;
 
     fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self::Output> {
         let number_of_parent = src.get_u32_le();
@@ -72,7 +72,7 @@ impl ParseBytes for Vec<Parent> {
             let ip = read_ipv4(src)?;
             let port = src.get_u32_le();
 
-            parents.push(Parent { username, ip, port });
+            parents.push(Peer { username, ip, port });
         }
 
         Ok(parents)

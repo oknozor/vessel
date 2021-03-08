@@ -4,19 +4,21 @@ extern crate serde_derive;
 extern crate async_trait;
 #[macro_use]
 extern crate tracing;
+#[macro_use]
+extern crate lazy_static;
 
 use std::fmt;
 use std::num::TryFromIntError;
 use std::string::FromUtf8Error;
 
 use tokio::time::Elapsed;
+use config::ConfigError;
 
 pub mod peers;
 
 // pub mod listener;
 // pub mod peer_connection;
 
-mod distributed_message;
 pub mod frame;
 pub mod message_common;
 /// Contains all the soulseek protocol server message, see [`ServerRequest`] and [`ServerResponse`]
@@ -25,6 +27,9 @@ pub mod message_common;
 ///  [`ServerRequest`]: crate::server.messages::request:ServerRequest
 ///  [`ServerResponse`]: crate::server.messages::request::ServerResponse
 pub mod server;
+
+pub mod database;
+pub mod settings;
 
 pub type Result<T> = std::result::Result<T, SlskError>;
 pub type Error = Box<dyn std::error::Error + Send + Sync>;
@@ -35,6 +40,11 @@ pub enum SlskError {
     Incomplete,
     /// Timeout waiting for an answer`
     TimeOut(Elapsed),
+    /// Peer disconnected
+    ConnectionResetByPeer,
+    /// Configuration error
+    ConfigError(ConfigError),
+
     /// Invalid message encoding
     Other(crate::Error),
 }
@@ -78,6 +88,12 @@ impl fmt::Display for SlskError {
             SlskError::Other(err) => err.fmt(fmt),
             SlskError::TimeOut(elapsed) => {
                 write!(fmt, "timed out after {} reading soulseek stream", elapsed)
+            }
+            SlskError::ConnectionResetByPeer => {
+                write!(fmt, "Connection reset by peer")
+            }
+            SlskError::ConfigError(err) => {
+                write!(fmt, "Configuration error : {}", err)
             }
         }
     }

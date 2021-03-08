@@ -1,23 +1,23 @@
 use tokio::io::{AsyncWrite, AsyncWriteExt, BufWriter};
 
 use crate::frame::ToBytes;
-use crate::peers::messages::{
-    FolderContentsReply, MessageCode, PlaceInQueueReply, PlaceInQueueRequest, QueueDownload,
-    QueueFailed, SearchReply, SearchRequest, TransferReply, TransferRequest, UploadFailed,
-    UserInfo,
-};
+use crate::peers::messages::{MessageCode};
+use crate::peers::messages::shared_directories::SharedDirectories;
+use crate::peers::messages::search::{SearchRequest, SearchReply};
+use crate::peers::messages::user_info::UserInfo;
+use crate::peers::messages::transfer::*;
 
 /// TODO
 #[derive(Debug)]
 pub enum PeerRequest {
     SharesRequest,
-    SharesReply,
+    SharesReply(SharedDirectories),
     SearchRequest(SearchRequest),
     SearchReply(SearchReply),
     UserInfoRequest,
     UserInfoReply(UserInfo),
-    FolderContentsRequest(FolderContentsReply),
-    FolderContentsReply(FolderContentsReply),
+    FolderContentsRequest(SharedDirectories),
+    FolderContentsReply(SharedDirectories),
     TransferRequest(TransferRequest),
     TransferReply(TransferReply),
     UploadPlaceholder,
@@ -34,7 +34,7 @@ impl PeerRequest {
     pub fn kind(&self) -> &str {
         match self {
             PeerRequest::SharesRequest => "SharesRequest",
-            PeerRequest::SharesReply => "SharesReply",
+            PeerRequest::SharesReply(_) => "SharesReply",
             PeerRequest::SearchRequest(_) => "SearchRequest",
             PeerRequest::SearchReply(_) => "SearchReply",
             PeerRequest::UserInfoRequest => "UserInfoRequest",
@@ -68,9 +68,11 @@ impl ToBytes for PeerRequest {
                     .write_u32_le(MessageCode::SharesRequest as u32)
                     .await?;
             }
-            PeerRequest::SharesReply => {}
-            PeerRequest::SearchRequest(search_resquest) => {
-                search_resquest.write_to_buf(buffer).await?
+            PeerRequest::SharesReply(shared_dirs) => {
+                shared_dirs.write_to_buf(buffer).await?;
+            }
+            PeerRequest::SearchRequest(search_request) => {
+                search_request.write_to_buf(buffer).await?
             }
             PeerRequest::SearchReply(search_reply) => search_reply.write_to_buf(buffer).await?,
             PeerRequest::UserInfoRequest => {

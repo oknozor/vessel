@@ -2,7 +2,7 @@ use futures::TryFutureExt;
 use tokio::net::TcpListener;
 use tokio::signal;
 use tokio::sync::mpsc;
-use tokio::task::{JoinHandle};
+use tokio::task::JoinHandle;
 
 use soulseek_protocol::database::Database;
 use soulseek_protocol::peers::messages::PeerRequestPacket;
@@ -108,9 +108,8 @@ pub fn spawn_peer_listener(
     possible_parent_rx: mpsc::Receiver<Vec<Peer>>,
     logged_in_rx: mpsc::Receiver<()>,
     listener: TcpListener,
-    database: Database
+    database: Database,
 ) -> JoinHandle<()> {
-
     tokio::spawn(async move {
         soulseek_protocol::peers::listener::run(
             listener,
@@ -140,6 +139,10 @@ pub fn spawn_login_task(mut login_sender: mpsc::Sender<ServerRequest>) -> JoinHa
     })
 }
 
-pub fn spawn_http_listener(http_tx: mpsc::Sender<ServerRequest>, peer_message_dispatcher_tx: mpsc::Sender<(String, PeerRequestPacket)>, database: Database) -> JoinHandle<()> {
+pub fn spawn_http_listener(
+    http_tx: mpsc::Sender<ServerRequest>,
+    peer_message_dispatcher_tx: mpsc::Sender<(String, PeerRequestPacket)>,
+    database: Database,
+) -> JoinHandle<()> {
     tokio::spawn(async { vessel_http::start(http_tx, peer_message_dispatcher_tx, database).await })
 }

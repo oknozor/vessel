@@ -5,14 +5,18 @@ use soulseek_protocol::server::messages::request::ServerRequest;
 use std::sync::Mutex;
 use tokio::sync::mpsc;
 
+use soulseek_protocol::database::Database;
+use soulseek_protocol::peers::messages::PeerRequestPacket;
+use soulseek_protocol::peers::request::PeerRequest;
 use soulseek_protocol::server::messages::chat::SayInChat;
 use std::sync::Arc;
 use warp::Filter;
-use soulseek_protocol::peers::messages::PeerRequestPacket;
-use soulseek_protocol::peers::request::PeerRequest;
-use soulseek_protocol::database::{Database};
 
-pub async fn start(sender: mpsc::Sender<ServerRequest>, peer_message_dispatcher: mpsc::Sender<(String, PeerRequestPacket)>, database: Database) {
+pub async fn start(
+    sender: mpsc::Sender<ServerRequest>,
+    peer_message_dispatcher: mpsc::Sender<(String, PeerRequestPacket)>,
+    database: Database,
+) {
     let sender = Arc::new(Mutex::new(sender));
     let peer_sender = Arc::new(Mutex::new(peer_message_dispatcher));
 
@@ -93,7 +97,10 @@ pub async fn start(sender: mpsc::Sender<ServerRequest>, peer_message_dispatcher:
     let send_user_info = warp::path!("peers" / String / "userinfo").map(move |peer_name| {
         let mut peer_sender_copy = peer_sender_copy.lock().unwrap();
         peer_sender_copy
-            .try_send((peer_name, PeerRequestPacket::Message(PeerRequest::UserInfoRequest)))
+            .try_send((
+                peer_name,
+                PeerRequestPacket::Message(PeerRequest::UserInfoRequest),
+            ))
             .unwrap();
         "ok"
     });
@@ -102,13 +109,17 @@ pub async fn start(sender: mpsc::Sender<ServerRequest>, peer_message_dispatcher:
     let send_share_request = warp::path!("peers" / String / "shares").map(move |peer_name| {
         let mut peer_sender_copy = peer_sender_copy.lock().unwrap();
         peer_sender_copy
-            .try_send((peer_name, PeerRequestPacket::Message(PeerRequest::SharesRequest)))
+            .try_send((
+                peer_name,
+                PeerRequestPacket::Message(PeerRequest::SharesRequest),
+            ))
             .unwrap();
         "ok"
     });
 
     let get_all_connected_users = warp::path!("peers").map(move || {
-        database.find_all()
+        database
+            .find_all()
             .iter()
             .map(|(k, v)| format!("{}@{}", k, v))
             .collect::<Vec<String>>()

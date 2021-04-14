@@ -11,8 +11,8 @@ use std::fmt;
 use std::num::TryFromIntError;
 use std::string::FromUtf8Error;
 
-use tokio::time::Elapsed;
 use config::ConfigError;
+use tokio::time::Elapsed;
 
 pub mod peers;
 

@@ -1,5 +1,5 @@
+use config::{Config, ConfigError, File};
 use std::path::PathBuf;
-use config::{ConfigError, Config, File};
 
 lazy_static! {
     pub static ref CONFIG: Settings = Settings::get().unwrap();
@@ -16,8 +16,7 @@ impl Settings {
     pub fn get() -> Result<Self, ConfigError> {
         let mut s = Config::new();
         s.merge(File::from(PathBuf::from("vessel.toml")))?;
-        let mut settings: Result<Settings, ConfigError> = s
-            .try_into();
+        let mut settings: Result<Settings, ConfigError> = s.try_into();
 
         settings
     }

@@ -3,13 +3,16 @@ use std::io::Cursor;
 use bytes::Buf;
 
 use crate::frame::ParseBytes;
-use crate::SlskError;
-use crate::peers::messages::shared_directories::SharedDirectories;
-use crate::peers::messages::search::{SearchRequest, SearchReply};
-use crate::peers::messages::user_info::UserInfo;
-use crate::peers::messages::transfer::{TransferRequest, TransferReply, QueueDownload, PlaceInQueueReply, UploadFailed, QueueFailed, PlaceInQueueRequest};
-use crate::peers::messages::{PeerMessageHeader, PEER_MSG_HEADER_LEN, MessageCode};
 use crate::peers::messages::folder_content::FolderContentsRequest;
+use crate::peers::messages::search::{SearchReply, SearchRequest};
+use crate::peers::messages::shared_directories::SharedDirectories;
+use crate::peers::messages::transfer::{
+    PlaceInQueueReply, PlaceInQueueRequest, QueueDownload, QueueFailed, TransferReply,
+    TransferRequest, UploadFailed,
+};
+use crate::peers::messages::user_info::UserInfo;
+use crate::peers::messages::{MessageCode, PeerMessageHeader, PEER_MSG_HEADER_LEN};
+use crate::SlskError;
 
 #[derive(Debug)]
 pub enum PeerResponse {
@@ -78,12 +81,16 @@ impl PeerResponse {
     ) -> std::io::Result<Self> {
         let message = match header.code {
             MessageCode::SharesRequest => PeerResponse::SharesRequest,
-            MessageCode::SharesReply => SharedDirectories::parse(src).map(PeerResponse::SharesReply)?,
+            MessageCode::SharesReply => {
+                SharedDirectories::parse(src).map(PeerResponse::SharesReply)?
+            }
             MessageCode::SearchRequest => todo!(),
             MessageCode::SearchReply => todo!(),
             MessageCode::UserInfoRequest => PeerResponse::UserInfoRequest,
             MessageCode::UserInfoReply => UserInfo::parse(src).map(PeerResponse::UserInfoReply)?,
-            MessageCode::FolderContentsRequest => FolderContentsRequest::parse(src).map(PeerResponse::FolderContentsRequest),
+            MessageCode::FolderContentsRequest => {
+                FolderContentsRequest::parse(src).map(PeerResponse::FolderContentsRequest)
+            }
             MessageCode::FolderContentsReply => todo!(),
             MessageCode::TransferRequest => todo!(),
             MessageCode::TransferReply => todo!(),

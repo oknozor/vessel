@@ -3,20 +3,22 @@ use std::io::Cursor;
 use bytes::Buf;
 use tokio::io::{AsyncWrite, AsyncWriteExt, BufWriter};
 
-use crate::frame::{read_string, ToBytes, write_string};
+use crate::frame::{read_string, write_string, ToBytes};
 use crate::message_common::ConnectionType;
-use crate::peers::messages::connection::{CONNECTION_MSG_HEADER_LEN, ConnectionMessageHeader, InitMessageCode, PeerConnectionMessage};
+use crate::peers::messages::connection::{
+    ConnectionMessageHeader, InitMessageCode, PeerConnectionMessage, CONNECTION_MSG_HEADER_LEN,
+};
 use crate::peers::request::PeerRequest;
 use crate::peers::response::PeerResponse;
 use crate::SlskError;
 
 pub mod connection;
-pub mod shared_directories;
-pub mod search;
-pub mod user_info;
-pub mod place_in_queue;
-pub mod transfer;
 pub mod folder_content;
+pub mod place_in_queue;
+pub mod search;
+pub mod shared_directories;
+pub mod transfer;
+pub mod user_info;
 
 #[derive(Debug)]
 pub struct PeerMessageHeader {

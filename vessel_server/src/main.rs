@@ -40,7 +40,6 @@ async fn main() -> std::io::Result<()> {
     let login_sender = http_tx.clone();
     let (logged_in_tx, logged_in_rx) = mpsc::channel::<()>(1);
 
-
     let database = Database::new();
 
     // listen for incoming client commands and forward soulseek message to the sse service
@@ -61,7 +60,8 @@ async fn main() -> std::io::Result<()> {
     // Start the HTTP api proxy with the soulseek mpsc event sender
     // Here we are only sending request via HTTP and expect no other response
     // than 201/NO_CONTENT
-    let http_server = tasks::spawn_http_listener(http_tx, peer_message_dispatcher_tx, database.clone());
+    let http_server =
+        tasks::spawn_http_listener(http_tx, peer_message_dispatcher_tx, database.clone());
 
     // Once every thing is ready we need to login before talking to the soulseek server
     // Vessel support one and only one user connection, credentials are retrieved from vessel configuration
@@ -77,7 +77,7 @@ async fn main() -> std::io::Result<()> {
         possible_parent_rx,
         logged_in_rx,
         listener,
-        database.clone()
+        database.clone(),
     );
 
     // Wraps everything with tokio::join so we don't block on servers startup

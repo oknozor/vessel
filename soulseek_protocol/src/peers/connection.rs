@@ -8,7 +8,7 @@ use tokio::time::Duration;
 
 use crate::frame::ToBytes;
 use crate::message_common::ConnectionType;
-use crate::peers::messages::connection::{CONNECTION_MSG_HEADER_LEN, PeerConnectionMessage};
+use crate::peers::messages::connection::{PeerConnectionMessage, CONNECTION_MSG_HEADER_LEN};
 use crate::peers::messages::PEER_MSG_HEADER_LEN;
 use crate::peers::messages::{PeerRequestPacket, PeerResponsePacket};
 use crate::peers::response::PeerResponse;
@@ -37,7 +37,7 @@ impl Connection {
             match self.connection_type {
                 Some(ConnectionType::PeerToPeer) => {
                     if let Some(message) = self.parse_peer_message()? {
-                        return Ok(PeerResponsePacket::Message(message))
+                        return Ok(PeerResponsePacket::Message(message));
                     }
                 }
                 Some(ConnectionType::DistributedNetwork) => {
@@ -85,12 +85,8 @@ impl Connection {
     /// otherwise consume the peer message plus the 8 bytes header prefix.
     fn consume(&mut self, message_len: usize) {
         match self.connection_type {
-            Some(_) => self
-                .buffer
-                .advance( message_len),
-            None => self
-                .buffer
-                .advance(message_len),
+            Some(_) => self.buffer.advance(message_len),
+            None => self.buffer.advance(message_len),
         }
     }
 

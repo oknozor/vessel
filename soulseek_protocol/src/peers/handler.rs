@@ -6,14 +6,13 @@ use tokio::sync::{mpsc, Semaphore};
 use crate::database::Database;
 use crate::message_common::ConnectionType;
 use crate::peers::connection::Connection;
+use crate::peers::messages::connection::PeerConnectionMessage;
 use crate::peers::messages::user_info::UserInfo;
 use crate::peers::messages::PeerRequestPacket;
-use crate::peers::messages::{PeerResponsePacket};
+use crate::peers::messages::PeerResponsePacket;
 use crate::peers::request::PeerRequest;
 use crate::peers::response::PeerResponse;
 use crate::peers::shutdown::Shutdown;
-use crate::peers::messages::connection::PeerConnectionMessage;
-
 
 #[derive(Debug)]
 pub struct Handler {
@@ -46,12 +45,12 @@ impl Handler {
                 }
             };
 
-
             match maybe_message {
                 Ok(message) => match message {
                     PeerResponsePacket::ConnectionMessage(message) => {
                         info!("Got connection message : {:?}", &message);
-                        self.handle_connection_message(&message, database.clone()).await;
+                        self.handle_connection_message(&message, database.clone())
+                            .await;
                     }
                     PeerResponsePacket::Message(message) => {
                         info!("Got message : {:?}", &message);
@@ -104,7 +103,11 @@ impl Handler {
         }
     }
 
-    async fn handle_connection_message(&mut self, message: &PeerConnectionMessage, database: Database) {
+    async fn handle_connection_message(
+        &mut self,
+        message: &PeerConnectionMessage,
+        database: Database,
+    ) {
         match message {
             PeerConnectionMessage::PierceFirewall(_pierce_firewall) => {}
             PeerConnectionMessage::PeerInit {
@@ -166,7 +169,9 @@ impl Handler {
             .await?;
 
         self.connection
-            .write_request(PeerRequestPacket::Message(PeerRequest::SharesReply(shared_dirs_copy)))
+            .write_request(PeerRequestPacket::Message(PeerRequest::SharesReply(
+                shared_dirs_copy,
+            )))
             .await
     }
 }

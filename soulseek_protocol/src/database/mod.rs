@@ -1,9 +1,9 @@
-use std::net::Ipv4Addr;
+use crate::peers::messages::shared_directories::{Directory, File, SharedDirectories};
 use crate::settings::CONFIG;
-use std::path::PathBuf;
 use std::io;
+use std::net::Ipv4Addr;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use crate::peers::messages::shared_directories::{SharedDirectories, File, Directory};
 
 #[derive(Clone)]
 pub struct Database {
@@ -11,15 +11,14 @@ pub struct Database {
 }
 
 lazy_static! {
-    pub static ref SHARED_DIRS: Arc<Mutex<SharedDirectories>> = Arc::new(Mutex::new(SharedDirectories::from_config().unwrap()));
+    pub static ref SHARED_DIRS: Arc<Mutex<SharedDirectories>> =
+        Arc::new(Mutex::new(SharedDirectories::from_config().unwrap()));
 }
 
 impl SharedDirectories {
     pub fn from_config() -> io::Result<Self> {
         let paths = &CONFIG.shared_directories;
-        let mut shared_directories = SharedDirectories {
-            dirs: vec![]
-        };
+        let mut shared_directories = SharedDirectories { dirs: vec![] };
 
         for path in paths {
             visit_dir(path, &mut shared_directories.dirs)?;
@@ -45,9 +44,16 @@ fn visit_dir(path: &PathBuf, dirs: &mut Vec<Directory>) -> io::Result<()> {
                 dir.files.push(File {
                     name: entry.file_name().to_str().unwrap().to_string(),
                     size: metadata.len(),
-                    extension: entry.file_name().to_str().unwrap().split('.').last().unwrap().to_string(),
+                    extension: entry
+                        .file_name()
+                        .to_str()
+                        .unwrap()
+                        .split('.')
+                        .last()
+                        .unwrap()
+                        .to_string(),
                     // TODO
-                    attributes: vec![]
+                    attributes: vec![],
                 })
             }
 
@@ -60,7 +66,6 @@ fn visit_dir(path: &PathBuf, dirs: &mut Vec<Directory>) -> io::Result<()> {
     Ok(())
 }
 
-
 impl Database {
     pub fn new() -> Database {
         Database {
@@ -70,13 +75,16 @@ impl Database {
 
     pub fn insert_peer(&self, username: &str, address: Ipv4Addr) -> sled::Result<()> {
         debug!("Writing peer {}@{} to db:", username, address.to_string());
-        self.inner.open_tree("users")?
+        self.inner
+            .open_tree("users")?
             .insert(username.as_bytes(), address.to_string().as_bytes())
             .map(|res| ())
     }
 
     pub fn get_peer_by_name(&self, username: &str) -> Option<String> {
-        self.inner.open_tree("users").unwrap()
+        self.inner
+            .open_tree("users")
+            .unwrap()
             .get(username)
             .ok()
             .flatten()
@@ -84,10 +92,17 @@ impl Database {
     }
 
     pub fn find_all(&self) -> Vec<(String, String)> {
-        self.inner.open_tree("users").unwrap()
+        self.inner
+            .open_tree("users")
+            .unwrap()
             .iter()
             .map(|res| res.expect("database error"))
-            .map(|(k, v)| (String::from_utf8(k.to_vec()).unwrap(),String::from_utf8(v.to_vec()).unwrap()))
+            .map(|(k, v)| {
+                (
+                    String::from_utf8(k.to_vec()).unwrap(),
+                    String::from_utf8(v.to_vec()).unwrap(),
+                )
+            })
             .collect()
     }
 }

@@ -8,6 +8,7 @@ use tokio::sync::{broadcast, mpsc, Semaphore};
 use tokio::time::{self, Duration};
 use tracing::{error, info};
 
+use crate::database::Database;
 use crate::message_common::ConnectionType;
 use crate::peers::connection::Connection;
 use crate::peers::handler::Handler;
@@ -18,12 +19,11 @@ use crate::server::messages::request::ServerRequest;
 use crate::SlskError;
 use rand::random;
 use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 use tokio::sync::broadcast::Sender;
 use tokio::sync::mpsc::error::SendError;
 use tokio::sync::mpsc::Receiver;
 use tokio::time::timeout;
-use crate::database::Database;
-use std::hash::{Hasher, Hash};
 
 type SenderPool = Arc<Mutex<HashMap<PeerAddress, mpsc::Sender<PeerRequestPacket>>>>;
 
@@ -81,7 +81,7 @@ impl GlobalConnectionHandler {
         server_request_tx: mpsc::Sender<ServerRequest>,
         mut possible_parent_rx: Receiver<Vec<Peer>>,
         mut peer_message_dispatcher: Receiver<(String, PeerRequestPacket)>,
-        database: Database
+        database: Database,
     ) -> crate::Result<()> {
         let limit_connections = self.limit_connections.clone();
         let notify_shutdown = self.notify_shutdown.clone();
@@ -174,7 +174,7 @@ pub async fn run(
     peer_connection_outgoing_tx: mpsc::Sender<ServerRequest>,
     possible_parent_rx: Receiver<Vec<Peer>>,
     peer_message_dispatcher: mpsc::Receiver<(String, PeerRequestPacket)>,
-    database: Database
+    database: Database,
 ) -> crate::Result<()> {
     debug!("Waiting for user to be logged in");
 
@@ -273,7 +273,7 @@ async fn listen_for_indirect_connection(
     limit_connections: Arc<Semaphore>,
     notify_shutdown: Sender<()>,
     shutdown_complete_tx: mpsc::Sender<()>,
-    database: Database
+    database: Database,
 ) -> Result<(), SendError<ServerRequest>> {
     while let Some(connection_request) = indirect_connection_rx.recv().await {
         if connection_request.username == "vessel" {
@@ -293,7 +293,7 @@ async fn listen_for_indirect_connection(
             shutdown_complete_tx.clone(),
             peer.clone(),
         )
-            .await;
+        .await;
 
         match handler {
             Ok(mut handler) => {
@@ -329,7 +329,7 @@ async fn connect_to_parents(
     notify_shutdown: Sender<()>,
     shutdown_complete_tx: mpsc::Sender<()>,
     possible_parent_rx: &mut Receiver<Vec<Peer>>,
-    database: Database
+    database: Database,
 ) -> Result<(), SendError<ServerRequest>> {
     while let Some(parents) = possible_parent_rx.recv().await {
         for parent in parents {
@@ -340,7 +340,7 @@ async fn connect_to_parents(
                 shutdown_complete_tx.clone(),
                 parent.clone(),
             )
-                .await;
+            .await;
 
             match handler {
                 Ok(mut handler) => {
@@ -425,7 +425,7 @@ async fn connect_to_peer(
         Duration::from_millis(2000),
         TcpStream::connect(user.get_address()),
     )
-        .await
+    .await
     {
         let (tx, rx) = mpsc::channel(32);
         let channels = channels.clone();
@@ -439,8 +439,7 @@ async fn connect_to_peer(
             connection: Connection::new(socket),
             handler_rx: rx,
             limit_connections: limit_connections.clone(),
-            shutdown: Shutdown::new(
-                notify_shutdown.subscribe()),
+            shutdown: Shutdown::new(notify_shutdown.subscribe()),
             _shutdown_complete: shutdown_complete_tx.clone(),
         })
     } else {
@@ -452,7 +451,11 @@ async fn connect_to_peer(
     }
 }
 
-async fn dispatch_peer_message(mut peer_message_dispatcher: Receiver<(String, PeerRequestPacket)>, channels: SenderPool, database: Database) {
+async fn dispatch_peer_message(
+    mut peer_message_dispatcher: Receiver<(String, PeerRequestPacket)>,
+    channels: SenderPool,
+    database: Database,
+) {
     while let Some((username, message)) = peer_message_dispatcher.recv().await {
         let address = database.get_peer_by_name(&username);
 
@@ -460,15 +463,18 @@ async fn dispatch_peer_message(mut peer_message_dispatcher: Receiver<(String, Pe
             debug!("Incoming peer message from HTTP API for peer {:?}", address);
             let sender;
             {
-                let channel_pool = channels.lock().expect("Unable to acquire lock on peer channel pool");
+                let channel_pool = channels
+                    .lock()
+                    .expect("Unable to acquire lock on peer channel pool");
                 let channel = channel_pool.get(&PeerAddress::new(address.clone()));
 
                 sender = if let Some(peer_sender) = channel {
                     debug!("Found channel for peer {}@{}", username, address);
                     Some(peer_sender.clone())
-                } else { None };
+                } else {
+                    None
+                };
             }
-
 
             if let Some(mut sender) = sender {
                 debug!("Sending message to peer handler {:?}", message);

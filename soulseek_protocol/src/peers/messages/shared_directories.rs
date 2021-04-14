@@ -1,13 +1,12 @@
-use flate2::{Decompress, FlushDecompress, Compression, FlushCompress};
-use crate::frame::{ParseBytes, read_string, ToBytes, write_string};
-use std::io::Cursor;
-use tokio::io::{AsyncWrite, AsyncWriteExt};
-use tokio::io::BufWriter;
+use crate::frame::{read_string, write_string, ParseBytes, ToBytes};
 use crate::peers::messages::MessageCode;
 use bytes::Buf;
 use flate2::write::ZlibEncoder;
+use flate2::{Compression, Decompress, FlushCompress, FlushDecompress};
+use std::io::Cursor;
 use std::io::Write;
-
+use tokio::io::BufWriter;
+use tokio::io::{AsyncWrite, AsyncWriteExt};
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct SharedDirectories {
@@ -20,7 +19,6 @@ impl ToBytes for SharedDirectories {
         &self,
         buffer: &mut BufWriter<impl AsyncWrite + Unpin + Send>,
     ) -> tokio::io::Result<()> {
-
         // Pack message
         let inner = &mut vec![];
         let mut message_buffer = BufWriter::new(inner);
@@ -39,7 +37,9 @@ impl ToBytes for SharedDirectories {
         let compressed_data = e.finish().unwrap();
 
         // Write to connection buffer
-        buffer.write_u32_le(compressed_data.len() as u32 + 4).await?;
+        buffer
+            .write_u32_le(compressed_data.len() as u32 + 4)
+            .await?;
         buffer.write_u32_le(MessageCode::SharesReply as u32).await?;
         buffer.write_all(compressed_data.as_slice()).await?;
         Ok(())
@@ -52,8 +52,8 @@ impl ParseBytes for SharedDirectories {
     fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self::Output> {
         let mut data = Vec::with_capacity(100_000);
 
-        let decompress_result = Decompress::new(true)
-            .decompress_vec(src.bytes(), &mut data, FlushDecompress::Sync);
+        let decompress_result =
+            Decompress::new(true).decompress_vec(src.bytes(), &mut data, FlushDecompress::Sync);
 
         match decompress_result {
             Ok(status) => {
@@ -200,14 +200,14 @@ impl ParseBytes for Attribute {
 
 #[cfg(test)]
 mod test {
-    use crate::peers::messages::shared_directories::{SharedDirectories, Directory, File};
-    use tokio::io::BufWriter;
-    use crate::frame::{ToBytes, ParseBytes};
-    use tokio_test::block_on;
-    use flate2::{Decompress, FlushDecompress, Compression};
+    use crate::frame::{ParseBytes, ToBytes};
+    use crate::peers::messages::shared_directories::{Directory, File, SharedDirectories};
     use flate2::write::DeflateEncoder;
-    use std::io::Write;
     use flate2::write::ZlibEncoder;
+    use flate2::{Compression, Decompress, FlushDecompress};
+    use std::io::Write;
+    use tokio::io::BufWriter;
+    use tokio_test::block_on;
 
     #[test]
     fn write_share_reply_ok() {
@@ -220,7 +220,7 @@ mod test {
                     extension: "md".to_string(),
                     attributes: vec![],
                 }],
-            }]
+            }],
         };
 
         let mut vec = vec![];

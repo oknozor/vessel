@@ -1,8 +1,8 @@
 use tokio::io::{AsyncWrite, AsyncWriteExt, BufWriter};
 
-use crate::frame::{ToBytes, write_string};
-use crate::peers::messages::MessageCode;
+use crate::frame::{write_string, ToBytes};
 use crate::peers::messages::shared_directories::Attribute;
+use crate::peers::messages::MessageCode;
 
 #[derive(Debug)]
 pub struct SearchRequest {

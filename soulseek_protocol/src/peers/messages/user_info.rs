@@ -3,7 +3,7 @@ use std::io::Cursor;
 use bytes::Buf;
 use tokio::io::{AsyncWrite, AsyncWriteExt, BufWriter};
 
-use crate::frame::{ParseBytes, read_string, ToBytes, write_string};
+use crate::frame::{read_string, write_string, ParseBytes, ToBytes};
 use crate::peers::messages::MessageCode;
 
 #[derive(Debug)]

@@ -100,7 +100,7 @@ impl ServerResponse {
             MessageCode::AddUser => UserAdded::parse(src).map(ServerResponse::UserAdded),
             MessageCode::RemoveUser => UserRoomEvent::parse(src).map(ServerResponse::UserRemoved),
             MessageCode::GetUserStatus => UserStatus::parse(src).map(ServerResponse::UserStatus),
-            MessageCode::SayInChatRoom => todo!(),
+            MessageCode::SayInChatRoom => ChatMessage::parse(src).map(ServerResponse::ChatMessage),
             MessageCode::JoinRoom => RoomJoined::parse(src).map(ServerResponse::RoomJoined),
             MessageCode::LeaveRoom => todo!(),
             MessageCode::UserJoinedRoom => {
@@ -142,7 +142,7 @@ impl ServerResponse {
                 UserList::parse(src).map(ServerResponse::PrivilegedUsers)
             }
             MessageCode::HaveNoParents => todo!(),
-            MessageCode::ParentsIP => todo!(),
+            MessageCode::ParentsIp => todo!(),
             MessageCode::ParentMinSpeed => Ok(ServerResponse::ParentMinSpeed(src.get_u32_le())),
             MessageCode::ParentSpeedRatio => Ok(ServerResponse::ParentSpeedRatio(src.get_u32_le())),
             MessageCode::ParentInactivityTimeout => {

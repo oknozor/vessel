@@ -4,7 +4,7 @@ use bytes::Buf;
 
 use crate::frame::ParseBytes;
 use crate::peers::messages::folder_content::FolderContentsRequest;
-use crate::peers::messages::search::{SearchReply, SearchRequest};
+use crate::peers::messages::search::SearchReply;
 use crate::peers::messages::shared_directories::SharedDirectories;
 use crate::peers::messages::transfer::{
     PlaceInQueueReply, PlaceInQueueRequest, QueueDownload, QueueFailed, TransferReply,
@@ -18,7 +18,6 @@ use crate::SlskError;
 pub enum PeerResponse {
     SharesRequest,
     SharesReply(SharedDirectories),
-    SearchRequest(SearchRequest),
     SearchReply(SearchReply),
     UserInfoRequest,
     UserInfoReply(UserInfo),
@@ -56,7 +55,6 @@ impl PeerResponse {
         match self {
             PeerResponse::SharesRequest => "SharesRequest",
             PeerResponse::SharesReply(_) => "SharesReply",
-            PeerResponse::SearchRequest(_) => "SearchRequest",
             PeerResponse::SearchReply(_) => "SearchReply",
             PeerResponse::UserInfoRequest => "UserInfoRequest",
             PeerResponse::UserInfoReply(_) => "UserInfoReply",
@@ -89,7 +87,7 @@ impl PeerResponse {
             MessageCode::UserInfoRequest => PeerResponse::UserInfoRequest,
             MessageCode::UserInfoReply => UserInfo::parse(src).map(PeerResponse::UserInfoReply)?,
             MessageCode::FolderContentsRequest => {
-                FolderContentsRequest::parse(src).map(PeerResponse::FolderContentsRequest)
+                FolderContentsRequest::parse(src).map(PeerResponse::FolderContentsRequest)?
             }
             MessageCode::FolderContentsReply => todo!(),
             MessageCode::TransferRequest => todo!(),

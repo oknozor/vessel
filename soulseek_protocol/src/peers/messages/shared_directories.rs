@@ -2,7 +2,7 @@ use crate::frame::{read_string, write_string, ParseBytes, ToBytes};
 use crate::peers::messages::MessageCode;
 use bytes::Buf;
 use flate2::write::ZlibEncoder;
-use flate2::{Compression, Decompress, FlushCompress, FlushDecompress};
+use flate2::{Compression, Decompress, FlushDecompress};
 use std::io::Cursor;
 use std::io::Write;
 use tokio::io::BufWriter;

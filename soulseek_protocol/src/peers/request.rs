@@ -2,7 +2,7 @@ use tokio::io::{AsyncWrite, AsyncWriteExt, BufWriter};
 
 use crate::frame::ToBytes;
 use crate::peers::messages::folder_content::FolderContentsRequest;
-use crate::peers::messages::search::{SearchReply, SearchRequest};
+use crate::peers::messages::search::SearchReply;
 use crate::peers::messages::shared_directories::SharedDirectories;
 use crate::peers::messages::transfer::*;
 use crate::peers::messages::user_info::UserInfo;
@@ -13,7 +13,6 @@ use crate::peers::messages::MessageCode;
 pub enum PeerRequest {
     SharesRequest,
     SharesReply(SharedDirectories),
-    SearchRequest(SearchRequest),
     SearchReply(SearchReply),
     UserInfoRequest,
     UserInfoReply(UserInfo),
@@ -36,7 +35,6 @@ impl PeerRequest {
         match self {
             PeerRequest::SharesRequest => "SharesRequest",
             PeerRequest::SharesReply(_) => "SharesReply",
-            PeerRequest::SearchRequest(_) => "SearchRequest",
             PeerRequest::SearchReply(_) => "SearchReply",
             PeerRequest::UserInfoRequest => "UserInfoRequest",
             PeerRequest::UserInfoReply(_) => "UserInfoReply",
@@ -71,9 +69,6 @@ impl ToBytes for PeerRequest {
             }
             PeerRequest::SharesReply(shared_dirs) => {
                 shared_dirs.write_to_buf(buffer).await?;
-            }
-            PeerRequest::SearchRequest(search_request) => {
-                search_request.write_to_buf(buffer).await?
             }
             PeerRequest::SearchReply(search_reply) => search_reply.write_to_buf(buffer).await?,
             PeerRequest::UserInfoRequest => {

@@ -5,29 +5,6 @@ use crate::peers::messages::shared_directories::Attribute;
 use crate::peers::messages::MessageCode;
 
 #[derive(Debug)]
-pub struct SearchRequest {
-    pub ticket: u32,
-    pub query: String,
-}
-
-#[async_trait]
-impl ToBytes for SearchRequest {
-    async fn write_to_buf(
-        &self,
-        buffer: &mut BufWriter<impl AsyncWrite + Unpin + Send>,
-    ) -> tokio::io::Result<()> {
-        let length = 4 + 4 + self.query.bytes().len() as u32;
-        buffer.write_u32_le(length).await?;
-        buffer
-            .write_u32_le(MessageCode::SearchRequest as u32)
-            .await?;
-        buffer.write_u32_le(self.ticket).await?;
-        write_string(&self.query, buffer).await?;
-        Ok(())
-    }
-}
-
-#[derive(Debug)]
 pub struct SearchReply {
     pub username: String,
     pub ticket: u32,

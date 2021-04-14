@@ -1,16 +1,10 @@
 use std::io::Cursor;
 
 use bytes::Buf;
-use tokio::io::{AsyncWrite, AsyncWriteExt, BufWriter};
 
-use crate::frame::{read_string, write_string, ToBytes};
-use crate::message_common::ConnectionType;
-use crate::peers::messages::connection::{
-    ConnectionMessageHeader, InitMessageCode, PeerConnectionMessage, CONNECTION_MSG_HEADER_LEN,
-};
+use crate::peers::messages::connection::PeerConnectionMessage;
 use crate::peers::request::PeerRequest;
 use crate::peers::response::PeerResponse;
-use crate::SlskError;
 
 pub mod connection;
 pub mod folder_content;

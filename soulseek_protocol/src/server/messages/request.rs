@@ -94,7 +94,7 @@ impl ToBytes for ServerRequest {
             ServerRequest::AddUser(_) => todo!(),
             ServerRequest::RemoveUser(_) => todo!(),
             ServerRequest::GetUserStatus(_) => todo!(),
-            ServerRequest::SendChatMessage(_) => todo!(),
+            ServerRequest::SendChatMessage(message) => message.write_to_buf(buffer).await,
             ServerRequest::JoinRoom(join_room) => {
                 write_str_msg(join_room, MessageCode::JoinRoom, buffer).await
             }

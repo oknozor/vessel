@@ -64,7 +64,7 @@ impl Handler {
                     debug!("connection with {:?} shutting down", self.peer_username);
                     return Ok(());
                 }
-                Err(e) => {
+                Err(_) => {
                     // Time out
                 }
             }
@@ -85,7 +85,6 @@ impl Handler {
         match message {
             PeerResponse::SharesReply(_) | PeerResponse::UserInfoReply(_) => Ok(()),
             PeerResponse::SharesRequest => self.send_shares_reply().await,
-            PeerResponse::SearchRequest(_) => todo!(),
             PeerResponse::SearchReply(_) => todo!(),
             PeerResponse::UserInfoRequest => self.send_user_info().await,
             PeerResponse::FolderContentsRequest(_) => todo!(),

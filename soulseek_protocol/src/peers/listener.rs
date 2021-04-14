@@ -80,7 +80,7 @@ impl GlobalConnectionHandler {
         peer_connection_rx: Receiver<PeerConnectionRequest>,
         server_request_tx: mpsc::Sender<ServerRequest>,
         mut possible_parent_rx: Receiver<Vec<Peer>>,
-        mut peer_message_dispatcher: Receiver<(String, PeerRequestPacket)>,
+        peer_message_dispatcher: Receiver<(String, PeerRequestPacket)>,
         database: Database,
     ) -> crate::Result<()> {
         let limit_connections = self.limit_connections.clone();
@@ -101,15 +101,15 @@ impl GlobalConnectionHandler {
                 database.clone()
             ),
             self.listen(channels.clone(), database.clone()),
-            // connect_to_parents(
-            //     server_request_tx,
-            //     channels.clone(),
-            //     limit_connections,
-            //     notify_shutdown,
-            //     shutdown_complete_tx,
-            //     &mut possible_parent_rx,
-            //     database
-            // )
+            connect_to_parents(
+                server_request_tx,
+                channels.clone(),
+                limit_connections,
+                notify_shutdown,
+                shutdown_complete_tx,
+                &mut possible_parent_rx,
+                database
+            )
         );
 
         Ok(())
@@ -361,7 +361,7 @@ async fn connect_to_parents(
                         }
                     });
                 }
-                Err(e) => {
+                Err(_) => {
                     warn!("Unable to establish direct connection to peer, either port is closed or user is disconnected");
                     warn!("Falling back to indirect connection");
                     let mut server_request_sender = server_request_tx.clone();
@@ -376,7 +376,7 @@ async fn connect_to_parents(
             }
         }
 
-        let mut parent_count = 0;
+        let parent_count;
 
         {
             let channel_pool = channels.clone();

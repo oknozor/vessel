@@ -3,7 +3,6 @@ use std::io::Cursor;
 use bytes::{Buf, BytesMut};
 use tokio::io::{AsyncReadExt, AsyncWriteExt, BufWriter};
 use tokio::net::TcpStream;
-use tokio::time::timeout;
 use tokio::time::Duration;
 
 use crate::frame::ToBytes;
@@ -12,7 +11,6 @@ use crate::peers::messages::connection::{PeerConnectionMessage, CONNECTION_MSG_H
 use crate::peers::messages::PEER_MSG_HEADER_LEN;
 use crate::peers::messages::{PeerRequestPacket, PeerResponsePacket};
 use crate::peers::response::PeerResponse;
-use crate::SlskError;
 use std::net::{Ipv4Addr, SocketAddr};
 
 #[derive(Debug)]

@@ -68,7 +68,7 @@ pub async fn start_sse_listener(mut rx: Receiver<ServerResponse>) {
                 // Once we get user list we can get out and proceed to the main event loop
                 break;
             }
-            other => debug!("Hanshake message : {:?}", other),
+            other => debug!("SEE message : {:?}", other),
         }
     }
 

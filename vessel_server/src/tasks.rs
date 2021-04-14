@@ -7,6 +7,7 @@ use tokio::task::JoinHandle;
 use soulseek_protocol::database::Database;
 use soulseek_protocol::peers::messages::PeerRequestPacket;
 use soulseek_protocol::server::connection::SlskConnection;
+use soulseek_protocol::server::messages::chat::SayInChat;
 use soulseek_protocol::server::messages::login::LoginRequest;
 use soulseek_protocol::server::messages::peer::{Peer, PeerConnectionRequest};
 use soulseek_protocol::server::messages::request::ServerRequest;
@@ -130,10 +131,19 @@ pub fn spawn_login_task(mut login_sender: mpsc::Sender<ServerRequest>) -> JoinHa
     tokio::spawn(async move {
         let mut listen_port_sender = login_sender.clone();
         let mut parent_request_sender = login_sender.clone();
+        let mut join_nicotine_room = login_sender.clone();
+        let mut send_chat_message = login_sender.clone();
         login_sender
             .send(ServerRequest::Login(LoginRequest::new("vessel", "lessev")))
             .and_then(|_| listen_port_sender.send(ServerRequest::SetListenPort(2255)))
             .and_then(|_| parent_request_sender.send(ServerRequest::NoParents(true)))
+            .and_then(|_| join_nicotine_room.send(ServerRequest::JoinRoom("nicotine".to_string())))
+            .and_then(|_| {
+                send_chat_message.send(ServerRequest::SendChatMessage(SayInChat {
+                    room: "nicotine".to_string(),
+                    message: "Hello from vessel server".to_string(),
+                }))
+            })
             .await
             .expect("Unable to establish connection with soulseek server");
     })

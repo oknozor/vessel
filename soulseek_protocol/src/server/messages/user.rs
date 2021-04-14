@@ -140,7 +140,6 @@ pub struct UserStats {
     download_number: u64,
     files: u32,
     dirs: u32,
-    country_code: String,
 }
 
 impl ParseBytes for UserStats {
@@ -152,7 +151,6 @@ impl ParseBytes for UserStats {
         let download_number = src.get_u64_le();
         let files = src.get_u32_le();
         let dirs = src.get_u32_le();
-        let country_code = read_string(src)?;
 
         Ok(Self {
             username,
@@ -160,7 +158,6 @@ impl ParseBytes for UserStats {
             download_number,
             files,
             dirs,
-            country_code,
         })
     }
 }

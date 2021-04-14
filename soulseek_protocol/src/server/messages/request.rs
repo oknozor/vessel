@@ -63,7 +63,7 @@ pub enum ServerRequest {
     /// private message. If we don't send it, the server will keep sending the chat phrase to us.
     ///
     /// **Response** : no message
-    AcknowledgePrivateMessage(String),
+    AcknowledgePrivateMessage(u32),
 
     ///  **Description** : We send this to the server when we search for something. Alternatively,
     /// the server sends this message outside the distributed network to tell us that someone
@@ -83,7 +83,7 @@ pub enum ServerRequest {
     ///      2 = Online
     ///
     /// **Response** : no message
-    SetOnlyStatus(u32),
+    SetOnlineStatus(u32),
 
     ///  **Description** :We send this to server to indicate the number of folder and files that we share.
     ///
@@ -308,9 +308,6 @@ pub enum ServerRequest {
     ///
     /// **Response** : no message
     CantConnectToPeer(PeerConnectionTicket),
-
-    /// TODO
-    Unimplemented,
 }
 
 #[async_trait]
@@ -327,9 +324,15 @@ impl ToBytes for ServerRequest {
             ServerRequest::GetPeerAddress(username) => {
                 write_str_msg(username, MessageCode::GetPeerAddress, buffer).await
             }
-            ServerRequest::AddUser(_) => todo!(),
-            ServerRequest::RemoveUser(_) => todo!(),
-            ServerRequest::GetUserStatus(_) => todo!(),
+            ServerRequest::AddUser(username) => {
+                write_str_msg(&username, MessageCode::AddUser, buffer).await
+            }
+            ServerRequest::RemoveUser(username) => {
+                write_str_msg(&username, MessageCode::RemoveUser, buffer).await
+            }
+            ServerRequest::GetUserStatus(username) => {
+                write_str_msg(&username, MessageCode::GetUserStatus, buffer).await
+            }
             ServerRequest::SendChatMessage(message) => message.write_to_buf(buffer).await,
             ServerRequest::JoinRoom(join_room) => {
                 write_str_msg(join_room, MessageCode::JoinRoom, buffer).await
@@ -337,35 +340,72 @@ impl ToBytes for ServerRequest {
             ServerRequest::LeaveRoom(room) => {
                 write_str_msg(room, MessageCode::LeaveRoom, buffer).await
             }
-            ServerRequest::EnablePublicChat => todo!(),
-            ServerRequest::DisablePublicChat => todo!(),
-            ServerRequest::GetUserStats(_) => todo!(),
+            ServerRequest::EnablePublicChat => {
+                write_empty_msg(MessageCode::AskPublicChat, buffer).await
+            }
+            ServerRequest::DisablePublicChat => {
+                write_empty_msg(MessageCode::StopPublicChat, buffer).await
+            }
+            ServerRequest::GetUserStats(username) => {
+                write_str_msg(&username, MessageCode::GetUserStats, buffer).await
+            }
             ServerRequest::NoParents(value) => {
                 write_bool_msg(*value, MessageCode::HaveNoParents, buffer).await
             }
-            ServerRequest::Unimplemented => todo!(),
             ServerRequest::ConnectToPeer(connection_request) => {
                 connection_request.write_to_buf(buffer).await
             }
-            ServerRequest::AcknowledgePrivateMessage(_) => todo!(),
-            ServerRequest::FileSearch(_) => todo!(),
-            ServerRequest::SetOnlyStatus(_) => todo!(),
-            ServerRequest::SharedFolderAndFiles(_) => todo!(),
-            ServerRequest::UserSearch(_) => todo!(),
-            ServerRequest::AddLinkedInterest(_) => todo!(),
-            ServerRequest::RemoveLinkedInterest(_) => todo!(),
-            ServerRequest::Recommendations => todo!(),
-            ServerRequest::GlobalRecommendations => todo!(),
-            ServerRequest::GetUserInterest(_) => todo!(),
-            ServerRequest::AdminCommand(_) => todo!(),
-            ServerRequest::RoomList => todo!(),
-            ServerRequest::CheckPrivileges => todo!(),
-            ServerRequest::AcceptChildren(_) => todo!(),
-            ServerRequest::WishlistSearch(_) => todo!(),
-            ServerRequest::GetSimilarUsers => todo!(),
-            ServerRequest::GetItemRecommendations(_) => todo!(),
-            ServerRequest::GetItemSimilarUsers(_) => todo!(),
-            ServerRequest::SetRoomTicker(_) => todo!(),
+            ServerRequest::AcknowledgePrivateMessage(message_id) => {
+                write_u32_msg(*message_id, MessageCode::AcknowledgePrivateMessage, buffer).await
+            }
+            ServerRequest::FileSearch(query) => {
+                query
+                    .write_to_buf_with_code(buffer, MessageCode::FileSearch)
+                    .await
+            }
+            ServerRequest::SetOnlineStatus(status) => {
+                write_u32_msg(*status, MessageCode::SetOnlineStatus, buffer).await
+            }
+            ServerRequest::SharedFolderAndFiles(folders) => folders.write_to_buf(buffer).await,
+            ServerRequest::UserSearch(query) => query.write_to_buf(buffer).await,
+            ServerRequest::AddLinkedInterest(item) => {
+                write_str_msg(item, MessageCode::InterestAdd, buffer).await
+            }
+            ServerRequest::RemoveLinkedInterest(item) => {
+                write_str_msg(item, MessageCode::InterestAdd, buffer).await
+            }
+            ServerRequest::Recommendations => {
+                write_empty_msg(MessageCode::GetRecommendations, buffer).await
+            }
+            ServerRequest::GlobalRecommendations => {
+                write_empty_msg(MessageCode::GetGlobalRecommendations, buffer).await
+            }
+            ServerRequest::GetUserInterest(username) => {
+                write_str_msg(username, MessageCode::GetUserInterests, buffer).await
+            }
+            ServerRequest::AdminCommand(command) => command.write_to_buf(buffer).await,
+            ServerRequest::RoomList => write_empty_msg(MessageCode::RoomList, buffer).await,
+            ServerRequest::CheckPrivileges => {
+                write_empty_msg(MessageCode::CheckPrivileges, buffer).await
+            }
+            ServerRequest::AcceptChildren(value) => {
+                write_bool_msg(*value, MessageCode::AcceptChildren, buffer).await
+            }
+            ServerRequest::WishlistSearch(query) => {
+                query
+                    .write_to_buf_with_code(buffer, MessageCode::WishlistSearch)
+                    .await
+            }
+            ServerRequest::GetSimilarUsers => {
+                write_empty_msg(MessageCode::GetSimilarUsers, buffer).await
+            }
+            ServerRequest::GetItemRecommendations(item) => {
+                write_str_msg(item, MessageCode::GetItemRecommendations, buffer).await
+            }
+            ServerRequest::GetItemSimilarUsers(item) => {
+                write_str_msg(item, MessageCode::GetItemSimilarUsers, buffer).await
+            }
+            ServerRequest::SetRoomTicker(ticker) => todo!(),
             ServerRequest::AddHatedInterest(_) => todo!(),
             ServerRequest::RemoveHatedInterest(_) => todo!(),
             ServerRequest::RoomSearch(_) => todo!(),
@@ -406,11 +446,10 @@ impl ServerRequest {
             ServerRequest::DisablePublicChat => "DisablePublicChat",
             ServerRequest::GetUserStats(_) => "GetUserStats",
             ServerRequest::NoParents(_) => "NoParent",
-            ServerRequest::Unimplemented => "Unimplemented",
             ServerRequest::ConnectToPeer(_) => "ConnectToPeer",
             ServerRequest::AcknowledgePrivateMessage(_) => "AcknowledgePrivateMessage",
             ServerRequest::FileSearch(_) => "FileSearch",
-            ServerRequest::SetOnlyStatus(_) => "SetOnlyStatus",
+            ServerRequest::SetOnlineStatus(_) => "SetOnlyStatus",
             ServerRequest::SharedFolderAndFiles(_) => "SharedFolderAndFiles",
             ServerRequest::UserSearch(_) => "UserSearch",
             ServerRequest::AddLinkedInterest(_) => "AddLinkedInterest",
@@ -460,6 +499,15 @@ pub(crate) async fn write_str_msg(
     buffer.write_u32_le(message_len).await?;
     buffer.write_u32_le(code as u32).await?;
     write_string(src, buffer).await?;
+    Ok(())
+}
+
+pub(crate) async fn write_empty_msg(
+    code: MessageCode,
+    buffer: &mut BufWriter<impl AsyncWrite + Unpin + Send>,
+) -> tokio::io::Result<()> {
+    buffer.write_u32_le(4).await?;
+    buffer.write_u32_le(code as u32).await?;
     Ok(())
 }
 

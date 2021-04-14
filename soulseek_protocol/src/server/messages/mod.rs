@@ -3,6 +3,7 @@ use std::io::Cursor;
 
 pub mod admin;
 pub mod chat;
+pub mod distributed;
 pub mod interest;
 pub mod login;
 pub mod peer;
@@ -65,7 +66,7 @@ impl Header {
 /// [`MessageCode::Unknown`]: MessageCode::Unknown
 /// [`ServerResponse`]: crate::server::messages::response::ServerResponse
 #[repr(u32)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum MessageCode {
     Login = 1,
     SetListenPort = 2,
@@ -116,7 +117,7 @@ pub enum MessageCode {
     DistributedAliveInterval = 90,
     AddPrivilegedUser = 91,
     CheckPrivileges = 92,
-    SearchRequest = 93,
+    EmbeddedMessage = 93,
     AcceptChildren = 100,
     PossibleParents = 102,
     WishlistSearch = 103,
@@ -153,16 +154,14 @@ pub enum MessageCode {
     PrivateRoomRemoveOperator = 144,
     PrivateRoomOperatorAdded = 145,
     PrivateRoomOperatorRemoved = 146,
-    PrivateRoomOwned = 148,
+    RoomOperators = 148,
     MessageUsers = 149,
     AskPublicChat = 150,
     StopPublicChat = 151,
     PublicChatMessage = 152,
     RelatedSearches = 153,
     CantConnectToPeer = 1001,
-    CantCreateRoom = 1002,
-    MaybeRoomJoinRequestAck = 1003,
-    Unknown1004 = 1004,
+    CantCreateRoom = 1003,
     Unknown,
 }
 
@@ -218,7 +217,7 @@ impl From<u32> for MessageCode {
             90 => MessageCode::DistributedAliveInterval,
             91 => MessageCode::AddPrivilegedUser,
             92 => MessageCode::CheckPrivileges,
-            93 => MessageCode::SearchRequest,
+            93 => MessageCode::EmbeddedMessage,
             100 => MessageCode::AcceptChildren,
             102 => MessageCode::PossibleParents,
             103 => MessageCode::WishlistSearch,
@@ -255,7 +254,7 @@ impl From<u32> for MessageCode {
             144 => MessageCode::PrivateRoomRemoveOperator,
             145 => MessageCode::PrivateRoomOperatorAdded,
             146 => MessageCode::PrivateRoomOperatorRemoved,
-            148 => MessageCode::PrivateRoomOwned,
+            148 => MessageCode::RoomOperators,
             149 => MessageCode::MessageUsers,
             150 => MessageCode::AskPublicChat,
             151 => MessageCode::StopPublicChat,
@@ -263,8 +262,6 @@ impl From<u32> for MessageCode {
             153 => MessageCode::RelatedSearches,
             1001 => MessageCode::CantConnectToPeer,
             1002 => MessageCode::CantCreateRoom,
-            1003 => MessageCode::MaybeRoomJoinRequestAck,
-            1004 => MessageCode::Unknown1004,
             _ => MessageCode::Unknown,
         }
     }

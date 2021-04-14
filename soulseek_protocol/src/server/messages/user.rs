@@ -143,6 +143,28 @@ pub struct UserStats {
     country_code: String,
 }
 
+impl ParseBytes for UserStats {
+    type Output = Self;
+
+    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self::Output> {
+        let username = read_string(src)?;
+        let average_speed = src.get_u32_le();
+        let download_number = src.get_u64_le();
+        let files = src.get_u32_le();
+        let dirs = src.get_u32_le();
+        let country_code = read_string(src)?;
+
+        Ok(Self {
+            username,
+            average_speed,
+            download_number,
+            files,
+            dirs,
+            country_code,
+        })
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UserData {
     average_speed: i32,
@@ -177,14 +199,55 @@ pub struct UsersWithStatus {
     users: Vec<UserWithStatus>,
 }
 
+impl ParseBytes for UsersWithStatus {
+    type Output = Self;
+
+    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self::Output> {
+        let users_nth = src.get_u32_le();
+        let mut users = vec![];
+        for _ in 0..users_nth {
+            users.push(UserWithStatus::parse(src)?)
+        }
+
+        Ok(Self { users })
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UserWithStatus {
     username: String,
     status: Status,
 }
 
+impl ParseBytes for UserWithStatus {
+    type Output = Self;
+
+    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self::Output> {
+        let username = read_string(src)?;
+        let status = Status::from(src.get_u32_le());
+
+        Ok(Self { username, status })
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ItemSimilarUsers {
     item: String,
-    users: Vec<UsersWithStatus>,
+    users: Vec<UserWithStatus>,
+}
+
+impl ParseBytes for ItemSimilarUsers {
+    type Output = Self;
+
+    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self::Output> {
+        let item = read_string(src)?;
+        let users_nth = src.get_u32_le();
+        let mut users = Vec::with_capacity(users_nth as usize);
+
+        for _ in 0..users_nth {
+            users.push(UserWithStatus::parse(src)?);
+        }
+
+        Ok(Self { item, users })
+    }
 }

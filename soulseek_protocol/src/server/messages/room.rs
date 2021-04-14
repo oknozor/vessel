@@ -112,8 +112,14 @@ pub struct UserRoomEvent {
 impl ParseBytes for UserRoomEvent {
     type Output = Self;
 
-    fn parse(_src: &mut Cursor<&[u8]>) -> std::io::Result<Self> {
-        unimplemented!()
+    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self> {
+        let room_name = read_string(src)?;
+        let username = read_string(src)?;
+
+        Ok(Self {
+            room_name,
+            username,
+        })
     }
 }
 
@@ -230,6 +236,29 @@ pub struct RoomTickers {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct RoomTicker {
+    room: String,
+    username: String,
+    ticker: String,
+}
+
+impl ParseBytes for RoomTicker {
+    type Output = Self;
+
+    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self::Output> {
+        let room = read_string(src)?;
+        let username = read_string(src)?;
+        let ticker = read_string(src)?;
+
+        Ok(Self {
+            room,
+            username,
+            ticker,
+        })
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Ticker {
     username: String,
     ticker: String,
@@ -256,7 +285,23 @@ impl ParseBytes for RoomTickers {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct UserInRoom {
-    username: String,
+pub struct RoomUsers {
     room: String,
+    users: Vec<String>,
+}
+
+impl ParseBytes for RoomUsers {
+    type Output = Self;
+
+    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self::Output> {
+        let room = read_string(src)?;
+        let users_nth = src.get_u32_le();
+        let mut users = Vec::with_capacity(users_nth as usize);
+
+        for _ in 0..users_nth {
+            users.push(read_string(src)?);
+        }
+
+        Ok(Self { room, users })
+    }
 }

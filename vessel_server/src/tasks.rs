@@ -32,7 +32,7 @@ pub fn spawn_server_listener_task(
                     response
                 );
                 match response {
-                    ServerResponse::ConnectToPeer(connection_request) => {
+                    ServerResponse::PeerConnectionRequest(connection_request) => {
                         info!(
                             "connect to peer request from server : {:?} ",
                             connection_request

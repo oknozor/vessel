@@ -101,15 +101,15 @@ impl GlobalConnectionHandler {
                 database.clone()
             ),
             self.listen(channels.clone(), database.clone()),
-            connect_to_parents(
-                server_request_tx,
-                channels.clone(),
-                limit_connections,
-                notify_shutdown,
-                shutdown_complete_tx,
-                &mut possible_parent_rx,
-                database
-            )
+            // connect_to_parents(
+            //     server_request_tx,
+            //     channels.clone(),
+            //     limit_connections,
+            //     notify_shutdown,
+            //     shutdown_complete_tx,
+            //     &mut possible_parent_rx,
+            //     database
+            // )
         );
 
         Ok(())

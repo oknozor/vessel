@@ -5,7 +5,7 @@ use crate::server::messages::chat::{GroupMessage, SayInChat};
 use crate::server::messages::login::LoginRequest;
 use crate::server::messages::peer::{PeerConnectionTicket, RequestConnectionToPeer};
 use crate::server::messages::privilege::PrivilegesGift;
-use crate::server::messages::room::{Ticker, UserInRoom};
+use crate::server::messages::room::{Ticker, UserRoomEvent};
 use crate::server::messages::search::{RoomSearchQuery, SearchQuery, SearchRequest};
 use crate::server::messages::shares::SharedFolderAndFiles;
 use crate::server::messages::{MessageCode, HEADER_LEN};
@@ -244,12 +244,12 @@ pub enum ServerRequest {
     ///  **Description** : We send this to inform the server that we've added a user to a private room.
     ///
     /// **Response** : no message
-    AddUserToPrivateRoom(UserInRoom),
+    AddUserToPrivateRoom(UserRoomEvent),
 
     ///  **Description** : We send this to inform the server that we've removed a user from a private room.
     ///
     /// **Response** : no message
-    RemoveUserFromPrivateRoom(UserInRoom),
+    RemoveUserFromPrivateRoom(UserRoomEvent),
 
     ///  **Description** : We send this to the server to remove our own membership of a private room.
     ///
@@ -279,7 +279,7 @@ pub enum ServerRequest {
     ///  **Description** : We send this to the server to add private room operator abilities to a user.
     ///
     /// **Response** :  [`ServerResponse::RoomOperatorAdd`][`crate::server::messages::response::ServerResponse::RoomOperatorAdd`]
-    PrivateRoomAddOperator(UserInRoom),
+    PrivateRoomAddOperator(UserRoomEvent),
 
     ///  **Description** : The server send us this message when our operator abilities are removed in a private room.
     ///
@@ -449,7 +449,6 @@ impl ServerRequest {
         }
     }
 }
-
 
 pub(crate) async fn write_str_msg(
     src: &str,

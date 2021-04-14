@@ -130,3 +130,14 @@ pub struct PeerConnectionTicket {
     username: String,
     ticket: u32,
 }
+
+impl ParseBytes for PeerConnectionTicket {
+    type Output = Self;
+
+    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self::Output> {
+        let username = read_string(src)?;
+        let ticket = src.get_u32_le();
+
+        Ok(Self { username, ticket })
+    }
+}

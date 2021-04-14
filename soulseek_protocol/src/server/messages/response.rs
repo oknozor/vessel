@@ -1,8 +1,9 @@
-use crate::frame::{read_string, ParseBytes};
+use crate::frame::{read_bool, read_string, ParseBytes};
 use crate::server::messages::chat::*;
+use crate::server::messages::distributed::EmbeddedDistributedMessage;
 use crate::server::messages::interest::{Interests, ItemRecommendations, Recommendations};
 use crate::server::messages::login::*;
-use crate::server::messages::peer::{Peer, PeerConnectionRequest};
+use crate::server::messages::peer::{Peer, PeerConnectionRequest, PeerConnectionTicket};
 use crate::server::messages::room::*;
 use crate::server::messages::search::SearchQuery;
 use crate::server::messages::user::*;
@@ -15,43 +16,55 @@ use std::io::Cursor;
 /// All incoming message from the Soulseek server.
 pub enum ServerResponse {
     LoginResponse(LoginResponse),
+    ListenPort(u32),
+    PeerAddress(PeerAddress),
+    UserAdded(UserAdded),
+    UserRemoved(UserRoomEvent),
+    UserStatus(UserStatus),
+    ChatMessage(ChatMessage),
+    RoomJoined(RoomJoined),
+    RoomLeft(String),
+    PrivateMessage(PrivateMessage),
+    UserJoinedRoom(UserJoinedRoom),
+    UserLeftRoom(UserRoomEvent),
+    PeerConnectionRequest(PeerConnectionRequest),
+    SearchReply(SearchQuery),
+    UserStats(UserStats),
+    KickedFromServer,
+    Recommendations(Recommendations),
+    GlobalRecommendations(Recommendations),
+    UserInterests(Interests),
     RoomList(RoomList),
+    AdminMessage(String),
     PrivilegedUsers(UserList),
     ParentMinSpeed(u32),
     ParentSpeedRatio(u32),
-    ParentInactivityTimeOut(u32),
-    WishlistInterval(u32),
-    ListenPort(u32),
-    PeerAddress(PeerAddress),
-    UserStatus(UserStatus),
-    UserAdded(UserAdded),
-    UserRemoved(UserRoomEvent),
-    RemoveUser(UserRoomEvent),
-    UserJoinedRoom(UserJoinedRoom),
-    UserLeftRoom(UserRoomEvent),
-    RoomJoined(RoomJoined),
-    RoomTickers(RoomTickers),
-    RoomLeft(String),
-    RoomJoinRequestAck(String),
-    ChatMessage(ChatMessage),
-    PrivateMessage(PrivateMessage),
-    UserStats(UserStats),
-    ConnectToPeer(PeerConnectionRequest),
+    TimeLeft(u32),
+    EmbeddedMessage(EmbeddedDistributedMessage),
     PossibleParents(Vec<Peer>),
-    SearchReply(SearchQuery),
-    Recommendations(Recommendations),
-    GlobalRecommendations(Recommendations),
-    Interests(Interests),
+    WishlistInterval(u32),
     SimilarUsers(UsersWithStatus),
     ItemRecommendations(ItemRecommendations),
     ItemSimilarUsers(ItemSimilarUsers),
+    RoomTickers(RoomTickers),
+    RoomTickersAdded(RoomTicker),
+    RoomTickersRemoved(UserRoomEvent),
+    PrivateRoomUsers(RoomUsers),
+    PrivateRoomUserAdded(UserRoomEvent),
+    PrivateRoomUserRemoved(UserRoomEvent),
+    PrivateRoomUnknown(String),
+    PrivateRoomAdded(String),
+    PrivateRoomRemoved(String),
     PrivateRoomInvitationEnabled(bool),
     NewPassword(String),
-    RoomOperatorAdd(UserInRoom),
+    RoomOperatorAdd(UserRoomEvent),
     RoomOperatorRemove(String),
     RoomOperatorAdded(String),
     RoomOperatorRemoved(String),
-    TimeLeft(u32),
+    RoomOperators(RoomUsers),
+    PublicChatMessage(ChatMessage),
+    CantConnectToPeer(PeerConnectionTicket),
+    CantCreateRoom(String),
     Unknown(u32, u32, Vec<u8>), // length, code, raw bytes,
 }
 
@@ -63,23 +76,19 @@ impl ServerResponse {
             ServerResponse::PrivilegedUsers(_) => "PrivilegedUsers",
             ServerResponse::ParentMinSpeed(_) => "ParentMinSpeed",
             ServerResponse::ParentSpeedRatio(_) => "ParentSpeedRatio",
-            ServerResponse::ParentInactivityTimeOut(_) => "ParentInactivityTimeOut",
-            ServerResponse::WishlistInterval(_) => "WishlistInterval",
             ServerResponse::ListenPort(_) => "ListenPort",
             ServerResponse::PeerAddress(_) => "PeerAddress",
             ServerResponse::UserStatus(_) => "UserStatus",
             ServerResponse::UserAdded(_) => "UserAdded",
             ServerResponse::UserRemoved(_) => "UserRemoved",
-            ServerResponse::RemoveUser(_) => "RemoveUser",
             ServerResponse::UserJoinedRoom(_) => "UserJoinedRoom",
             ServerResponse::UserLeftRoom(_) => "UserLeftRoom",
             ServerResponse::RoomJoined(_) => "RoomJoined",
             ServerResponse::RoomTickers(_) => "RoomTickers",
             ServerResponse::RoomLeft(_) => "RoomLeft",
-            ServerResponse::RoomJoinRequestAck(_) => "RoomJoinRequestAck",
             ServerResponse::ChatMessage(_) => "ChatMessage",
             ServerResponse::UserStats(_) => "UserStats",
-            ServerResponse::ConnectToPeer(_) => "PeerConnection",
+            ServerResponse::PeerConnectionRequest(_) => "PeerConnection",
             ServerResponse::PossibleParents(_) => "PossibleParents",
             ServerResponse::Unknown(_, _, _) => "Unknown",
             ServerResponse::PrivateMessage(_) => "PrivateMessage",
@@ -87,7 +96,7 @@ impl ServerResponse {
             ServerResponse::SearchReply(_) => "SearchReply",
             ServerResponse::Recommendations(_) => "Recommendation",
             ServerResponse::GlobalRecommendations(_) => "GlobalRecommendation",
-            ServerResponse::Interests(_) => "Interests",
+            ServerResponse::UserInterests(_) => "Interests",
             ServerResponse::SimilarUsers(_) => "SimilarUsers",
             ServerResponse::ItemRecommendations(_) => "ItemRecommendations",
             ServerResponse::ItemSimilarUsers(_) => "ItemSimilarUsers",
@@ -97,6 +106,22 @@ impl ServerResponse {
             ServerResponse::RoomOperatorRemove(_) => "RoomOperatorRemove",
             ServerResponse::RoomOperatorAdded(_) => "RoomOperatorAdded",
             ServerResponse::RoomOperatorRemoved(_) => "RoomOperatorRemoved",
+            ServerResponse::KickedFromServer => "KickedFromServer",
+            ServerResponse::AdminMessage(_) => "AdminMessage",
+            ServerResponse::EmbeddedMessage(_) => "EmbeddedMessage",
+            ServerResponse::RoomTickersAdded(_) => "RoomTickersAdded",
+            ServerResponse::RoomTickersRemoved(_) => "RoomTickersRemoved",
+            ServerResponse::PrivateRoomUsers(_) => "PrivateRoomUsers",
+            ServerResponse::PrivateRoomUserAdded(_) => "PrivateRoomUserAdded",
+            ServerResponse::PrivateRoomUserRemoved(_) => "PrivateRoomUserRemoved",
+            ServerResponse::PrivateRoomUnknown(_) => "PrivateUnknown",
+            ServerResponse::PrivateRoomAdded(_) => "PrivateRoomAdded",
+            ServerResponse::PrivateRoomRemoved(_) => "PrivateRoomRemoved",
+            ServerResponse::RoomOperators(_) => "RoomOperators",
+            ServerResponse::PublicChatMessage(_) => "PublicChatMessage",
+            ServerResponse::CantConnectToPeer(_) => "CantConnectToPeer",
+            ServerResponse::CantCreateRoom(_) => "CantCreateRoom",
+            ServerResponse::WishlistInterval(_) => "WishlistInterval",
         }
     }
 }
@@ -123,7 +148,7 @@ impl ServerResponse {
     }
 
     pub fn parse(src: &mut Cursor<&[u8]>, header: &Header) -> std::io::Result<ServerResponse> {
-        match header.code {
+        match &header.code {
             MessageCode::Login => LoginResponse::parse(src).map(ServerResponse::LoginResponse),
             MessageCode::SetListenPort => Ok(ServerResponse::ListenPort(src.get_u32_le())),
             MessageCode::GetPeerAddress => PeerAddress::parse(src).map(ServerResponse::PeerAddress),
@@ -136,101 +161,106 @@ impl ServerResponse {
             MessageCode::UserJoinedRoom => {
                 UserJoinedRoom::parse(src).map(ServerResponse::UserJoinedRoom)
             }
-            MessageCode::UserLeftRoom => todo!(),
+            MessageCode::UserLeftRoom => {
+                UserRoomEvent::parse(src).map(ServerResponse::UserLeftRoom)
+            }
             MessageCode::ConnectToPeer => {
-                PeerConnectionRequest::parse(src).map(ServerResponse::ConnectToPeer)
+                PeerConnectionRequest::parse(src).map(ServerResponse::PeerConnectionRequest)
             }
             MessageCode::PrivateMessages => {
                 PrivateMessage::parse(src).map(ServerResponse::PrivateMessage)
             }
-            MessageCode::AcknowledgePrivateMessage => todo!(),
-            MessageCode::FileSearch => todo!(),
-            MessageCode::SetOnlineStatus => todo!(),
-            MessageCode::Ping => todo!(),
-            MessageCode::SendConnectToken => todo!(),
-            MessageCode::SendDownloadSpeed => todo!(),
-            MessageCode::SharedFoldersAndFiles => todo!(),
-            MessageCode::GetUserStats => todo!(),
-            MessageCode::QueuedDownloads => todo!(),
-            MessageCode::KickedFromServer => todo!(),
-            MessageCode::UserSearch => todo!(),
-            MessageCode::InterestAdd => todo!(),
-            MessageCode::InterestRemove => todo!(),
-            MessageCode::GetRecommendations => todo!(),
-            MessageCode::GetGlobalRecommendations => todo!(),
-            MessageCode::GetUserInterests => todo!(),
-            MessageCode::AdminCommand => todo!(),
-            MessageCode::PlaceInLineResponse => todo!(),
-            MessageCode::RoomAdded => todo!(),
-            MessageCode::RoomRemoved => todo!(),
+            MessageCode::FileSearch => SearchQuery::parse(src).map(ServerResponse::SearchReply),
+            MessageCode::GetUserStats => UserStats::parse(src).map(ServerResponse::UserStats),
+            MessageCode::KickedFromServer => Ok(ServerResponse::KickedFromServer),
+            MessageCode::GetRecommendations => {
+                Recommendations::parse(src).map(ServerResponse::Recommendations)
+            }
+            MessageCode::GetGlobalRecommendations => {
+                Recommendations::parse(src).map(ServerResponse::GlobalRecommendations)
+            }
+            MessageCode::GetUserInterests => {
+                Interests::parse(src).map(ServerResponse::UserInterests)
+            }
             MessageCode::RoomList => RoomList::parse(src).map(ServerResponse::RoomList),
-            MessageCode::ExactFileSearch => todo!(),
-            MessageCode::GlobalAdminMessage => todo!(),
-            MessageCode::GlobalUserList => todo!(),
-            MessageCode::TunneledMessage => todo!(),
+            MessageCode::GlobalAdminMessage => read_string(src).map(ServerResponse::AdminMessage),
             MessageCode::PrivilegedUsers => {
                 UserList::parse(src).map(ServerResponse::PrivilegedUsers)
             }
-            MessageCode::HaveNoParents => todo!(),
-            MessageCode::ParentsIp => todo!(),
             MessageCode::ParentMinSpeed => Ok(ServerResponse::ParentMinSpeed(src.get_u32_le())),
             MessageCode::ParentSpeedRatio => Ok(ServerResponse::ParentSpeedRatio(src.get_u32_le())),
-            MessageCode::ParentInactivityTimeout => {
-                Ok(ServerResponse::ParentInactivityTimeOut(src.get_u32_le()))
+            MessageCode::CheckPrivileges => Ok(ServerResponse::TimeLeft(src.get_u32_le())),
+            MessageCode::EmbeddedMessage => {
+                EmbeddedDistributedMessage::parse(src).map(ServerResponse::EmbeddedMessage)
             }
-            MessageCode::SearchInactivityTimeout => todo!(),
-            MessageCode::MinimumParentsInCache => todo!(),
-            MessageCode::DistributedAliveInterval => todo!(),
-            MessageCode::AddPrivilegedUser => todo!(),
-            MessageCode::CheckPrivileges => todo!(),
-            MessageCode::SearchRequest => todo!(),
-            MessageCode::AcceptChildren => todo!(),
             MessageCode::PossibleParents => Vec::parse(src).map(ServerResponse::PossibleParents),
-            MessageCode::WishlistSearch => todo!(),
             MessageCode::WishlistInterval => Ok(ServerResponse::WishlistInterval(src.get_u32_le())),
-            MessageCode::GetSimilarUsers => todo!(),
-            MessageCode::GetItemRecommendations => todo!(),
-            MessageCode::GetItemSimilarUsers => todo!(),
+            MessageCode::GetSimilarUsers => {
+                UsersWithStatus::parse(src).map(ServerResponse::SimilarUsers)
+            }
+            MessageCode::GetItemRecommendations => {
+                ItemRecommendations::parse(src).map(ServerResponse::ItemRecommendations)
+            }
+            MessageCode::GetItemSimilarUsers => {
+                ItemSimilarUsers::parse(src).map(ServerResponse::ItemSimilarUsers)
+            }
             MessageCode::RoomTickers => RoomTickers::parse(src).map(ServerResponse::RoomTickers),
-            MessageCode::RoomTickerAdd => todo!(),
-            MessageCode::RoomTickerRemove => todo!(),
-            MessageCode::SetRoomTicker => todo!(),
-            MessageCode::HatedInterestAdd => todo!(),
-            MessageCode::HatedInterestRemove => todo!(),
-            MessageCode::RoomSearch => todo!(),
-            MessageCode::SendUploadSpeed => todo!(),
-            MessageCode::UserPrivileges => todo!(),
-            MessageCode::GivePrivileges => todo!(),
-            MessageCode::NotifyPrivileges => todo!(),
-            MessageCode::AcknowledgeNotifyPrivileges => todo!(),
-            MessageCode::BranchLevel => todo!(),
-            MessageCode::BranchRoot => todo!(),
-            MessageCode::ChildDepth => todo!(),
-            MessageCode::PrivateRoomUsers => todo!(),
-            MessageCode::PrivateRoomAddUser => todo!(),
-            MessageCode::PrivateRoomRemoveUser => todo!(),
-            MessageCode::PrivateRoomDropMembership => todo!(),
-            MessageCode::PrivateRoomDropOwnership => todo!(),
-            MessageCode::PrivateRoomUnknown => todo!(),
-            MessageCode::PrivateRoomAdded => todo!(),
-            MessageCode::PrivateRoomRemoved => todo!(),
-            MessageCode::PrivateRoomToggle => todo!(),
-            MessageCode::NewPassword => todo!(),
-            MessageCode::PrivateRoomAddOperator => todo!(),
-            MessageCode::PrivateRoomRemoveOperator => todo!(),
-            MessageCode::PrivateRoomOperatorAdded => todo!(),
-            MessageCode::PrivateRoomOperatorRemoved => todo!(),
-            MessageCode::PrivateRoomOwned => todo!(),
-            MessageCode::MessageUsers => todo!(),
-            MessageCode::AskPublicChat => todo!(),
-            MessageCode::StopPublicChat => todo!(),
-            MessageCode::PublicChatMessage => todo!(),
-            MessageCode::RelatedSearches => todo!(),
-            MessageCode::CantConnectToPeer => todo!(),
-            MessageCode::CantCreateRoom => todo!(),
-            MessageCode::MaybeRoomJoinRequestAck => todo!(),
-            MessageCode::Unknown1004 => todo!(),
-            MessageCode::Unknown => todo!(),
+            MessageCode::RoomTickerAdd => {
+                RoomTicker::parse(src).map(ServerResponse::RoomTickersAdded)
+            }
+            MessageCode::RoomTickerRemove => {
+                UserRoomEvent::parse(src).map(ServerResponse::RoomTickersRemoved)
+            }
+            MessageCode::PrivateRoomUsers => {
+                RoomUsers::parse(src).map(ServerResponse::PrivateRoomUsers)
+            }
+            MessageCode::PrivateRoomAddUser => {
+                UserRoomEvent::parse(src).map(ServerResponse::PrivateRoomUserAdded)
+            }
+            MessageCode::PrivateRoomRemoveUser => {
+                UserRoomEvent::parse(src).map(ServerResponse::PrivateRoomUserRemoved)
+            }
+            MessageCode::PrivateRoomUnknown => {
+                Ok(ServerResponse::PrivateRoomUnknown(read_string(src)?))
+            }
+            MessageCode::PrivateRoomAdded => {
+                Ok(ServerResponse::PrivateRoomAdded(read_string(src)?))
+            }
+            MessageCode::PrivateRoomRemoved => {
+                Ok(ServerResponse::PrivateRoomRemoved(read_string(src)?))
+            }
+            MessageCode::PrivateRoomToggle => Ok(ServerResponse::PrivateRoomInvitationEnabled(
+                read_bool(src)?,
+            )),
+            MessageCode::NewPassword => Ok(ServerResponse::NewPassword(read_string(src)?)),
+            MessageCode::PrivateRoomAddOperator => {
+                UserRoomEvent::parse(src).map(ServerResponse::RoomOperatorAdd)
+            }
+            MessageCode::PrivateRoomRemoveOperator => {
+                Ok(ServerResponse::RoomOperatorRemove(read_string(src)?))
+            }
+            MessageCode::PrivateRoomOperatorAdded => {
+                Ok(ServerResponse::RoomOperatorRemoved(read_string(src)?))
+            }
+            MessageCode::PrivateRoomOperatorRemoved => {
+                Ok(ServerResponse::RoomOperatorAdded(read_string(src)?))
+            }
+            MessageCode::RoomOperators => RoomUsers::parse(src).map(ServerResponse::RoomOperators),
+            MessageCode::PublicChatMessage => {
+                ChatMessage::parse(src).map(ServerResponse::PublicChatMessage)
+            }
+            MessageCode::CantConnectToPeer => {
+                PeerConnectionTicket::parse(src).map(ServerResponse::CantConnectToPeer)
+            }
+            MessageCode::CantCreateRoom => Ok(ServerResponse::CantCreateRoom(read_string(src)?)),
+            unknown => {
+                error!("Unkown message code : {:?}", unknown);
+                Ok(ServerResponse::Unknown(
+                    header.message_len as u32,
+                    header.code.clone() as u32,
+                    src.bytes().to_vec(),
+                ))
+            }
         }
     }
 }

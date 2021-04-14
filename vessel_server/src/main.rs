@@ -40,7 +40,7 @@ async fn main() -> std::io::Result<()> {
     let login_sender = http_tx.clone();
     let (logged_in_tx, logged_in_rx) = mpsc::channel::<()>(1);
 
-    let database = Database::new();
+    let database = Database::default();
 
     // listen for incoming client commands and forward soulseek message to the sse service
     let soulseek_server_listener = spawn_server_listener_task(

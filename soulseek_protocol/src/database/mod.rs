@@ -2,7 +2,7 @@ use crate::peers::messages::shared_directories::{Directory, File, SharedDirector
 use crate::settings::CONFIG;
 use std::io;
 use std::net::Ipv4Addr;
-use std::path::PathBuf;
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 #[derive(Clone)]
@@ -28,7 +28,7 @@ impl SharedDirectories {
     }
 }
 
-fn visit_dir(path: &PathBuf, dirs: &mut Vec<Directory>) -> io::Result<()> {
+fn visit_dir(path: &Path, dirs: &mut Vec<Directory>) -> io::Result<()> {
     if path.is_dir() {
         for entry in std::fs::read_dir(path)? {
             let entry = entry?;
@@ -66,19 +66,21 @@ fn visit_dir(path: &PathBuf, dirs: &mut Vec<Directory>) -> io::Result<()> {
     Ok(())
 }
 
-impl Database {
-    pub fn new() -> Database {
+impl Default for Database {
+    fn default() -> Self {
         Database {
             inner: sled::open("vessel_db").unwrap(),
         }
     }
+}
 
+impl Database {
     pub fn insert_peer(&self, username: &str, address: Ipv4Addr) -> sled::Result<()> {
         debug!("Writing peer {}@{} to db:", username, address.to_string());
         self.inner
             .open_tree("users")?
             .insert(username.as_bytes(), address.to_string().as_bytes())
-            .map(|res| ())
+            .map(|_res| ())
     }
 
     pub fn get_peer_by_name(&self, username: &str) -> Option<String> {

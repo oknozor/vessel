@@ -178,7 +178,7 @@ pub async fn run(
 ) -> crate::Result<()> {
     debug!("Waiting for user to be logged in");
 
-    while let None = logged_in_rx.recv().await {
+    while logged_in_rx.recv().await.is_none() {
         // Waiting for login
     }
 
@@ -282,7 +282,7 @@ async fn listen_for_indirect_connection(
 
         let peer = Peer {
             username: connection_request.username.clone(),
-            ip: connection_request.ip.clone(),
+            ip: connection_request.ip,
             port: connection_request.port,
         };
 

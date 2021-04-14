@@ -1,4 +1,4 @@
-use crate::frame::ParseBytes;
+use crate::frame::{read_string, ParseBytes};
 use crate::server::messages::chat::*;
 use crate::server::messages::login::*;
 use crate::server::messages::peer::{Peer, PeerConnectionRequest};
@@ -102,7 +102,7 @@ impl ServerResponse {
             MessageCode::GetUserStatus => UserStatus::parse(src).map(ServerResponse::UserStatus),
             MessageCode::SayInChatRoom => ChatMessage::parse(src).map(ServerResponse::ChatMessage),
             MessageCode::JoinRoom => RoomJoined::parse(src).map(ServerResponse::RoomJoined),
-            MessageCode::LeaveRoom => todo!(),
+            MessageCode::LeaveRoom => read_string(src).map(ServerResponse::RoomLeft),
             MessageCode::UserJoinedRoom => {
                 UserJoinedRoom::parse(src).map(ServerResponse::UserJoinedRoom)
             }

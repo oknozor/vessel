@@ -16,7 +16,7 @@ impl Settings {
     pub fn get() -> Result<Self, ConfigError> {
         let mut s = Config::new();
         s.merge(File::from(PathBuf::from("vessel.toml")))?;
-        let mut settings: Result<Settings, ConfigError> = s.try_into();
+        let settings: Result<Settings, ConfigError> = s.try_into();
 
         settings
     }

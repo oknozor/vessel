@@ -98,7 +98,9 @@ impl ToBytes for ServerRequest {
             ServerRequest::JoinRoom(join_room) => {
                 write_str_msg(join_room, MessageCode::JoinRoom, buffer).await
             }
-            ServerRequest::LeaveRoom(_) => todo!(),
+            ServerRequest::LeaveRoom(room) => {
+                write_str_msg(room, MessageCode::LeaveRoom, buffer).await
+            }
             ServerRequest::EnablePublicChat => todo!(),
             ServerRequest::DisablePublicChat => todo!(),
             ServerRequest::GetUserStats(_) => todo!(),

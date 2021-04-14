@@ -124,3 +124,9 @@ impl ToBytes for RequestConnectionToPeer {
         Ok(())
     }
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PeerConnectionTicket {
+    username: String,
+    ticket: u32,
+}

@@ -1,8 +1,10 @@
 use crate::frame::{read_string, ParseBytes};
 use crate::server::messages::chat::*;
+use crate::server::messages::interest::{Interests, ItemRecommendations, Recommendations};
 use crate::server::messages::login::*;
 use crate::server::messages::peer::{Peer, PeerConnectionRequest};
 use crate::server::messages::room::*;
+use crate::server::messages::search::SearchQuery;
 use crate::server::messages::user::*;
 use crate::server::messages::{Header, MessageCode, HEADER_LEN};
 use crate::SlskError;
@@ -36,6 +38,20 @@ pub enum ServerResponse {
     UserStats(UserStats),
     ConnectToPeer(PeerConnectionRequest),
     PossibleParents(Vec<Peer>),
+    SearchReply(SearchQuery),
+    Recommendation(Recommendations),
+    GlobalRecommendation(Recommendations),
+    Interests(Interests),
+    SimilarUsers(UsersWithStatus),
+    ItemRecommendations(ItemRecommendations),
+    ItemSimilarUsers(ItemSimilarUsers),
+    PrivateRoomInvitationEnabled(bool),
+    NewPassword(String),
+    RoomOperatorAdd(UserInRoom),
+    RoomOperatorRemove(String),
+    RoomOperatorAdded(String),
+    RoomOperatorRemoved(String),
+    TimeLeft(u32),
     Unknown(u32, u32, Vec<u8>), // length, code, raw bytes,
 }
 
@@ -67,6 +83,20 @@ impl ServerResponse {
             ServerResponse::PossibleParents(_) => "PossibleParents",
             ServerResponse::Unknown(_, _, _) => "Unknown",
             ServerResponse::PrivateMessage(_) => "PrivateMessage",
+            ServerResponse::TimeLeft(_) => "TimeLeft",
+            ServerResponse::SearchReply(_) => "SearchReply",
+            ServerResponse::Recommendation(_) => "Recommendation",
+            ServerResponse::GlobalRecommendation(_) => "GlobalRecommendation",
+            ServerResponse::Interests(_) => "Interests",
+            ServerResponse::SimilarUsers(_) => "SimilarUsers",
+            ServerResponse::ItemRecommendations(_) => "ItemRecommendations",
+            ServerResponse::ItemSimilarUsers(_) => "ItemSimilarUsers",
+            ServerResponse::PrivateRoomInvitationEnabled(_) => "PrivateRoomInvitationEnabled",
+            ServerResponse::NewPassword(_) => "NewPassword",
+            ServerResponse::RoomOperatorAdd(_) => "RoomOperatorAdd",
+            ServerResponse::RoomOperatorRemove(_) => "RoomOperatorRemove",
+            ServerResponse::RoomOperatorAdded(_) => "RoomOperatorAdded",
+            ServerResponse::RoomOperatorRemoved(_) => "RoomOperatorRemoved",
         }
     }
 }

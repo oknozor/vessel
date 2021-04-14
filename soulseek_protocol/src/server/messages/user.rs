@@ -171,3 +171,20 @@ impl ParseBytes for UserData {
         })
     }
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UsersWithStatus {
+    users: Vec<UserWithStatus>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UserWithStatus {
+    username: String,
+    status: Status,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ItemSimilarUsers {
+    item: String,
+    users: Vec<UsersWithStatus>,
+}

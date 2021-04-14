@@ -82,3 +82,9 @@ impl ParseBytes for PrivateMessage {
         })
     }
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct GroupMessage {
+    users: Vec<String>,
+    message: String,
+}

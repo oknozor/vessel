@@ -1,12 +1,17 @@
 use bytes::Buf;
 use std::io::Cursor;
 
+pub mod admin;
 pub mod chat;
+pub mod interest;
 pub mod login;
 pub mod peer;
+pub mod privilege;
 pub mod request;
 pub mod response;
 pub mod room;
+pub mod search;
+pub mod shares;
 pub mod user;
 
 /// length of a server message header (8 bytes)

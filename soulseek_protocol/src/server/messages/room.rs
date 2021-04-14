@@ -254,3 +254,9 @@ impl ParseBytes for RoomTickers {
         Ok(RoomTickers { room, tickers })
     }
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UserInRoom {
+    username: String,
+    room: String,
+}

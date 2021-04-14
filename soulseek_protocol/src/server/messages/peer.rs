@@ -29,7 +29,7 @@ impl ParseBytes for PeerConnectionRequest {
     fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self::Output> {
         let username = read_string(src)?;
         let connection_type = ConnectionType::parse(src)?;
-        let ip = read_ipv4(src)?;
+        let ip = read_ipv4(src);
         let port = src.get_u32_le();
         let token = src.get_u32_le();
         let privileged = src.get_u8() == 1;
@@ -69,7 +69,7 @@ impl ParseBytes for Vec<Peer> {
         let mut parents = Vec::with_capacity(number_of_parent as usize);
         for _ in 0..number_of_parent {
             let username = read_string(src)?;
-            let ip = read_ipv4(src)?;
+            let ip = read_ipv4(src);
             let port = src.get_u32_le();
 
             parents.push(Peer { username, ip, port });

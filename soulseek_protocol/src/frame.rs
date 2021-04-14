@@ -11,9 +11,9 @@ use tokio::io::{AsyncWrite, AsyncWriteExt, BufWriter};
 /// length against the message length header.
 /// For instance [`ServerResponse`] header length is 8 bytes while [`PeerMessage`]'s header is 5.
 ///
-/// [`ServerResponse`]: crate::server.messages::response::ServerResponse
+/// [`ServerResponse`]: crate::server::messages::response::ServerResponse
 /// [`PeerMessage`]: crate::peers::messages::PeerMessage
-pub trait ParseBytes {
+pub(crate) trait ParseBytes {
     type Output;
     fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self::Output>;
 }
@@ -21,7 +21,7 @@ pub trait ParseBytes {
 /// A utility trait to write soulseek server messages, peer messages and distributed messages
 /// to a TCP stream buffer.
 #[async_trait]
-pub trait ToBytes {
+pub(crate) trait ToBytes {
     /// Write the request to the underlying buffer via [`BufWriter`].
     ///
     /// ## Example :
@@ -42,7 +42,7 @@ pub trait ToBytes {
     ) -> tokio::io::Result<()>;
 }
 
-pub async fn write_string(
+pub(crate) async fn write_string(
     src: &str,
     buffer: &mut BufWriter<impl AsyncWrite + Unpin + Send>,
 ) -> tokio::io::Result<()> {
@@ -52,7 +52,7 @@ pub async fn write_string(
     Ok(())
 }
 
-pub fn read_string(src: &mut Cursor<&[u8]>) -> std::io::Result<String> {
+pub(crate) fn read_string(src: &mut Cursor<&[u8]>) -> std::io::Result<String> {
     let string_len = src.get_u32_le();
     if string_len > 0 {
         let mut string = vec![0u8; string_len as usize];
@@ -63,9 +63,9 @@ pub fn read_string(src: &mut Cursor<&[u8]>) -> std::io::Result<String> {
     }
 }
 
-pub fn read_ipv4(src: &mut Cursor<&[u8]>) -> std::io::Result<Ipv4Addr> {
+pub(crate) fn read_ipv4(src: &mut Cursor<&[u8]>) -> Ipv4Addr {
     let ip = src.get_u32_le();
-    Ok(Ipv4Addr::from(ip))
+    Ipv4Addr::from(ip)
 }
 
-pub const STR_LENGTH_PREFIX: u32 = 4;
+pub(crate) const STR_LENGTH_PREFIX: u32 = 4;

@@ -79,7 +79,7 @@ impl ParseBytes for PeerAddress {
 
     fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self> {
         let username = read_string(src)?;
-        let ip = read_ipv4(src)?;
+        let ip = read_ipv4(src);
         let port = src.get_u32_le();
 
         Ok(PeerAddress { username, ip, port })

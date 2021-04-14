@@ -24,8 +24,8 @@ pub mod message_common;
 /// Contains all the soulseek protocol server message, see [`ServerRequest`] and [`ServerResponse`]
 /// for a detailed explanation of each one.
 ///
-///  [`ServerRequest`]: crate::server.messages::request:ServerRequest
-///  [`ServerResponse`]: crate::server.messages::request::ServerResponse
+///  [`ServerRequest`]: crate::server::messages::request::ServerRequest
+///  [`ServerResponse`]: crate::server::messages::request::ServerResponse
 pub mod server;
 
 pub mod database;

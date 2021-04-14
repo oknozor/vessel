@@ -121,7 +121,7 @@ impl ParseBytes for LoginResponse {
 
             1 => {
                 let greeting_message = read_string(src)?;
-                let user_ip = read_ipv4(src)?;
+                let user_ip = read_ipv4(src);
                 let password_md5_digest = read_string(src)?;
 
                 Ok(LoginResponse::Success {

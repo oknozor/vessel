@@ -32,8 +32,8 @@ pub const HEADER_LEN: u32 = 8;
 /// this is not used to write [`ServerRequest`] since write only once to the buffer.
 ///
 /// [`Cursor`]: std::io::Cursor
-/// [`ServerResponse`]: crate::server.messages::response::ServerResponse
-/// [`ServerRequest`]: crate::server.messages::request::ServerRequest
+/// [`ServerResponse`]: crate::server::messages::response::ServerResponse
+/// [`ServerRequest`]: crate::server::messages::request::ServerRequest
 #[derive(Debug)]
 pub struct Header {
     pub(crate) code: MessageCode,
@@ -61,9 +61,9 @@ impl Header {
 /// [`MessageCode::Unknown`] is used handle unknown message without causing panic on deserialization.
 /// This should be used to track and implement unkown/new messages in the future.
 ///
-/// [`ServerRequest`]: crate::server.messages::request::ServerRequest
+/// [`ServerRequest`]: crate::server::messages::request::ServerRequest
 /// [`MessageCode::Unknown`]: MessageCode::Unknown
-/// [`ServerResponse`]: crate::server.messages::response::ServerResponse
+/// [`ServerResponse`]: crate::server::messages::response::ServerResponse
 #[repr(u32)]
 #[derive(Debug)]
 pub enum MessageCode {

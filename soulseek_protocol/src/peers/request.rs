@@ -6,6 +6,7 @@ use crate::peers::messages::shared_directories::SharedDirectories;
 use crate::peers::messages::search::{SearchRequest, SearchReply};
 use crate::peers::messages::user_info::UserInfo;
 use crate::peers::messages::transfer::*;
+use crate::peers::messages::folder_content::FolderContentsRequest;
 
 /// TODO
 #[derive(Debug)]
@@ -16,7 +17,7 @@ pub enum PeerRequest {
     SearchReply(SearchReply),
     UserInfoRequest,
     UserInfoReply(UserInfo),
-    FolderContentsRequest(SharedDirectories),
+    FolderContentsRequest(FolderContentsRequest),
     FolderContentsReply(SharedDirectories),
     TransferRequest(TransferRequest),
     TransferReply(TransferReply),

@@ -1,7 +1,31 @@
 use tokio::io::{AsyncWrite, AsyncWriteExt, BufWriter};
 
-use crate::frame::ToBytes;
+use crate::frame::{ToBytes, ParseBytes, read_string};
 use crate::peers::messages::MessageCode;
+use std::io::Cursor;
+use bytes::Buf;
+
+#[derive(Debug)]
+pub struct FolderContentsRequest {
+    files: Vec<String>,
+}
+
+impl ParseBytes for FolderContentsRequest {
+    type Output = FolderContentsRequest;
+
+    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self::Output> {
+        let file_nth = src.get_u32_le();
+        let mut folder_content_request = FolderContentsRequest {
+            files: vec![]
+        };
+
+        for _ in 0..file_nth {
+            folder_content_request.files.push(read_string(src)?);
+        }
+
+        Ok(folder_content_request)
+    }
+}
 
 #[async_trait]
 impl ToBytes for FolderContentsRequest {
@@ -23,9 +47,4 @@ impl ToBytes for FolderContentsRequest {
             .await?;
         Ok(())
     }
-}
-
-#[derive(Debug)]
-pub struct FolderContentsRequest {
-    files: Vec<String>,
 }

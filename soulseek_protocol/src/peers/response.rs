@@ -9,6 +9,7 @@ use crate::peers::messages::search::{SearchRequest, SearchReply};
 use crate::peers::messages::user_info::UserInfo;
 use crate::peers::messages::transfer::{TransferRequest, TransferReply, QueueDownload, PlaceInQueueReply, UploadFailed, QueueFailed, PlaceInQueueRequest};
 use crate::peers::messages::{PeerMessageHeader, PEER_MSG_HEADER_LEN, MessageCode};
+use crate::peers::messages::folder_content::FolderContentsRequest;
 
 #[derive(Debug)]
 pub enum PeerResponse {
@@ -18,7 +19,7 @@ pub enum PeerResponse {
     SearchReply(SearchReply),
     UserInfoRequest,
     UserInfoReply(UserInfo),
-    FolderContentsRequest(SharedDirectories),
+    FolderContentsRequest(FolderContentsRequest),
     FolderContentsReply(SharedDirectories),
     TransferRequest(TransferRequest),
     TransferReply(TransferReply),
@@ -82,7 +83,7 @@ impl PeerResponse {
             MessageCode::SearchReply => todo!(),
             MessageCode::UserInfoRequest => PeerResponse::UserInfoRequest,
             MessageCode::UserInfoReply => UserInfo::parse(src).map(PeerResponse::UserInfoReply)?,
-            MessageCode::FolderContentsRequest => todo!(),
+            MessageCode::FolderContentsRequest => FolderContentsRequest::parse(src).map(PeerResponse::FolderContentsRequest),
             MessageCode::FolderContentsReply => todo!(),
             MessageCode::TransferRequest => todo!(),
             MessageCode::TransferReply => todo!(),

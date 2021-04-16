@@ -153,6 +153,7 @@ impl ParseBytes for File {
         let size = src.get_u64_le();
         let extension = read_string(src)?;
         let attribute_size = src.get_u32_le();
+
         let mut attributes = Vec::with_capacity(attribute_size as usize);
 
         for _ in 0..attribute_size {

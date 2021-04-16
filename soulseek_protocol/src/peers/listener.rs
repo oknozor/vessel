@@ -101,15 +101,15 @@ impl GlobalConnectionHandler {
                 database.clone()
             ),
             self.listen(channels.clone(), database.clone()),
-            // connect_to_parents(
-            //     server_request_tx,
-            //     channels.clone(),
-            //     limit_connections,
-            //     notify_shutdown,
-            //     shutdown_complete_tx,
-            //     &mut possible_parent_rx,
-            //     database
-            // )
+            connect_to_parents(
+                server_request_tx,
+                channels.clone(),
+                limit_connections,
+                notify_shutdown,
+                shutdown_complete_tx,
+                &mut possible_parent_rx,
+                database
+            )
         );
 
         Ok(())
@@ -121,7 +121,6 @@ impl GlobalConnectionHandler {
         loop {
             self.limit_connections.acquire().await.forget();
             let socket = self.peer_listener.accept().await?;
-            let address = socket.peer_addr()?.to_string();
 
             debug!(
                 "Incoming direct connection from {:?} accepted",
@@ -129,12 +128,13 @@ impl GlobalConnectionHandler {
             );
 
             let address = socket.peer_addr()?.ip().to_string();
-            let (tx, rx) = mpsc::channel(32);
+            let (tx, rx) = mpsc::channel(100);
 
             let channels = channels.clone();
             let mut channels = channels
                 .lock()
                 .expect("Unable to acquire lock on peer channels");
+
             channels.insert(PeerAddress::new(address.clone()), tx);
 
             let mut handler = Handler {
@@ -333,6 +333,29 @@ async fn connect_to_parents(
 ) -> Result<(), SendError<ServerRequest>> {
     while let Some(parents) = possible_parent_rx.recv().await {
         for parent in parents {
+            let parent_count;
+
+            {
+                let channel_pool = channels
+                    .lock()
+                    .expect("Unable to acquire lock on sender pool");
+                parent_count = channel_pool
+                    .keys()
+                    .filter(|address| address.is_parent)
+                    .count();
+
+                debug!("Connected to {}/{} parents", parent_count, MAX_PARENT);
+            }
+
+            if parent_count >= MAX_PARENT {
+                debug!("Max parent count reached");
+                let mut server_request_sender = server_request_tx.clone();
+                server_request_sender
+                    .send(ServerRequest::NoParents(false))
+                    .await?;
+                return Ok(());
+            };
+
             let handler = connect_to_peer(
                 channels.clone(),
                 limit_connections.clone(),
@@ -375,30 +398,6 @@ async fn connect_to_parents(
                 }
             }
         }
-
-        let parent_count;
-
-        {
-            let channel_pool = channels.clone();
-            let channel_pool = channels
-                .lock()
-                .expect("Unable to acquire lock on sender pool");
-            parent_count = channel_pool
-                .keys()
-                .filter(|address| address.is_parent)
-                .count();
-
-            debug!("Connected to {}/{} parents", parent_count, MAX_PARENT);
-        }
-
-        if parent_count >= MAX_PARENT {
-            debug!("Max parent count reached");
-            let mut server_request_sender = server_request_tx.clone();
-            server_request_sender
-                .send(ServerRequest::NoParents(false))
-                .await?;
-            return Ok(());
-        };
     }
 
     unreachable!()
@@ -427,7 +426,7 @@ async fn connect_to_peer(
     )
     .await
     {
-        let (tx, rx) = mpsc::channel(32);
+        let (tx, rx) = mpsc::channel(100);
         let channels = channels.clone();
         let mut channels = channels
             .lock()

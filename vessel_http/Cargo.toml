@@ -11,3 +11,5 @@ soulseek_protocol = { path = "../soulseek_protocol" }
 tokio = { version = "0.2", features = ["io-util", "net", "macros", "sync"] }
 warp = "0.2.5"
 log = "0.4.11"
+rand = "0.7.3"
+

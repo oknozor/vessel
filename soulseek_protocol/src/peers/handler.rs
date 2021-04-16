@@ -65,7 +65,7 @@ impl Handler {
                     return Ok(());
                 }
                 Err(_) => {
-                    // Time out
+                    // Timeout
                 }
             }
         }
@@ -83,9 +83,8 @@ impl Handler {
 
     async fn handle_peer_message(&mut self, message: &PeerResponse) -> tokio::io::Result<()> {
         match message {
-            PeerResponse::SharesReply(_) | PeerResponse::UserInfoReply(_) => Ok(()),
+            PeerResponse::SharesReply(_) | PeerResponse::UserInfoReply(_) | PeerResponse::SearchReply(_) => Ok(()),
             PeerResponse::SharesRequest => self.send_shares_reply().await,
-            PeerResponse::SearchReply(_) => todo!(),
             PeerResponse::UserInfoRequest => self.send_user_info().await,
             PeerResponse::FolderContentsRequest(_) => todo!(),
             PeerResponse::FolderContentsReply(_) => todo!(),
@@ -98,7 +97,10 @@ impl Handler {
             PeerResponse::QueueFailed(_) => todo!(),
             PeerResponse::PlaceInQueueRequest(_) => todo!(),
             PeerResponse::UploadQueueNotification => todo!(),
-            PeerResponse::Unknown => todo!(),
+            PeerResponse::Unknown => {
+                warn!("Unknown Peer message kind : {:#?}", message);
+                Ok(())
+            }
         }
     }
 

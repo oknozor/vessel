@@ -90,6 +90,7 @@ impl SlskConnection {
         match ServerResponse::check(&mut buf) {
             Ok(header) => {
                 let server_response = ServerResponse::parse(&mut buf, &header)?;
+                
                 // consume the message bytes
                 self.consume(header.message_len);
                 Ok(Some(server_response))

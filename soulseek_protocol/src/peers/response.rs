@@ -47,6 +47,10 @@ impl PeerResponse {
         if src.remaining() < header.message_len {
             Err(SlskError::Incomplete)
         } else {
+            // discard header data
+            src.set_position(0);
+            src.advance(PEER_MSG_HEADER_LEN as usize);
+
             Ok(header)
         }
     }
@@ -83,7 +87,7 @@ impl PeerResponse {
                 SharedDirectories::parse(src).map(PeerResponse::SharesReply)?
             }
             MessageCode::SearchRequest => todo!(),
-            MessageCode::SearchReply => todo!(),
+            MessageCode::SearchReply => SearchReply::parse(src).map(PeerResponse::SearchReply)?,
             MessageCode::UserInfoRequest => PeerResponse::UserInfoRequest,
             MessageCode::UserInfoReply => UserInfo::parse(src).map(PeerResponse::UserInfoReply)?,
             MessageCode::FolderContentsRequest => {

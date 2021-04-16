@@ -13,6 +13,7 @@ pub mod search;
 pub mod shared_directories;
 pub mod transfer;
 pub mod user_info;
+mod zlib;
 
 #[derive(Debug)]
 pub struct PeerMessageHeader {
@@ -27,9 +28,7 @@ impl PeerMessageHeader {
         let code = MessageCode::from(code);
 
         // We can subtract message code from the length since we already know it
-        let message_len = (message_length + 4) as usize;
-
-        src.set_position(0);
+        let message_len = (message_length) as usize;
 
         Ok(Self { message_len, code })
     }

@@ -9,6 +9,7 @@ use soulseek_protocol::database::Database;
 use soulseek_protocol::peers::messages::PeerRequestPacket;
 use soulseek_protocol::peers::request::PeerRequest;
 use soulseek_protocol::server::messages::chat::SayInChat;
+use soulseek_protocol::server::messages::search::SearchRequest;
 use std::sync::Arc;
 use warp::Filter;
 
@@ -126,14 +127,26 @@ pub async fn start(
             .join(",")
     });
 
+    let sender_copy = sender.clone();
+    let search_resquest = warp::path!("search" / String).map(move |query| {
+        let mut sender_copy = sender_copy.lock().unwrap();
+        sender_copy
+            .try_send(ServerRequest::FileSearch(SearchRequest {
+                ticket: rand::random(),
+                query,
+            }))
+            .unwrap();
+        "ok"
+    });
+
     let routes = warp::get()
         .and(get_peer_adress)
         .or(join_room)
         .or(get_user_status)
-        .or(send_chat_message)
         .or(add_user)
         .or(remove_user)
-        .or(start_public_chat)
+        .or(send_chat_message)
+        .or(search_resquest)
         .or(stop_public_chat)
         .or(get_all_connected_users)
         .or(send_share_request)

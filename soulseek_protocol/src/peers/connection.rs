@@ -120,16 +120,10 @@ impl Connection {
 
         match PeerResponse::check(&mut buf) {
             Ok(header) => {
-                debug!("Incoming peer message header: {:?}", header);
-
-                // Advance the buffer forward to skip header bytes
-                buf.set_position(PEER_MSG_HEADER_LEN as u64);
-
                 let peer_message = PeerResponse::parse(&mut buf, &header)?;
 
                 // consume the message bytes
                 self.consume(header.message_len as usize);
-
                 Ok(Some(peer_message))
             }
             Err(Incomplete) => Ok(None),

@@ -1,19 +1,20 @@
-use tokio::io::{AsyncWrite, AsyncWriteExt, BufWriter};
+use bytes::Buf;
+use tokio::io::{AsyncWrite , BufWriter};
 
-use crate::frame::{write_string, ToBytes};
-use crate::peers::messages::shared_directories::Attribute;
-use crate::peers::messages::MessageCode;
+use crate::frame::{ParseBytes, ToBytes, read_string};
+use std::{io::Cursor, usize};
+
+use super::{shared_directories::File, zlib::decompress};
 
 #[derive(Debug)]
 pub struct SearchReply {
     pub username: String,
     pub ticket: u32,
-    pub size: u64,
-    pub ext: String,
-    pub attributes: Vec<Attribute>,
+    pub files: Vec<File>,
     pub slot_free: bool,
     pub average_speed: u32,
     pub queue_length: u64,
+    pub locked_results:Vec<File>
 }
 
 #[async_trait]
@@ -22,30 +23,48 @@ impl ToBytes for SearchReply {
         &self,
         buffer: &mut BufWriter<impl AsyncWrite + Unpin + Send>,
     ) -> tokio::io::Result<()> {
-        let length = self.username.bytes().len() as u32
-            + 8
-            + self.ext.bytes().len() as u32
-            + 4
-            + self.attributes.len() as u32 * 8
-            + 1
-            + 4
-            + 8;
-        buffer.write_u32_le(length).await?;
-        buffer.write_u32_le(MessageCode::SearchReply as u32).await?;
-        write_string(&self.username, buffer).await?;
-        buffer.write_u32_le(self.ticket).await?;
-        buffer.write_u64_le(self.size).await?;
-        buffer.write_u32_le(self.attributes.len() as u32).await?;
+        todo!()
+    }
+}
 
-        for attribute in &self.attributes {
-            attribute.write_to_buf(buffer).await?;
+
+impl ParseBytes for SearchReply {
+    type Output = Self;
+
+    fn parse(src: &mut std::io::Cursor<&[u8]>) -> std::io::Result<Self::Output> {
+        let data= decompress(src)?;
+        let src = &mut Cursor::new(data.as_slice());
+        let username = read_string(src)?;
+        let ticket = src.get_u32_le();
+        
+        let result_nth = src.get_u32_le();
+        let mut files = Vec::with_capacity(result_nth as usize);
+
+        
+        for _ in 0..result_nth {
+            files.push(File::parse(src)?);
+        }
+        
+        let slot_free = src.get_u8() == 1; 
+        let average_speed = src.get_u32_le();
+        let queue_length = src.get_u64_le();
+
+        let lock_result_nth = src.get_u32_le();
+        let mut locked_results = Vec::with_capacity(lock_result_nth as usize);
+
+        
+        for _ in 0..lock_result_nth {
+            locked_results.push(File::parse(src)?);
         }
 
-        let slot_free = if self.slot_free { 1u8 } else { 0u8 };
-        buffer.write_u8(slot_free);
-
-        buffer.write_u32_le(self.average_speed).await?;
-        buffer.write_u64_le(self.queue_length).await?;
-        Ok(())
+        Ok(Self {
+            username,
+            ticket,
+            files,
+            slot_free,
+            average_speed,
+            queue_length,
+            locked_results,
+        }) 
     }
 }

@@ -19,7 +19,7 @@ const PEER_LISTENER_ADDRESS: &str = "0.0.0.0:2255";
 
 mod tasks;
 
-#[tokio::main]
+#[tokio::main(basic_scheduler)]
 async fn main() -> std::io::Result<()> {
     let filter = std::env::var("RUST_LOG").unwrap_or_else(|_| "tracing=info,warp=debug".to_owned());
 

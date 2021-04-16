@@ -6,8 +6,8 @@ use tokio::io::{AsyncWrite, AsyncWriteExt, BufWriter};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SearchRequest {
-    ticket: u32,
-    query: String,
+    pub ticket: u32,
+    pub query: String,
 }
 
 impl SearchRequest {
@@ -16,7 +16,7 @@ impl SearchRequest {
         buffer: &mut BufWriter<impl AsyncWrite + Unpin + Send>,
         code: MessageCode,
     ) -> tokio::io::Result<()> {
-        let len = STR_LENGTH_PREFIX + self.query.bytes().len() as u32 + 4;
+        let len = 4 + STR_LENGTH_PREFIX + self.query.bytes().len() as u32 + 4;
         buffer.write_u32_le(len).await?;
         buffer.write_u32_le(code as u32).await?;
         buffer.write_u32_le(self.ticket).await?;

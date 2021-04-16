@@ -10,8 +10,9 @@ edition = "2018"
 
 md5 = "0.7.0"
 rand = "0.7.3"
-tokio = { version = "0.2", features = ["io-util", "net", "macros", "time", "sync" ] }
-bytes = "0.5.0"
+tokio = { version = "^1", features = ["io-util", "net", "macros", "time", "sync" ] }
+bytes = "1"
+futures = "0.3.8"
 serde = "1.0.117"
 serde_derive = "1.0.117"
 serde_json = "1.0.59"

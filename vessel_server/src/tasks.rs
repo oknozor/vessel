@@ -1,3 +1,4 @@
+use futures::future::FutureExt;
 use futures::TryFutureExt;
 use tokio::net::TcpListener;
 use tokio::signal;
@@ -14,23 +15,25 @@ use soulseek_protocol::server::messages::response::ServerResponse;
 
 pub fn spawn_server_listener_task(
     mut http_rx: mpsc::Receiver<ServerRequest>,
-    mut sse_tx: mpsc::Sender<ServerResponse>,
-    mut peer_listener_tx: mpsc::Sender<PeerConnectionRequest>,
+    sse_tx: mpsc::Sender<ServerResponse>,
+    peer_listener_tx: mpsc::Sender<PeerConnectionRequest>,
     mut request_peer_connection_from_server_rx: mpsc::Receiver<ServerRequest>,
-    mut possible_parent_tx: mpsc::Sender<Vec<Peer>>,
+    possible_parent_tx: mpsc::Sender<Vec<Peer>>,
     mut connection: SlskConnection,
-    mut logged_in_tx: mpsc::Sender<()>,
+    logged_in_tx: mpsc::Sender<()>,
 ) -> JoinHandle<()> {
     tokio::spawn(async move {
+        info!("Starting Soulseek server TCP listener");
         loop {
             // Reveive all soulseek incoming messages, we stop reading from the soulseek connection
             // on [`SlskError::TimeOut`]
-            while let Ok(Some(response)) = connection.read_response_with_timeout().await {
+            if let Ok(Some(response)) = connection.read_response_with_timeout().await {
                 info!(
                     "Got response from server {:?} : {:?}",
                     response.kind(),
                     response
                 );
+
                 match response {
                     ServerResponse::PeerConnectionRequest(connection_request) => {
                         info!(
@@ -68,7 +71,7 @@ pub fn spawn_server_listener_task(
             }
 
             // We try once to receive a command
-            if let Ok(request) = http_rx.try_recv() {
+            if let Some(request) = http_rx.recv().now_or_never().flatten() {
                 debug!(
                     "Sending {} request to server: {:?}",
                     request.kind(),
@@ -80,7 +83,11 @@ pub fn spawn_server_listener_task(
                     .expect("failed to write to soulseek connection");
             }
 
-            if let Ok(request) = request_peer_connection_from_server_rx.try_recv() {
+            if let Some(request) = request_peer_connection_from_server_rx
+                .recv()
+                .now_or_never()
+                .flatten()
+            {
                 debug!(
                     "Sending {} peer connection request to server: {:?}",
                     request.kind(),
@@ -126,11 +133,11 @@ pub fn spawn_peer_listener(
     })
 }
 
-pub fn spawn_login_task(mut login_sender: mpsc::Sender<ServerRequest>) -> JoinHandle<()> {
+pub fn spawn_login_task(login_sender: mpsc::Sender<ServerRequest>) -> JoinHandle<()> {
     tokio::spawn(async move {
-        let mut listen_port_sender = login_sender.clone();
-        let mut parent_request_sender = login_sender.clone();
-        let mut join_nicotine_room = login_sender.clone();
+        let listen_port_sender = login_sender.clone();
+        let parent_request_sender = login_sender.clone();
+        let join_nicotine_room = login_sender.clone();
         login_sender
             .send(ServerRequest::Login(LoginRequest::new("vessel", "lessev")))
             .and_then(|_| listen_port_sender.send(ServerRequest::SetListenPort(2255)))

@@ -3,21 +3,20 @@ extern crate log;
 #[macro_use]
 extern crate tokio;
 
+use futures::{FutureExt, Stream, StreamExt};
 use soulseek_protocol::server::messages::response::ServerResponse;
 use std::convert::Infallible;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
-use tokio::stream::{Stream, StreamExt};
-use tokio::sync::mpsc;
-use tokio::sync::mpsc::{Receiver, Sender};
+use tokio::sync::mpsc::{self, Receiver, UnboundedReceiver, UnboundedSender};
 use warp::http::Method;
 use warp::Filter;
 
-struct Client(Receiver<String>);
+struct Client(UnboundedReceiver<String>);
 
 struct Broadcaster {
-    clients: Vec<Sender<String>>,
+    clients: Vec<UnboundedSender<String>>,
 }
 
 type Cache = Arc<Mutex<Vec<ServerResponse>>>;
@@ -82,7 +81,7 @@ pub async fn start_sse_listener(mut rx: Receiver<ServerResponse>) {
 
             for client in broadcaster.clients.iter_mut() {
                 client
-                    .try_send(message.clone())
+                    .send(message.clone())
                     .expect("failed to send message to sse client");
             }
         }
@@ -96,7 +95,7 @@ pub async fn start_sse_listener(mut rx: Receiver<ServerResponse>) {
                 .lock()
                 .unwrap()
                 .new_client(cache.clone())
-                .map(|msg| msg.map(warp::sse::json));
+                .map(|msg| warp::sse::Event::default().json_data(&msg.unwrap()));
 
             warp::sse::reply(warp::sse::keep_alive().stream(stream))
         })
@@ -113,17 +112,15 @@ impl Broadcaster {
     fn new_client(&mut self, cache: Cache) -> Client {
         info!("sse client connected");
 
-        let (tx, rx) = mpsc::channel(100);
+        let (tx, rx) = mpsc::unbounded_channel();
 
-        tx.clone()
-            .try_send("data: connected\n\n".to_string())
-            .unwrap();
+        tx.send("data: connected\n\n".to_string()).unwrap();
 
         // get every cached data and push them as a welcome pack to the client
         let cache = cache.lock().unwrap();
         for item in cache.iter() {
             let json = serde_json::to_string(item).unwrap();
-            tx.clone().try_send(json).unwrap();
+            tx.clone().send(json).unwrap();
         }
 
         self.clients.push(tx);
@@ -135,7 +132,7 @@ impl Stream for Client {
     type Item = Result<String, Infallible>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        match Pin::new(&mut self.0).poll_next(cx) {
+        match Pin::new(&mut self.0).poll_recv(cx) {
             Poll::Ready(Some(v)) => Poll::Ready(Some(Ok(v))),
             Poll::Ready(None) => Poll::Ready(None),
             Poll::Pending => Poll::Pending,

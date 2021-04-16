@@ -13,6 +13,7 @@ use crate::peers::messages::PeerResponsePacket;
 use crate::peers::request::PeerRequest;
 use crate::peers::response::PeerResponse;
 use crate::peers::shutdown::Shutdown;
+use futures::future::FutureExt;
 
 #[derive(Debug)]
 pub struct Handler {
@@ -27,7 +28,7 @@ pub struct Handler {
 impl Handler {
     pub(crate) async fn listen(&mut self, database: Database) -> crate::Result<()> {
         while !self.shutdown.is_shutdown() {
-            if let Ok(request) = self.handler_rx.try_recv() {
+            if let Some(request) = self.handler_rx.recv().now_or_never().flatten() {
                 debug!("Sending request {:?} to {:?}", request, self.peer_username);
                 if let Err(err) = self.connection.write_request(request).await {
                     error!("Handler write error, {:?}", err);
@@ -83,7 +84,9 @@ impl Handler {
 
     async fn handle_peer_message(&mut self, message: &PeerResponse) -> tokio::io::Result<()> {
         match message {
-            PeerResponse::SharesReply(_) | PeerResponse::UserInfoReply(_) | PeerResponse::SearchReply(_) => Ok(()),
+            PeerResponse::SharesReply(_)
+            | PeerResponse::UserInfoReply(_)
+            | PeerResponse::SearchReply(_) => Ok(()),
             PeerResponse::SharesRequest => self.send_shares_reply().await,
             PeerResponse::UserInfoRequest => self.send_user_info().await,
             PeerResponse::FolderContentsRequest(_) => todo!(),

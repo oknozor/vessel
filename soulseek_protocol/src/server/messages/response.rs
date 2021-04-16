@@ -258,7 +258,7 @@ impl ServerResponse {
                 Ok(ServerResponse::Unknown(
                     header.message_len as u32,
                     header.code.clone() as u32,
-                    src.bytes().to_vec(),
+                    src.chunk().to_vec(),
                 ))
             }
         }

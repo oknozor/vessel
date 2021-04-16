@@ -23,7 +23,7 @@ pub async fn start(
 
     let sender_copy = sender.clone();
     let get_peer_adress = warp::path!("user" / String / "peer_address").map(move |username| {
-        let mut sender_copy = sender_copy.lock().unwrap();
+        let sender_copy = sender_copy.lock().unwrap();
         sender_copy
             .try_send(ServerRequest::GetPeerAddress(username))
             .unwrap();
@@ -32,7 +32,7 @@ pub async fn start(
 
     let sender_copy = sender.clone();
     let join_room = warp::path!("rooms" / String / "join").map(move |room_name| {
-        let mut sender_copy = sender_copy.lock().unwrap();
+        let sender_copy = sender_copy.lock().unwrap();
         sender_copy
             .try_send(ServerRequest::JoinRoom(room_name))
             .unwrap();
@@ -41,7 +41,7 @@ pub async fn start(
 
     let sender_copy = sender.clone();
     let get_user_status = warp::path!("users" / String / "status").map(move |username| {
-        let mut sender_copy = sender_copy.lock().unwrap();
+        let sender_copy = sender_copy.lock().unwrap();
         sender_copy
             .try_send(ServerRequest::GetUserStatus(username))
             .unwrap();
@@ -50,7 +50,7 @@ pub async fn start(
 
     let sender_copy = sender.clone();
     let send_chat_message = warp::path!("chat" / String / String).map(move |room, message| {
-        let mut sender_copy = sender_copy.lock().unwrap();
+        let sender_copy = sender_copy.lock().unwrap();
         sender_copy
             .try_send(ServerRequest::SendChatMessage(SayInChat { room, message }))
             .unwrap();
@@ -60,7 +60,7 @@ pub async fn start(
 
     let sender_copy = sender.clone();
     let add_user = warp::path!("user" / String / "add").map(move |username| {
-        let mut sender_copy = sender_copy.lock().unwrap();
+        let sender_copy = sender_copy.lock().unwrap();
         sender_copy
             .try_send(ServerRequest::AddUser(username))
             .unwrap();
@@ -69,7 +69,7 @@ pub async fn start(
 
     let sender_copy = sender.clone();
     let remove_user = warp::path!("user" / String / "remove").map(move |username| {
-        let mut sender_copy = sender_copy.lock().unwrap();
+        let sender_copy = sender_copy.lock().unwrap();
         sender_copy
             .try_send(ServerRequest::RemoveUser(username))
             .unwrap();
@@ -77,8 +77,8 @@ pub async fn start(
     });
 
     let sender_copy = sender.clone();
-    let start_public_chat = warp::path!("chat" / "start").map(move || {
-        let mut sender_copy = sender_copy.lock().unwrap();
+    let _start_public_chat = warp::path!("chat" / "start").map(move || {
+        let sender_copy = sender_copy.lock().unwrap();
         sender_copy
             .try_send(ServerRequest::EnablePublicChat)
             .unwrap();
@@ -87,7 +87,7 @@ pub async fn start(
 
     let sender_copy = sender.clone();
     let stop_public_chat = warp::path!("chat" / "stop").map(move || {
-        let mut sender_copy = sender_copy.lock().unwrap();
+        let sender_copy = sender_copy.lock().unwrap();
         sender_copy
             .try_send(ServerRequest::DisablePublicChat)
             .unwrap();
@@ -96,7 +96,7 @@ pub async fn start(
 
     let peer_sender_copy = peer_sender.clone();
     let send_user_info = warp::path!("peers" / String / "userinfo").map(move |peer_name| {
-        let mut peer_sender_copy = peer_sender_copy.lock().unwrap();
+        let peer_sender_copy = peer_sender_copy.lock().unwrap();
         peer_sender_copy
             .try_send((
                 peer_name,
@@ -108,7 +108,7 @@ pub async fn start(
 
     let peer_sender_copy = peer_sender.clone();
     let send_share_request = warp::path!("peers" / String / "shares").map(move |peer_name| {
-        let mut peer_sender_copy = peer_sender_copy.lock().unwrap();
+        let peer_sender_copy = peer_sender_copy.lock().unwrap();
         peer_sender_copy
             .try_send((
                 peer_name,
@@ -129,7 +129,7 @@ pub async fn start(
 
     let sender_copy = sender.clone();
     let search_resquest = warp::path!("search" / String).map(move |query| {
-        let mut sender_copy = sender_copy.lock().unwrap();
+        let sender_copy = sender_copy.lock().unwrap();
         sender_copy
             .try_send(ServerRequest::FileSearch(SearchRequest {
                 ticket: rand::random(),

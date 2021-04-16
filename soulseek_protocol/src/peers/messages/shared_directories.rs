@@ -28,7 +28,7 @@ impl ToBytes for SharedDirectories {
             dir.write_to_buf(&mut message_buffer).await?;
         }
 
-        message_buffer.flush();
+        message_buffer.flush().await?;
 
         // Compress message
         let mut e = ZlibEncoder::new(Vec::new(), Compression::default());
@@ -53,7 +53,7 @@ impl ParseBytes for SharedDirectories {
         let mut data = Vec::with_capacity(100_000);
 
         let decompress_result =
-            Decompress::new(true).decompress_vec(src.bytes(), &mut data, FlushDecompress::Sync);
+            Decompress::new(true).decompress_vec(src.chunk(), &mut data, FlushDecompress::Sync);
 
         match decompress_result {
             Ok(status) => {

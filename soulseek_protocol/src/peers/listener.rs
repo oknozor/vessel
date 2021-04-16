@@ -1,3 +1,4 @@
+use futures::FutureExt;
 /// Code and documentation from this module have been heavily inspired by tokio [mini-redis](https://github.com/tokio-rs/mini-redis/blob/master/src/server.rs)
 /// tutorial.
 use std::future::Future;
@@ -119,7 +120,7 @@ impl GlobalConnectionHandler {
         info!("accepting inbound connections");
 
         loop {
-            self.limit_connections.acquire().await.forget();
+            self.limit_connections.acquire().await.unwrap().forget();
             let socket = self.peer_listener.accept().await?;
 
             debug!(
@@ -178,7 +179,7 @@ pub async fn run(
 ) -> crate::Result<()> {
     debug!("Waiting for user to be logged in");
 
-    while logged_in_rx.recv().await.is_none() {
+    while logged_in_rx.recv().now_or_never().is_none() {
         // Waiting for login
     }
 
@@ -258,7 +259,7 @@ impl PeerListener {
             }
 
             // Pause execution until the back off period elapses.
-            time::delay_for(Duration::from_secs(backoff)).await;
+            time::sleep(Duration::from_secs(backoff)).await;
 
             // Double the back off
             backoff *= 2;
@@ -275,7 +276,7 @@ async fn listen_for_indirect_connection(
     shutdown_complete_tx: mpsc::Sender<()>,
     database: Database,
 ) -> Result<(), SendError<ServerRequest>> {
-    while let Some(connection_request) = indirect_connection_rx.recv().await {
+    while let Some(connection_request) = indirect_connection_rx.recv().now_or_never().flatten() {
         if connection_request.username == "vessel" {
             continue;
         };
@@ -331,76 +332,76 @@ async fn connect_to_parents(
     possible_parent_rx: &mut Receiver<Vec<Peer>>,
     database: Database,
 ) -> Result<(), SendError<ServerRequest>> {
-    while let Some(parents) = possible_parent_rx.recv().await {
-        for parent in parents {
-            let parent_count;
+    loop {
+        while let Some(parents) = possible_parent_rx.recv().await {
+            for parent in parents {
+                let parent_count;
 
-            {
-                let channel_pool = channels
-                    .lock()
-                    .expect("Unable to acquire lock on sender pool");
-                parent_count = channel_pool
-                    .keys()
-                    .filter(|address| address.is_parent)
-                    .count();
+                {
+                    let channel_pool = channels
+                        .lock()
+                        .expect("Unable to acquire lock on sender pool");
+                    parent_count = channel_pool
+                        .keys()
+                        .filter(|address| address.is_parent)
+                        .count();
 
-                debug!("Connected to {}/{} parents", parent_count, MAX_PARENT);
-            }
-
-            if parent_count >= MAX_PARENT {
-                debug!("Max parent count reached");
-                let mut server_request_sender = server_request_tx.clone();
-                server_request_sender
-                    .send(ServerRequest::NoParents(false))
-                    .await?;
-                return Ok(());
-            };
-
-            let handler = connect_to_peer(
-                channels.clone(),
-                limit_connections.clone(),
-                notify_shutdown.clone(),
-                shutdown_complete_tx.clone(),
-                parent.clone(),
-            )
-            .await;
-
-            match handler {
-                Ok(mut handler) => {
-                    info!(
-                        "Connected to distributed parent: {}@{:?}",
-                        &parent.username,
-                        parent.get_address()
-                    );
-
-                    database.insert_peer(&parent.username, parent.ip).unwrap();
-
-                    let db_copy = database.clone();
-
-                    tokio::spawn(async move {
-                        match handler.connect(db_copy).await {
-                            Ok(()) => {}
-                            Err(err) => error!(cause = ?err, "connection error"),
-                        }
-                    });
+                    debug!("Connected to {}/{} parents", parent_count, MAX_PARENT);
                 }
-                Err(_) => {
-                    warn!("Unable to establish direct connection to peer, either port is closed or user is disconnected");
-                    warn!("Falling back to indirect connection");
-                    let mut server_request_sender = server_request_tx.clone();
+
+                if parent_count >= MAX_PARENT {
+                    debug!("Max parent count reached");
+                    let server_request_sender = server_request_tx.clone();
                     server_request_sender
-                        .send(ServerRequest::ConnectToPeer(RequestConnectionToPeer {
-                            token: random(),
-                            username: "vessel".to_string(),
-                            connection_type: ConnectionType::DistributedNetwork,
-                        }))
+                        .send(ServerRequest::NoParents(false))
                         .await?;
+                    return Ok(());
+                };
+
+                let handler = connect_to_peer(
+                    channels.clone(),
+                    limit_connections.clone(),
+                    notify_shutdown.clone(),
+                    shutdown_complete_tx.clone(),
+                    parent.clone(),
+                )
+                .await;
+
+                match handler {
+                    Ok(mut handler) => {
+                        info!(
+                            "Connected to distributed parent: {}@{:?}",
+                            &parent.username,
+                            parent.get_address()
+                        );
+
+                        database.insert_peer(&parent.username, parent.ip).unwrap();
+
+                        let db_copy = database.clone();
+
+                        tokio::spawn(async move {
+                            match handler.connect(db_copy).await {
+                                Ok(()) => {}
+                                Err(err) => error!(cause = ?err, "connection error"),
+                            }
+                        });
+                    }
+                    Err(_) => {
+                        warn!("Unable to establish direct connection to peer, either port is closed or user is disconnected");
+                        warn!("Falling back to indirect connection");
+                        let server_request_sender = server_request_tx.clone();
+                        server_request_sender
+                            .send(ServerRequest::ConnectToPeer(RequestConnectionToPeer {
+                                token: random(),
+                                username: "vessel".to_string(),
+                                connection_type: ConnectionType::DistributedNetwork,
+                            }))
+                            .await?;
+                    }
                 }
             }
         }
     }
-
-    unreachable!()
 }
 
 async fn connect_to_peer(
@@ -410,8 +411,8 @@ async fn connect_to_peer(
     shutdown_complete_tx: mpsc::Sender<()>,
     user: Peer,
 ) -> crate::Result<Handler> {
-    limit_connections.acquire().await.forget();
-
+    // FIXME : unwrap
+    limit_connections.acquire().await.unwrap().forget();
     // Accept a new socket. This will attempt to perform error handling.
     // The `accept` method internally attempts to recover errors, so an
     // error here is non-recoverable.
@@ -475,7 +476,7 @@ async fn dispatch_peer_message(
                 };
             }
 
-            if let Some(mut sender) = sender {
+            if let Some(sender) = sender {
                 debug!("Sending message to peer handler {:?}", message);
                 sender.send(message).await.expect("Send error");
             }

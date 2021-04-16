@@ -12,7 +12,7 @@ use std::num::TryFromIntError;
 use std::string::FromUtf8Error;
 
 use config::ConfigError;
-use tokio::time::Elapsed;
+use tokio::time::error::Elapsed;
 
 pub mod peers;
 

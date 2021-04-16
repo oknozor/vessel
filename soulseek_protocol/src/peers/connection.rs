@@ -3,12 +3,10 @@ use std::io::Cursor;
 use bytes::{Buf, BytesMut};
 use tokio::io::{AsyncReadExt, AsyncWriteExt, BufWriter};
 use tokio::net::TcpStream;
-use tokio::time::Duration;
 
 use crate::frame::ToBytes;
 use crate::message_common::ConnectionType;
 use crate::peers::messages::connection::{PeerConnectionMessage, CONNECTION_MSG_HEADER_LEN};
-use crate::peers::messages::PEER_MSG_HEADER_LEN;
 use crate::peers::messages::{PeerRequestPacket, PeerResponsePacket};
 use crate::peers::response::PeerResponse;
 use std::net::{Ipv4Addr, SocketAddr};
@@ -89,7 +87,6 @@ impl Connection {
     }
 
     pub(crate) fn new(socket: TcpStream) -> Connection {
-        let _ = socket.set_keepalive(Some(Duration::from_secs(1)));
         Connection {
             stream: BufWriter::new(socket),
             buffer: BytesMut::with_capacity(4 * 1024),

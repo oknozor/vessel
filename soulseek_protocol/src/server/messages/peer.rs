@@ -117,9 +117,13 @@ impl ToBytes for RequestConnectionToPeer {
             .await?;
 
         buffer.write_u32_le(self.token).await?;
-        buffer.write_u32_le(self.username.bytes().len() as u32);
+        buffer
+            .write_u32_le(self.username.bytes().len() as u32)
+            .await?;
         write_string(&self.username, buffer).await?;
-        buffer.write_u32_le(self.connection_type.bytes().len() as u32);
+        buffer
+            .write_u32_le(self.connection_type.bytes().len() as u32)
+            .await?;
         write_string(self.connection_type.as_ref(), buffer).await?;
         Ok(())
     }

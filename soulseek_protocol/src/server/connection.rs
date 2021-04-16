@@ -32,7 +32,7 @@ impl SlskConnection {
     /// Try to read a soulseek message and timeout after 10ms if nothing happened, this method is used
     /// to avoid blocking when the stream buffer is empty and soulseek is not sending message anymore.
     pub async fn read_response_with_timeout(&mut self) -> crate::Result<Option<ServerResponse>> {
-        match timeout(Duration::from_millis(10), self.read_response()).await {
+        match timeout(Duration::from_millis(60), self.read_response()).await {
             Ok(read_result) => read_result,
             Err(e) => Err(SlskError::TimeOut(e)),
         }
@@ -90,7 +90,7 @@ impl SlskConnection {
         match ServerResponse::check(&mut buf) {
             Ok(header) => {
                 let server_response = ServerResponse::parse(&mut buf, &header)?;
-                
+
                 // consume the message bytes
                 self.consume(header.message_len);
                 Ok(Some(server_response))

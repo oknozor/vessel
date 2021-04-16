@@ -13,7 +13,7 @@ impl ParseBytes for EmbeddedDistributedMessage {
 
     fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self::Output> {
         let code = src.get_u8();
-        let message = src.bytes().to_vec();
+        let message = src.chunk().to_vec();
 
         Ok(Self { code, message })
     }

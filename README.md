@@ -35,7 +35,10 @@ This is still a **WORK IN PROGESS** and not usable yet.
 
 ## Running
 
+Make sure port 2255 is open and transfered to your machine ip, peer can attempt direct connection to your vessel instance. 
+
 ### vessel server
+
 ```shell
 RUST_LOG=debug cargo run
 ```

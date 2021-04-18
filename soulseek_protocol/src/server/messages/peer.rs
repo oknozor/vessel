@@ -88,8 +88,7 @@ pub struct RequestConnectionToPeer {
 
 impl RequestConnectionToPeer {
     pub fn new(username: String, connection_type: ConnectionType) -> Self {
-        let mut rng = thread_rng();
-        let token: u32 = rng.gen();
+        let token: u32 = rand::random();
 
         Self {
             token,

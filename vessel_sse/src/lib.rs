@@ -1,9 +1,9 @@
 #[macro_use]
-extern crate log;
-#[macro_use]
 extern crate tokio;
+#[macro_use]
+extern crate tracing;
 
-use futures::{FutureExt, Stream, StreamExt};
+use futures::{Stream, StreamExt};
 use soulseek_protocol::server::messages::response::ServerResponse;
 use std::convert::Infallible;
 use std::pin::Pin;
@@ -22,6 +22,7 @@ struct Broadcaster {
 type Cache = Arc<Mutex<Vec<ServerResponse>>>;
 
 // see : https://github.com/seanmonstar/warp/blob/master/examples/sse_chat.rs
+#[instrument(name = "sse_listener", level = "debug", skip(rx))]
 pub async fn start_sse_listener(mut rx: Receiver<ServerResponse>) {
     info!("Starting to server sent event broadcast ...");
 
@@ -67,7 +68,7 @@ pub async fn start_sse_listener(mut rx: Receiver<ServerResponse>) {
                 // Once we get user list we can get out and proceed to the main event loop
                 break;
             }
-            other => debug!("SSE message : {:?}", other),
+            other => debug!("SSE message : {:?}", other.kind()),
         }
     }
 

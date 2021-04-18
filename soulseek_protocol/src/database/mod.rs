@@ -5,7 +5,7 @@ use std::net::Ipv4Addr;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Database {
     inner: sled::Db,
 }

@@ -29,15 +29,28 @@ async fn main() -> std::io::Result<()> {
         .with_span_events(FmtSpan::CLOSE)
         .init();
 
+    // Forward http request to the soulseek server
     let (http_tx, http_rx) = mpsc::channel::<ServerRequest>(32);
+
+    // Send http request directly to a peer connection
     let (peer_message_dispatcher_tx, peer_message_dispatcher_rx) =
         mpsc::channel::<(String, PeerRequestPacket)>(32);
+
+    // Send Soulseek server response to the SSE client
     let (sse_tx, sse_rx) = mpsc::channel::<ServerResponse>(32);
+
+    // Dispatch incoming indirect connection request to the global peer handler
     let (peer_listener_tx, peer_connection_rx) = mpsc::channel::<PeerConnectionRequest>(32);
+
+    // Request an indirect connection via http
     let (request_peer_connection_from_server_tx, request_peer_connection_from_server_rx) =
         mpsc::channel::<ServerRequest>(32);
+
+    // Dispatch possible parrent to the global peer handler
     let (possible_parent_tx, possible_parent_rx) = mpsc::channel::<Vec<Peer>>(32);
+
     let connection = soulseek_protocol::server::connection::connect().await;
+
     let login_sender = http_tx.clone();
     let (logged_in_tx, logged_in_rx) = mpsc::channel::<()>(1);
 
@@ -83,8 +96,8 @@ async fn main() -> std::io::Result<()> {
 
     // Wraps everything with tokio::join so we don't block on servers startup
     let _ = join!(
-        sse_server,
-        http_server,
+        // sse_server,
+        // http_server,
         soulseek_server_listener,
         login,
         peer_listener

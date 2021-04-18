@@ -4,7 +4,7 @@ use bytes::Buf;
 use flate2::{Decompress, FlushDecompress};
 
 pub(crate) fn decompress(src: &mut Cursor<&[u8]>) -> std::io::Result<Vec<u8>> {
-    let mut data = Vec::with_capacity(1000000);
+    let mut data = Vec::with_capacity(src.remaining() * 4);
     let decompress_result =
         Decompress::new(true).decompress_vec(&src.chunk(), &mut data, FlushDecompress::Sync);
 

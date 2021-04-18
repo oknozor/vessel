@@ -17,89 +17,119 @@ pub fn spawn_server_listener_task(
     mut http_rx: mpsc::Receiver<ServerRequest>,
     sse_tx: mpsc::Sender<ServerResponse>,
     peer_listener_tx: mpsc::Sender<PeerConnectionRequest>,
+    request_peer_connection_from_server_rx: mpsc::Receiver<ServerRequest>,
+    possible_parent_tx: mpsc::Sender<Vec<Peer>>,
+    connection: SlskConnection,
+    logged_in_tx: mpsc::Sender<()>,
+) -> JoinHandle<()> {
+    tokio::spawn(async move {
+        server_listener(
+            http_rx,
+            sse_tx,
+            peer_listener_tx,
+            request_peer_connection_from_server_rx,
+            possible_parent_tx,
+            connection,
+            logged_in_tx,
+        )
+        .await;
+    })
+}
+
+#[instrument(
+    name = "slsk_server_listener",
+    level = "debug",
+    skip(
+        http_rx,
+        sse_tx,
+        peer_listener_tx,
+        request_peer_connection_from_server_rx,
+        possible_parent_tx,
+        connection,
+        logged_in_tx
+    )
+)]
+async fn server_listener(
+    mut http_rx: mpsc::Receiver<ServerRequest>,
+    sse_tx: mpsc::Sender<ServerResponse>,
+    peer_listener_tx: mpsc::Sender<PeerConnectionRequest>,
     mut request_peer_connection_from_server_rx: mpsc::Receiver<ServerRequest>,
     possible_parent_tx: mpsc::Sender<Vec<Peer>>,
     mut connection: SlskConnection,
     logged_in_tx: mpsc::Sender<()>,
 ) -> JoinHandle<()> {
-    tokio::spawn(async move {
-        info!("Starting Soulseek server TCP listener");
-        loop {
-            // Reveive all soulseek incoming messages, we stop reading from the soulseek connection
-            // on [`SlskError::TimeOut`]
-            if let Ok(Some(response)) = connection.read_response_with_timeout().await {
-                info!(
-                    "Got response from server {:?} : {:?}",
-                    response.kind(),
-                    response
-                );
+    info!("Starting Soulseek server TCP listener");
+    loop {
+        // Reveive all soulseek incoming messages, we stop reading from the soulseek connection
+        // on [`SlskError::TimeOut`]
+        if let Some(Ok(Some(response))) = connection.read_response().now_or_never() {
+            info!("Got response from server {:?}", response.kind(),);
 
-                match response {
-                    ServerResponse::PeerConnectionRequest(connection_request) => {
-                        info!(
-                            "connect to peer request from server : {:?} ",
-                            connection_request
-                        );
-                        peer_listener_tx
-                            .send(connection_request)
-                            .await
-                            .expect("Cannot send peer connection request to peer handler");
-                    }
+            match response {
+                ServerResponse::PeerConnectionRequest(connection_request) => {
+                    info!(
+                        "connect to peer request from server : {:?} ",
+                        connection_request
+                    );
+                    peer_listener_tx
+                        .send(connection_request)
+                        .await
+                        .expect("Cannot send peer connection request to peer handler");
+                }
 
-                    ServerResponse::PossibleParents(parents) => {
-                        info!("Got possible parents from server");
-                        possible_parent_tx
-                            .send(parents)
-                            .await
-                            .expect("Unable to send possible parent to peer handler");
-                    }
+                ServerResponse::PossibleParents(parents) => {
+                    info!("Got possible parents from server");
+                    possible_parent_tx
+                        .send(parents)
+                        .await
+                        .expect("Unable to send possible parent to peer handler");
+                }
 
-                    ServerResponse::PrivilegedUsers(_) => {
-                        logged_in_tx
-                            .send(())
-                            .await
-                            .expect("error sending connection status to peer listener");
-                    }
+                ServerResponse::PrivilegedUsers(_) => {
+                    logged_in_tx
+                        .send(())
+                        .await
+                        .expect("error sending connection status to peer listener");
+                }
 
-                    response => {
-                        sse_tx
-                            .send(response)
-                            .await
-                            .expect("Unable to send message to sse listener");
-                    }
+                response => {
+                    sse_tx
+                        .send(response)
+                        .await
+                        .expect("Unable to send message to sse listener");
                 }
             }
-
-            // We try once to receive a command
-            if let Some(request) = http_rx.recv().now_or_never().flatten() {
-                debug!(
-                    "Sending {} request to server: {:?}",
-                    request.kind(),
-                    request
-                );
-                connection
-                    .write_request(request)
-                    .await
-                    .expect("failed to write to soulseek connection");
-            }
-
-            if let Some(request) = request_peer_connection_from_server_rx
-                .recv()
-                .now_or_never()
-                .flatten()
-            {
-                debug!(
-                    "Sending {} peer connection request to server: {:?}",
-                    request.kind(),
-                    request
-                );
-                connection
-                    .write_request(request)
-                    .await
-                    .expect("failed to write to soulseek connection");
-            }
         }
-    })
+
+        // We try once to receive a command
+        if let Some(request) = http_rx.recv().now_or_never().flatten() {
+            debug!(
+                "Sending {} request to server: {:?}",
+                request.kind(),
+                request
+            );
+            connection
+                .write_request(request)
+                .await
+                .expect("failed to write to soulseek connection");
+        }
+
+        if let Some(request) = request_peer_connection_from_server_rx
+            .recv()
+            .now_or_never()
+            .flatten()
+        {
+            debug!(
+                "Sending {} peer connection request to server: {:?}",
+                request.kind(),
+                request
+            );
+            connection
+                .write_request(request)
+                .await
+                .expect("failed to write to soulseek connection");
+        }
+    }
 }
 
 pub fn spawn_sse_server(sse_rx: mpsc::Receiver<ServerResponse>) -> JoinHandle<()> {

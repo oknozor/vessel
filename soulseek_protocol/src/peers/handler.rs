@@ -26,12 +26,13 @@ pub struct Handler {
 }
 
 impl Handler {
+    #[instrument(name = "peer_handler", level = "debug", skip(self, database))]
     pub(crate) async fn listen(&mut self, database: Database) -> crate::Result<()> {
         while !self.shutdown.is_shutdown() {
             if let Some(request) = self.handler_rx.recv().now_or_never().flatten() {
-                debug!("Sending request {:?} to {:?}", request, self.peer_username);
+                tracing::debug!("Sending request {:?} to {:?}", request, self.peer_username);
                 if let Err(err) = self.connection.write_request(request).await {
-                    error!("Handler write error, {:?}", err);
+                    tracing::error!("Handler write error, {:?}", err);
                 }
             }
 
@@ -49,12 +50,12 @@ impl Handler {
             match maybe_message {
                 Ok(message) => match message {
                     PeerResponsePacket::ConnectionMessage(message) => {
-                        info!("Got connection message : {:?}", &message);
+                        tracing::info!("Got connection message : {:?}", &message);
                         self.handle_connection_message(&message, database.clone())
                             .await;
                     }
                     PeerResponsePacket::Message(message) => {
-                        info!("Got message : {:?}", &message);
+                        tracing::info!("Got message : {:?}", &message);
                         self.handle_peer_message(&message)
                             .await
                             .expect("Peer message flow error");
@@ -62,11 +63,16 @@ impl Handler {
                     PeerResponsePacket::None => {}
                 },
                 Err(crate::SlskError::ConnectionResetByPeer) => {
-                    debug!("connection with {:?} shutting down", self.peer_username);
+                    tracing::debug!("connection with {:?} shutting down", self.peer_username);
                     return Ok(());
                 }
-                Err(_) => {
-                    // Timeout
+                Err(e) => {
+                    tracing::error!(
+                        "Error occured on connection with {:?} : {:?}",
+                        self.peer_username,
+                        e
+                    );
+                    return Ok(());
                 }
             }
         }
@@ -74,10 +80,15 @@ impl Handler {
         Ok(())
     }
 
-    pub(crate) async fn connect(&mut self, database: Database) -> crate::Result<()> {
+    pub(crate) async fn connect(
+        &mut self,
+        database: Database,
+        connection_type: ConnectionType,
+    ) -> crate::Result<()> {
+        debug!("Initiating peer connection handshake");
         self.send_peer_init().await?;
 
-        self.connection.connection_type = Some(ConnectionType::PeerToPeer);
+        self.connection.connection_type = Some(connection_type);
 
         self.listen(database).await
     }
@@ -101,7 +112,7 @@ impl Handler {
             PeerResponse::PlaceInQueueRequest(_) => todo!(),
             PeerResponse::UploadQueueNotification => todo!(),
             PeerResponse::Unknown => {
-                warn!("Unknown Peer message kind : {:#?}", message);
+                warn!("Unknown Peer message kind : {:?}", message);
                 Ok(())
             }
         }
@@ -113,7 +124,9 @@ impl Handler {
         database: Database,
     ) {
         match message {
-            PeerConnectionMessage::PierceFirewall(_pierce_firewall) => {}
+            PeerConnectionMessage::PierceFirewall(_pierce_firewall) => {
+                debug!("Got PierceFirewall");
+            }
             PeerConnectionMessage::PeerInit {
                 username,
                 connection_type,

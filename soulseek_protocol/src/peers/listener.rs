@@ -116,6 +116,11 @@ impl GlobalConnectionHandler {
         Ok(())
     }
 
+    #[instrument(
+        name = "peer_connection_handler",
+        level = "debug",
+        skip(self, channels, database)
+    )]
     async fn listen(&mut self, channels: SenderPool, database: Database) -> crate::Result<()> {
         info!("accepting inbound connections");
 
@@ -167,6 +172,20 @@ struct PeerListener {
     listener: TcpListener,
 }
 
+#[instrument(
+    name = "peers_listener",
+    level = "debug",
+    skip(
+        listener,
+        shutdown,
+        peer_connection_rx,
+        logged_in_rx,
+        peer_connection_outgoing_tx,
+        possible_parent_rx,
+        peer_message_dispatcher,
+        database
+    )
+)]
 pub async fn run(
     listener: TcpListener,
     shutdown: impl Future,
@@ -206,6 +225,7 @@ pub async fn run(
         }
         _err = shutdown => {
             info!("shutting down");
+            std::process::exit(0);
         }
     }
 
@@ -252,6 +272,7 @@ impl PeerListener {
                 }
                 Err(err) => {
                     if backoff > 64 {
+                        debug!("Accept error, backing off for {} sec", backoff);
                         // Accept has failed too many times. Return the error.
                         return Err(err.into());
                     }
@@ -307,14 +328,14 @@ async fn listen_for_indirect_connection(
                 let db_copy = database.clone();
 
                 tokio::spawn(async move {
-                    match handler.connect(db_copy).await {
+                    match handler.connect(db_copy, ConnectionType::PeerToPeer).await {
                         Ok(()) => {}
                         Err(err) => error!(cause = ?err, "connection error"),
                     }
                 });
             }
             Err(_) => {
-                warn!("Unable to establish indirect connection to peer, either port is closed or user is disconnected");
+                warn!("Unable to establish indirect connection to peer {:?}, either port is closed or user is disconnected", peer);
                 warn!("Aborting");
             }
         }
@@ -323,6 +344,18 @@ async fn listen_for_indirect_connection(
     Ok(())
 }
 
+#[instrument(
+    level = "debug",
+    skip(
+        server_request_tx,
+        channels,
+        limit_connections,
+        notify_shutdown,
+        shutdown_complete_tx,
+        possible_parent_rx,
+        database
+    )
+)]
 async fn connect_to_parents(
     server_request_tx: mpsc::Sender<ServerRequest>,
     channels: SenderPool,
@@ -380,14 +413,17 @@ async fn connect_to_parents(
                         let db_copy = database.clone();
 
                         tokio::spawn(async move {
-                            match handler.connect(db_copy).await {
+                            match handler
+                                .connect(db_copy, ConnectionType::DistributedNetwork)
+                                .await
+                            {
                                 Ok(()) => {}
                                 Err(err) => error!(cause = ?err, "connection error"),
                             }
                         });
                     }
                     Err(_) => {
-                        warn!("Unable to establish direct connection to peer, either port is closed or user is disconnected");
+                        warn!("Unable to establish indirect connection to parent {:?}, either port is closed or user is disconnected", parent);
                         warn!("Falling back to indirect connection");
                         let server_request_sender = server_request_tx.clone();
                         server_request_sender
@@ -404,6 +440,10 @@ async fn connect_to_parents(
     }
 }
 
+#[instrument(
+    level = "debug",
+    skip(limit_connections, channels, notify_shutdown, shutdown_complete_tx)
+)]
 async fn connect_to_peer(
     channels: SenderPool,
     limit_connections: Arc<Semaphore>,
@@ -411,8 +451,12 @@ async fn connect_to_peer(
     shutdown_complete_tx: mpsc::Sender<()>,
     user: Peer,
 ) -> crate::Result<Handler> {
-    // FIXME : unwrap
     limit_connections.acquire().await.unwrap().forget();
+    debug!(
+        "Available permit : {:?}",
+        limit_connections.available_permits()
+    );
+
     // Accept a new socket. This will attempt to perform error handling.
     // The `accept` method internally attempts to recover errors, so an
     // error here is non-recoverable.
@@ -432,7 +476,10 @@ async fn connect_to_peer(
         let mut channels = channels
             .lock()
             .expect("Unable to acquire lock on peer channels");
+
         channels.insert(PeerAddress::new_parent(user.ip.to_string()), tx);
+
+        debug!("{:?} known channels", channels.len());
 
         Ok(Handler {
             peer_username: Some(user.username.clone()),
@@ -451,14 +498,22 @@ async fn connect_to_peer(
     }
 }
 
+#[instrument(
+    name = "peer_message_dispatcher",
+    level = "debug",
+    skip(peer_message_dispatcher, channels, database)
+)]
 async fn dispatch_peer_message(
     mut peer_message_dispatcher: Receiver<(String, PeerRequestPacket)>,
     channels: SenderPool,
     database: Database,
 ) {
+    info!("ready to dispatch peer messages");
     while let Some((username, message)) = peer_message_dispatcher.recv().await {
+        // Resolve peer name against local db
         let address = database.get_peer_by_name(&username);
 
+        // If we have an adress, try to get the sender for this peer
         if let Some(address) = address {
             debug!("Incoming peer message from HTTP API for peer {:?}", address);
             let sender;
@@ -476,6 +531,7 @@ async fn dispatch_peer_message(
                 };
             }
 
+            // We have a sender, let's send the message
             if let Some(sender) = sender {
                 debug!("Sending message to peer handler {:?}", message);
                 sender.send(message).await.expect("Send error");

@@ -29,24 +29,14 @@ pub async fn connect() -> SlskConnection {
 }
 
 impl SlskConnection {
-    /// Try to read a soulseek message and timeout after 10ms if nothing happened, this method is used
-    /// to avoid blocking when the stream buffer is empty and soulseek is not sending message anymore.
-    pub async fn read_response_with_timeout(&mut self) -> crate::Result<Option<ServerResponse>> {
-        match timeout(Duration::from_millis(60), self.read_response()).await {
-            Ok(read_result) => read_result,
-            Err(e) => Err(SlskError::TimeOut(e)),
-        }
-    }
-
     /// Attempt to read a message from the soulseek server.
     /// First parse the message [`Header`], if there are at least as much bytes as the header content
     /// length, try to parse it, otherwise, try to read more bytes from the soulseek TcpStream buffer.
     /// **WARNING**  :
     /// If this function is called when the buffer is empty it will block trying to read the buffer,
-    /// use [`read_response_with_timeout`] to avoid this
+    /// use [`now_or_never`] to avoid this
     ///
     /// [`Header`]: crate::server.messages::Header
-    /// [`read_response_with_timeout`]: SlskConnection::read_response_with_timeout
     pub async fn read_response(&mut self) -> crate::Result<Option<ServerResponse>> {
         loop {
             if let Some(message) = self.parse_response()? {
@@ -64,9 +54,10 @@ impl SlskConnection {
     }
 
     /// Send a [`ServerRequest`] the soulseek server, using `[ToBytes]` to write to the buffer.
+    #[instrument(level = "debug", skip(self))]
     pub async fn write_request(&mut self, request: ServerRequest) -> tokio::io::Result<()> {
         request.write_to_buf(&mut self.stream).await?;
-        info!("request sent to soulseek : {}", request.kind());
+        info!("request sent to soulseek");
         self.stream.flush().await
     }
 

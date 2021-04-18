@@ -60,15 +60,16 @@ impl Connection {
     }
 
     /// Send a [`PeerMessage`] the soulseek server, using `[ToBytes]` to write to the buffer.
+    #[instrument(level = "debug", skip(self))]
     pub async fn write_request(&mut self, message: PeerRequestPacket) -> tokio::io::Result<()> {
         match message {
             PeerRequestPacket::Message(message) => {
                 message.write_to_buf(&mut self.stream).await?;
-                info!("Peer request sent to peer : {}", message.kind());
+                info!("Peer request sent to peer");
             }
             PeerRequestPacket::ConnectionMessage(message) => {
                 message.write_to_buf(&mut self.stream).await?;
-                info!("Connection request sent to peer : {}", message.kind());
+                info!("Connection request sent to peer");
             }
             _ => unreachable!(),
         }

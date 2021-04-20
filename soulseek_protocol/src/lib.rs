@@ -29,6 +29,7 @@ pub mod message_common;
 pub mod server;
 
 pub mod database;
+pub mod debug;
 pub mod settings;
 
 pub type Result<T> = std::result::Result<T, SlskError>;
@@ -40,10 +41,13 @@ pub enum SlskError {
     Incomplete,
     /// Timeout waiting for an answer`
     TimeOut(Elapsed),
+    BackoffReached(u64),
     /// Peer disconnected
     ConnectionResetByPeer,
     /// Configuration error
     ConfigError(ConfigError),
+    NoPermitAvailable,
+    UnkownMessage,
 
     /// Invalid message encoding
     Other(crate::Error),
@@ -75,7 +79,7 @@ impl From<TryFromIntError> for SlskError {
 
 impl From<std::io::Error> for SlskError {
     fn from(src: std::io::Error) -> SlskError {
-        src.into()
+        SlskError::Other(Box::new(src))
     }
 }
 
@@ -94,6 +98,15 @@ impl fmt::Display for SlskError {
             }
             SlskError::ConfigError(err) => {
                 write!(fmt, "Configuration error : {}", err)
+            }
+            SlskError::BackoffReached(value) => {
+                write!(fmt, "Backoff period reached : {}", value)
+            }
+            SlskError::NoPermitAvailable => {
+                write!(fmt, "No available connection")
+            }
+            SlskError::UnkownMessage => {
+                write!(fmt, "Got unkown message")
             }
         }
     }

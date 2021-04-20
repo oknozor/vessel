@@ -4,7 +4,7 @@ use bytes::Buf;
 use tokio::io::{AsyncWrite, AsyncWriteExt, BufWriter};
 
 use crate::frame::{read_string, write_string, ParseBytes, ToBytes};
-use crate::peers::messages::MessageCode;
+use crate::peers::messages::p2p::MessageCode;
 
 #[derive(Debug)]
 pub struct UserInfo {

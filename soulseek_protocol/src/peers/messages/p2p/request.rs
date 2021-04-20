@@ -1,12 +1,12 @@
 use tokio::io::{AsyncWrite, AsyncWriteExt, BufWriter};
 
 use crate::frame::ToBytes;
-use crate::peers::messages::folder_content::FolderContentsRequest;
-use crate::peers::messages::search::SearchReply;
-use crate::peers::messages::shared_directories::SharedDirectories;
-use crate::peers::messages::transfer::*;
-use crate::peers::messages::user_info::UserInfo;
-use crate::peers::messages::MessageCode;
+use crate::peers::messages::p2p::folder_content::FolderContentsRequest;
+use crate::peers::messages::p2p::search::SearchReply;
+use crate::peers::messages::p2p::shared_directories::SharedDirectories;
+use crate::peers::messages::p2p::transfer::*;
+use crate::peers::messages::p2p::user_info::UserInfo;
+use crate::peers::messages::p2p::MessageCode;
 
 /// TODO
 #[derive(Debug)]

@@ -1,7 +1,7 @@
 use tokio::io::{AsyncWrite, AsyncWriteExt, BufWriter};
 
 use crate::frame::{read_string, ParseBytes, ToBytes};
-use crate::peers::messages::MessageCode;
+use crate::peers::messages::p2p::MessageCode;
 use bytes::Buf;
 use std::io::Cursor;
 

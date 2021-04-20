@@ -7,13 +7,14 @@ use crate::database::Database;
 use crate::message_common::ConnectionType;
 use crate::peers::connection::Connection;
 use crate::peers::messages::connection::PeerConnectionMessage;
-use crate::peers::messages::user_info::UserInfo;
+use crate::peers::messages::p2p::request::PeerRequest;
+use crate::peers::messages::p2p::response::PeerResponse;
+use crate::peers::messages::p2p::user_info::UserInfo;
 use crate::peers::messages::PeerRequestPacket;
 use crate::peers::messages::PeerResponsePacket;
-use crate::peers::request::PeerRequest;
-use crate::peers::response::PeerResponse;
 use crate::peers::shutdown::Shutdown;
-use futures::future::FutureExt;
+use crate::SlskError;
+use std::time::Duration;
 
 #[derive(Debug)]
 pub struct Handler {
@@ -26,55 +27,62 @@ pub struct Handler {
 }
 
 impl Handler {
-    #[instrument(name = "peer_handler", level = "debug", skip(self, database))]
     pub(crate) async fn listen(&mut self, database: Database) -> crate::Result<()> {
-        while !self.shutdown.is_shutdown() {
-            if let Some(request) = self.handler_rx.recv().now_or_never().flatten() {
-                tracing::debug!("Sending request {:?} to {:?}", request, self.peer_username);
-                if let Err(err) = self.connection.write_request(request).await {
-                    tracing::error!("Handler write error, {:?}", err);
-                }
-            }
+        let mut backoff = 1;
 
+        while !self.shutdown.is_shutdown() {
             // While reading a request frame, also listen for the shutdown
             // signal.
-            let maybe_message = tokio::select! {
-                res = self.connection.read_response() => res,
+            tokio::select! {
+                request = self.handler_rx.recv() => {
+                    if let Some(request) = request {
+                        debug!("Sending request {:?} to {:?}", request, self.peer_username);
+                        if let Err(err) = self.connection.write_request(request).await {
+                            error!("Handler write error, {:?}", err);
+                        }
+                    }
+                },
+                response = self.connection.read_response() =>  {
+                    match response {
+                        Ok(message) => match message {
+                            Some(PeerResponsePacket::ConnectionMessage(message)) => {
+                                info!("Got connection message : {:?}", &message);
+                                if let Err(e) = self.handle_connection_message(&message, database.clone()).await {
+                                    return Err(format!("Connection error : {}", e).into());
+                                }
+                            }
+                            Some(PeerResponsePacket::Message(message)) => {
+                                info!("Got message from peer {:?} : {:?}", self.peer_username, &message.kind());
+                                if let Err(e) = self.handle_peer_message(&message).await {
+                                    return Err(format!("Peer message error : {}", e).into());
+                                }
+                            },
+
+                            Some(PeerResponsePacket::DistributedMessage(message)) => {
+                                info!("Got Distributed message from parent {:?} : {:?}", self.peer_username, &message.kind());
+                            }
+
+                            None => {
+                                if backoff > 2048 {
+                                    return Err(format!("Timed out listening for peer {:?} after {}ms", self.peer_username, backoff).into());
+                                }
+                                info!("No message from peer, backing off for {}ms", backoff);
+                                tokio::time::sleep(Duration::from_millis(backoff)).await;
+                                backoff *= 2;
+                            }
+                        },
+                        Err(e) => {
+                            return Err(format!("Error in connection handler with {:?} : {}", self.peer_username, e).into());
+                        }
+                    }
+
+                },
                 _ = self.shutdown.recv() => {
                     // If a shutdown signal is received, return from `run`.
                     // This will result in the task terminating.
-                    return Ok(());
+                    break;
                 }
             };
-
-            match maybe_message {
-                Ok(message) => match message {
-                    PeerResponsePacket::ConnectionMessage(message) => {
-                        tracing::info!("Got connection message : {:?}", &message);
-                        self.handle_connection_message(&message, database.clone())
-                            .await;
-                    }
-                    PeerResponsePacket::Message(message) => {
-                        tracing::info!("Got message : {:?}", &message);
-                        self.handle_peer_message(&message)
-                            .await
-                            .expect("Peer message flow error");
-                    }
-                    PeerResponsePacket::None => {}
-                },
-                Err(crate::SlskError::ConnectionResetByPeer) => {
-                    tracing::debug!("connection with {:?} shutting down", self.peer_username);
-                    return Ok(());
-                }
-                Err(e) => {
-                    tracing::error!(
-                        "Error occured on connection with {:?} : {:?}",
-                        self.peer_username,
-                        e
-                    );
-                    return Ok(());
-                }
-            }
         }
 
         Ok(())
@@ -85,14 +93,12 @@ impl Handler {
         database: Database,
         connection_type: ConnectionType,
     ) -> crate::Result<()> {
-        debug!("Initiating peer connection handshake");
         self.send_peer_init().await?;
-
         self.connection.connection_type = Some(connection_type);
-
         self.listen(database).await
     }
 
+    #[instrument(level = "debug", skip(self, message), fields(message = message.kind()))]
     async fn handle_peer_message(&mut self, message: &PeerResponse) -> tokio::io::Result<()> {
         match message {
             PeerResponse::SharesReply(_)
@@ -112,20 +118,22 @@ impl Handler {
             PeerResponse::PlaceInQueueRequest(_) => todo!(),
             PeerResponse::UploadQueueNotification => todo!(),
             PeerResponse::Unknown => {
-                warn!("Unknown Peer message kind : {:?}", message);
-                Ok(())
+                error!("Unknown Peer message kind : {:?}", message);
+                panic!()
             }
         }
     }
 
+    #[instrument(level = "debug", skip(self, database))]
     async fn handle_connection_message(
         &mut self,
         message: &PeerConnectionMessage,
         database: Database,
-    ) {
+    ) -> Result<(), std::io::Error> {
         match message {
             PeerConnectionMessage::PierceFirewall(_pierce_firewall) => {
                 debug!("Got PierceFirewall");
+                Ok(())
             }
             PeerConnectionMessage::PeerInit {
                 username,
@@ -134,15 +142,22 @@ impl Handler {
             } => {
                 self.connection.connection_type = Some(connection_type.clone());
                 self.peer_username = Some(username.clone());
+                match self.connection.get_peer_address() {
+                    Ok(peer_address) => {
+                        database
+                            .insert_peer(&username, peer_address)
+                            .expect("Database error");
 
-                database
-                    .insert_peer(&username, self.connection.get_peer_address())
-                    .expect("Database error");
+                        debug!("connected");
+                        Ok(())
+                    }
+                    Err(e) => Err(e),
+                }
             }
         }
-        debug!("connected");
     }
 
+    #[instrument(level = "debug", skip(self))]
     async fn send_peer_init(&mut self) -> tokio::io::Result<()> {
         let token = random();
 
@@ -157,6 +172,7 @@ impl Handler {
             .await
     }
 
+    #[instrument(level = "debug", skip(self))]
     async fn send_user_info(&mut self) -> tokio::io::Result<()> {
         // TODO : calculate correct values for total_upload, queue size and free slots
         self.connection
@@ -172,6 +188,7 @@ impl Handler {
             .await
     }
 
+    #[instrument(level = "debug", skip(self))]
     async fn send_shares_reply(&mut self) -> tokio::io::Result<()> {
         let shared_dirs_copy;
         {
@@ -195,7 +212,7 @@ impl Handler {
 
 impl Drop for Handler {
     fn drop(&mut self) {
-        debug!("HANDLER DROPPED");
+        debug!("Dropping handler");
         self.limit_connections.add_permits(1);
     }
 }

@@ -131,10 +131,10 @@ pub struct RoomJoined {
     operators: Option<RoomOperators>,
 }
 
-impl ParseBytes for RoomJoined {
-    type Output = Self;
-
-    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self> {
+impl RoomJoined {
+    // For this message we need the lessage len to determine if we need to continue parsing operator
+    // in private rooms
+    pub(crate) fn parse(src: &mut Cursor<&[u8]>, msg_len: usize) -> std::io::Result<Self> {
         let room_name = read_string(src)?;
 
         let user_nth = src.get_u32_le();
@@ -147,6 +147,7 @@ impl ParseBytes for RoomJoined {
 
         // Unpack user status
         let user_status_nth = src.get_u32_le();
+
         let mut user_status = vec![];
         for _ in 0..user_status_nth {
             user_status.push(Status::from(src.get_u32_le()));
@@ -154,6 +155,7 @@ impl ParseBytes for RoomJoined {
 
         // Unpack user metadata
         let user_data_nth = src.get_u32_le();
+
         let mut user_data = vec![];
         for _ in 0..user_data_nth {
             user_data.push(UserData::parse(src)?);
@@ -162,31 +164,35 @@ impl ParseBytes for RoomJoined {
         // Unpack user free slots
         let free_slots_nth = src.get_u32_le();
         let mut free_slots = vec![];
+
         for _ in 0..free_slots_nth {
             free_slots.push(src.get_u32_le());
         }
 
         // Unpack user country codes
         let country_code_nth = src.get_u32_le();
+
         let mut country_codes = vec![];
         for _ in 0..country_code_nth {
             country_codes.push(read_string(src)?);
         }
 
-        // Unpack room owner and operators
-        let owner = read_string(src).ok();
+        let is_public_room = src.position() == (msg_len + 8) as u64;
 
-        // if owner exists then we are on a private room : we can unpack operator
-        let operators = if owner.is_some() {
+        let mut owner = None;
+        let mut operators = None;
+
+        if !is_public_room {
+            // Unpack room owner and operators
+            owner = Some(read_string(src)?);
+            // if owner exists then we are on a private room : we can unpack operator
             let operator_nth = src.get_u32_le();
-            let mut operators = vec![];
+            let mut ops = Vec::with_capacity(operator_nth as usize);
             for _ in 0..operator_nth {
-                operators.push(read_string(src)?);
+                ops.push(read_string(src)?);
             }
-            Some(operators)
-        } else {
-            None
-        };
+            operators = Some(ops);
+        }
 
         // Zip user info in a single struct
         let users = usernames

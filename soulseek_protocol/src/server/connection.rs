@@ -7,8 +7,6 @@ use bytes::{Buf, BytesMut};
 use std::io::Cursor;
 use tokio::io::{AsyncReadExt, AsyncWriteExt, BufWriter};
 use tokio::net::TcpStream;
-use tokio::time::timeout;
-use tokio::time::Duration;
 
 const DEFAULT_ADDRESS: &str = "server.slsknet.org:2242";
 
@@ -33,9 +31,6 @@ impl SlskConnection {
     /// First parse the message [`Header`], if there are at least as much bytes as the header content
     /// length, try to parse it, otherwise, try to read more bytes from the soulseek TcpStream buffer.
     /// **WARNING**  :
-    /// If this function is called when the buffer is empty it will block trying to read the buffer,
-    /// use [`now_or_never`] to avoid this
-    ///
     /// [`Header`]: crate::server.messages::Header
     pub async fn read_response(&mut self) -> crate::Result<Option<ServerResponse>> {
         loop {
@@ -74,18 +69,22 @@ impl SlskConnection {
         }
     }
 
+    #[instrument(level = "debug", skip(self))]
     fn parse_response(&mut self) -> crate::Result<Option<ServerResponse>> {
         use crate::SlskError::Incomplete;
         let mut buf = Cursor::new(&self.buffer[..]);
 
         match ServerResponse::check(&mut buf) {
-            Ok(header) => {
-                let server_response = ServerResponse::parse(&mut buf, &header)?;
-
-                // consume the message bytes
-                self.consume(header.message_len);
-                Ok(Some(server_response))
-            }
+            Ok(header) => match ServerResponse::parse(&mut buf, &header) {
+                Ok(server_response) => {
+                    self.consume(header.message_len);
+                    Ok(Some(server_response))
+                }
+                Err(e) => {
+                    self.consume(header.message_len);
+                    Err(SlskError::Other(Box::new(e)))
+                }
+            },
             Err(Incomplete) => Ok(None),
             Err(e) => Err(e),
         }

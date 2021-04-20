@@ -1,5 +1,5 @@
 use crate::frame::{read_string, write_string, ParseBytes, ToBytes};
-use crate::peers::messages::MessageCode;
+use crate::peers::messages::p2p::MessageCode;
 use bytes::Buf;
 use flate2::write::ZlibEncoder;
 use flate2::{Compression, Decompress, FlushDecompress};
@@ -202,11 +202,7 @@ impl ParseBytes for Attribute {
 #[cfg(test)]
 mod test {
     use crate::frame::{ParseBytes, ToBytes};
-    use crate::peers::messages::shared_directories::{Directory, File, SharedDirectories};
-    use flate2::write::DeflateEncoder;
-    use flate2::write::ZlibEncoder;
-    use flate2::{Compression, Decompress, FlushDecompress};
-    use std::io::Write;
+    use crate::peers::messages::p2p::shared_directories::{Directory, File, SharedDirectories};
     use tokio::io::BufWriter;
     use tokio_test::block_on;
 

@@ -6,8 +6,8 @@ use std::sync::Mutex;
 use tokio::sync::mpsc;
 
 use soulseek_protocol::database::Database;
+use soulseek_protocol::peers::messages::p2p::request::PeerRequest;
 use soulseek_protocol::peers::messages::PeerRequestPacket;
-use soulseek_protocol::peers::request::PeerRequest;
 use soulseek_protocol::server::messages::chat::SayInChat;
 use soulseek_protocol::server::messages::search::SearchRequest;
 use std::sync::Arc;

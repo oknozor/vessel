@@ -1,21 +1,33 @@
-use std::io::Cursor;
+use std::{io::Cursor};
 
 use bytes::{Buf, BytesMut};
-use tokio::io::{AsyncReadExt, AsyncWriteExt, BufWriter};
-use tokio::net::TcpStream;
+use tokio::{io::AsyncReadExt, net::TcpStream};
+use tokio::{
+    io::{AsyncWriteExt, BufWriter},
+    time::timeout,
+};
 
-use crate::frame::ToBytes;
 use crate::message_common::ConnectionType;
 use crate::peers::messages::connection::{PeerConnectionMessage, CONNECTION_MSG_HEADER_LEN};
+use crate::peers::messages::p2p::response::PeerResponse;
 use crate::peers::messages::{PeerRequestPacket, PeerResponsePacket};
-use crate::peers::response::PeerResponse;
+use crate::{frame::ToBytes, SlskError};
 use std::net::{Ipv4Addr, SocketAddr};
+
+use crate::peers::messages::distributed::DistributedMessage;
+use crate::peers::messages::p2p::PEER_MSG_HEADER_LEN;
 
 #[derive(Debug)]
 pub struct Connection {
     stream: BufWriter<TcpStream>,
     buffer: BytesMut,
     pub(crate) connection_type: Option<ConnectionType>,
+}
+
+impl Drop for Connection {
+    fn drop(&mut self) {
+        debug!("Dropping peer connection")
+    }
 }
 
 impl Connection {
@@ -28,34 +40,40 @@ impl Connection {
     ///
     /// [`Header`]: crate::peers::messages::Header
     /// [`read_response_with_timeout`]: SlskConnection::read_response_with_timeout
-    pub async fn read_response(&mut self) -> crate::Result<PeerResponsePacket> {
-        loop {
-            match self.connection_type {
-                Some(ConnectionType::PeerToPeer) => {
-                    if let Some(message) = self.parse_peer_message()? {
-                        return Ok(PeerResponsePacket::Message(message));
-                    }
-                }
-                Some(ConnectionType::DistributedNetwork) => {
-                    // TODO
-                }
-                Some(ConnectionType::FileTransfer) => {
-                    // TODO
-                }
-                None => {
-                    if let Some(message) = self.parse_connection_message()? {
-                        return Ok(PeerResponsePacket::ConnectionMessage(message));
-                    }
-                }
+    #[instrument(level = "debug", skip(self))]
+    pub async fn read_response(&mut self) -> crate::Result<Option<PeerResponsePacket>> {
+        if 0 == self.stream.read_buf(&mut self.buffer).await? {
+            // The remote closed the connection. For this to be a clean
+            // shutdown, there should be no data in the read buffer. If
+            // there is, this means that the peer closed the socket while
+            // sending a frame.
+            if self.buffer.is_empty() {
+                return Ok(None);
+            } else {
+                return Err(SlskError::ConnectionResetByPeer);
             }
+        }
 
-            if 0 == self.stream.read_buf(&mut self.buffer).await? {
-                return if self.buffer.is_empty() {
-                    Ok(PeerResponsePacket::None)
-                } else {
-                    Err(crate::SlskError::ConnectionResetByPeer)
-                };
+        // Read incoming messages according to the connection type
+        match self.connection_type {
+            Some(ConnectionType::PeerToPeer) => match self.parse_peer_message() {
+                Ok(Some(message)) => Ok(Some(PeerResponsePacket::Message(message))),
+                Ok(None) => Ok(None),
+                Err(e) => Err(e),
+            },
+            Some(ConnectionType::DistributedNetwork) => match self.parse_distributed_message() {
+                Ok(Some(message)) => Ok(Some(PeerResponsePacket::DistributedMessage(message))),
+                Ok(None) => Ok(None),
+                Err(e) => Err(e),
+            },
+            Some(ConnectionType::FileTransfer) => {
+                todo!("FT message");
             }
+            None => match self.parse_connection_message() {
+                Ok(Some(message)) => Ok(Some(PeerResponsePacket::ConnectionMessage(message))),
+                Ok(None) => Ok(None),
+                Err(e) => Err(e),
+            },
         }
     }
 
@@ -82,8 +100,12 @@ impl Connection {
     /// otherwise consume the peer message plus the 8 bytes header prefix.
     fn consume(&mut self, message_len: usize) {
         match self.connection_type {
-            Some(_) => self.buffer.advance(message_len),
-            None => self.buffer.advance(message_len),
+            Some(_) => self
+                .buffer
+                .advance(message_len + PEER_MSG_HEADER_LEN as usize),
+            None => self
+                .buffer
+                .advance(message_len + CONNECTION_MSG_HEADER_LEN as usize),
         }
     }
 
@@ -95,6 +117,7 @@ impl Connection {
         }
     }
 
+    #[instrument(level = "debug", skip(self))]
     fn parse_connection_message(&mut self) -> crate::Result<Option<PeerConnectionMessage>> {
         use crate::SlskError::Incomplete;
         let mut buf = Cursor::new(&self.buffer[..]);
@@ -112,16 +135,15 @@ impl Connection {
         }
     }
 
+    #[instrument(level = "debug", skip(self))]
     fn parse_peer_message(&mut self) -> crate::Result<Option<PeerResponse>> {
         use crate::SlskError::Incomplete;
         let mut buf = Cursor::new(&self.buffer[..]);
-
         match PeerResponse::check(&mut buf) {
             Ok(header) => {
                 let peer_message = PeerResponse::parse(&mut buf, &header)?;
-
                 // consume the message bytes
-                self.consume(header.message_len as usize);
+                self.consume(header.message_len);
                 Ok(Some(peer_message))
             }
             Err(Incomplete) => Ok(None),
@@ -129,17 +151,29 @@ impl Connection {
         }
     }
 
-    pub fn get_peer_address(&self) -> Ipv4Addr {
-        match &self
-            .stream
-            .get_ref()
-            .peer_addr()
-            .expect("Unable to get peer address")
-        {
-            SocketAddr::V4(address) => address.ip().to_owned(),
-            SocketAddr::V6(_) => {
+    #[instrument(level = "debug", skip(self))]
+    fn parse_distributed_message(&mut self) -> crate::Result<Option<DistributedMessage>> {
+        use crate::SlskError::Incomplete;
+        let mut buf = Cursor::new(&self.buffer[..]);
+        match DistributedMessage::check(&mut buf) {
+            Ok(header) => {
+                let distributed_message = DistributedMessage::parse(&mut buf, &header)?;
+                // consume the message bytes
+                self.consume(header.message_len);
+                Ok(Some(distributed_message))
+            }
+            Err(Incomplete) => Ok(None),
+            Err(e) => Err(e),
+        }
+    }
+
+    pub fn get_peer_address(&self) -> Result<Ipv4Addr, std::io::Error> {
+        match &self.stream.get_ref().peer_addr() {
+            Ok(SocketAddr::V4(address)) => Ok(address.ip().to_owned()),
+            Ok(SocketAddr::V6(_)) => {
                 unreachable!()
             }
+            Err(err) => Err(std::io::Error::from(err.kind())),
         }
     }
 }

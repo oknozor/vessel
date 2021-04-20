@@ -3,15 +3,15 @@ use std::io::Cursor;
 use bytes::Buf;
 
 use crate::frame::ParseBytes;
-use crate::peers::messages::folder_content::FolderContentsRequest;
-use crate::peers::messages::search::SearchReply;
-use crate::peers::messages::shared_directories::SharedDirectories;
-use crate::peers::messages::transfer::{
+use crate::peers::messages::p2p::folder_content::FolderContentsRequest;
+use crate::peers::messages::p2p::search::SearchReply;
+use crate::peers::messages::p2p::shared_directories::SharedDirectories;
+use crate::peers::messages::p2p::transfer::{
     PlaceInQueueReply, PlaceInQueueRequest, QueueDownload, QueueFailed, TransferReply,
     TransferRequest, UploadFailed,
 };
-use crate::peers::messages::user_info::UserInfo;
-use crate::peers::messages::{MessageCode, PeerMessageHeader, PEER_MSG_HEADER_LEN};
+use crate::peers::messages::p2p::user_info::UserInfo;
+use crate::peers::messages::p2p::{MessageCode, PeerMessageHeader, PEER_MSG_HEADER_LEN};
 use crate::SlskError;
 
 #[derive(Debug)]
@@ -47,10 +47,6 @@ impl PeerResponse {
         if src.remaining() < header.message_len {
             Err(SlskError::Incomplete)
         } else {
-            // discard header data
-            src.set_position(0);
-            src.advance(PEER_MSG_HEADER_LEN as usize);
-
             Ok(header)
         }
     }
@@ -77,21 +73,22 @@ impl PeerResponse {
         }
     }
 
+    #[instrument(level = "debug", skip(src))]
     pub(crate) fn parse(
         src: &mut Cursor<&[u8]>,
         header: &PeerMessageHeader,
     ) -> std::io::Result<Self> {
-        let message = match header.code {
-            MessageCode::SharesRequest => PeerResponse::SharesRequest,
+        match header.code {
+            MessageCode::SharesRequest => Ok(PeerResponse::SharesRequest),
             MessageCode::SharesReply => {
-                SharedDirectories::parse(src).map(PeerResponse::SharesReply)?
+                SharedDirectories::parse(src).map(PeerResponse::SharesReply)
             }
             MessageCode::SearchRequest => todo!(),
-            MessageCode::SearchReply => SearchReply::parse(src).map(PeerResponse::SearchReply)?,
-            MessageCode::UserInfoRequest => PeerResponse::UserInfoRequest,
-            MessageCode::UserInfoReply => UserInfo::parse(src).map(PeerResponse::UserInfoReply)?,
+            MessageCode::SearchReply => SearchReply::parse(src).map(PeerResponse::SearchReply),
+            MessageCode::UserInfoRequest => Ok(PeerResponse::UserInfoRequest),
+            MessageCode::UserInfoReply => UserInfo::parse(src).map(PeerResponse::UserInfoReply),
             MessageCode::FolderContentsRequest => {
-                FolderContentsRequest::parse(src).map(PeerResponse::FolderContentsRequest)?
+                FolderContentsRequest::parse(src).map(PeerResponse::FolderContentsRequest)
             }
             MessageCode::FolderContentsReply => todo!(),
             MessageCode::TransferRequest => todo!(),
@@ -103,9 +100,7 @@ impl PeerResponse {
             MessageCode::QueueFailed => todo!(),
             MessageCode::PlaceInQueueRequest => todo!(),
             MessageCode::UploadQueueNotification => todo!(),
-            MessageCode::Unknown => PeerResponse::Unknown,
-        };
-
-        Ok(message)
+            MessageCode::Unknown => Ok(PeerResponse::Unknown),
+        }
     }
 }

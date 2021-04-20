@@ -1,4 +1,4 @@
-use crate::peers::messages::shared_directories::{Directory, File, SharedDirectories};
+use crate::peers::messages::p2p::shared_directories::{Directory, File, SharedDirectories};
 use crate::settings::CONFIG;
 use std::io;
 use std::net::Ipv4Addr;
@@ -116,13 +116,13 @@ mod test {
 
     #[test]
     fn should_open_db() {
-        let db = Database::new();
+        let db = Database::default();
         assert!(db.insert_peer("toto", Ipv4Addr::new(127, 0, 0, 1)).is_ok())
     }
 
     #[test]
     fn should_get_peer() {
-        let db = Database::new();
+        let db = Database::default();
         db.insert_peer("toto", Ipv4Addr::new(127, 0, 0, 1)).unwrap();
         let address = db.get_peer_by_name("toto").unwrap();
         assert_eq!(address.to_string(), "127.0.0.1");

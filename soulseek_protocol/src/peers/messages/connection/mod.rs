@@ -19,12 +19,12 @@ pub struct ConnectionMessageHeader {
 
 impl ConnectionMessageHeader {
     pub fn read(src: &mut Cursor<&[u8]>) -> std::io::Result<Self> {
-        let message_length = src.get_u32_le() + 4;
+        let message_length = src.get_u32_le();
         let code = src.get_u8();
         let code = InitMessageCode::from(code);
 
         // We can subtract message code from the length since we already know it
-        let message_len = message_length as usize;
+        let message_len = message_length as usize - 1;
 
         Ok(Self { message_len, code })
     }
@@ -115,20 +115,21 @@ impl PeerConnectionMessage {
     pub(crate) fn parse(
         src: &mut Cursor<&[u8]>,
         header: &ConnectionMessageHeader,
-    ) -> std::io::Result<Self> {
-        let message = match header.code {
+    ) -> crate::Result<Self> {
+        match header.code {
             InitMessageCode::PierceFireWall => {
-                PeerConnectionMessage::PierceFirewall(src.get_u32_le())
+                Ok(PeerConnectionMessage::PierceFirewall(src.get_u32_le()))
             }
-            InitMessageCode::PeerInit => PeerConnectionMessage::PeerInit {
+            InitMessageCode::PeerInit => Ok(PeerConnectionMessage::PeerInit {
                 username: read_string(src)?,
                 connection_type: ConnectionType::from(read_string(src)?),
                 token: src.get_u32_le(),
-            },
-            InitMessageCode::Unknown => panic!("Unkown message kind, code"),
-        };
-
-        Ok(message)
+            }),
+            InitMessageCode::Unknown => {
+                error!("Unkown message kind, code");
+                Err(SlskError::UnkownMessage)
+            }
+        }
     }
 
     pub fn kind(&self) -> &str {

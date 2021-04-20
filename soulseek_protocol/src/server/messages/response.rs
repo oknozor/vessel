@@ -140,13 +140,11 @@ impl ServerResponse {
             Err(SlskError::Incomplete)
         } else {
             // discard header data
-            src.set_position(0);
-            src.advance(HEADER_LEN as usize);
-
             Ok(header)
         }
     }
 
+    #[instrument(level = "debug", skip(src))]
     pub fn parse(src: &mut Cursor<&[u8]>, header: &Header) -> std::io::Result<ServerResponse> {
         match &header.code {
             MessageCode::Login => LoginResponse::parse(src).map(ServerResponse::LoginResponse),
@@ -156,7 +154,9 @@ impl ServerResponse {
             MessageCode::RemoveUser => UserRoomEvent::parse(src).map(ServerResponse::UserRemoved),
             MessageCode::GetUserStatus => UserStatus::parse(src).map(ServerResponse::UserStatus),
             MessageCode::SayInChatRoom => ChatMessage::parse(src).map(ServerResponse::ChatMessage),
-            MessageCode::JoinRoom => RoomJoined::parse(src).map(ServerResponse::RoomJoined),
+            MessageCode::JoinRoom => {
+                RoomJoined::parse(src, header.message_len).map(ServerResponse::RoomJoined)
+            }
             MessageCode::LeaveRoom => read_string(src).map(ServerResponse::RoomLeft),
             MessageCode::UserJoinedRoom => {
                 UserJoinedRoom::parse(src).map(ServerResponse::UserJoinedRoom)

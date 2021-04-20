@@ -162,31 +162,29 @@ impl ParseBytes for UserStats {
     }
 }
 
+// FIXME : changed, must break
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UserData {
-    average_speed: i32,
-    download_number: u32,
+    average_speed: u32,
+    download_number: u64,
     files: u32,
     dirs: u32,
-    privileged: u32,
 }
 
 impl ParseBytes for UserData {
     type Output = Self;
 
     fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self::Output> {
-        let average_speed = src.get_i32_le();
-        let download_number = src.get_u32_le();
+        let average_speed = src.get_u32_le();
+        let download_number = src.get_u64_le();
         let files = src.get_u32_le();
         let dirs = src.get_u32_le();
-        let privileged = src.get_u32_le();
 
         Ok(Self {
             average_speed,
             download_number,
             files,
             dirs,
-            privileged,
         })
     }
 }

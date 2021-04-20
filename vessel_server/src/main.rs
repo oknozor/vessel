@@ -20,7 +20,7 @@ const PEER_LISTENER_ADDRESS: &str = "0.0.0.0:2255";
 
 mod tasks;
 
-#[tokio::main]
+#[tokio::main(flavor = "current_thread")]
 async fn main() -> std::io::Result<()> {
     let filter = std::env::var("RUST_LOG").unwrap_or_else(|_| "tracing=info,warp=debug".to_owned());
 
@@ -96,8 +96,8 @@ async fn main() -> std::io::Result<()> {
 
     // Wraps everything with tokio::join so we don't block on servers startup
     let _ = join!(
-        // sse_server,
-        // http_server,
+        sse_server,
+        http_server,
         soulseek_server_listener,
         login,
         peer_listener

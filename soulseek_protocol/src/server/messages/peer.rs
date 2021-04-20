@@ -2,7 +2,6 @@ use crate::frame::{read_ipv4, read_string, write_string, ParseBytes, ToBytes, ST
 use crate::message_common::ConnectionType;
 use crate::server::messages::MessageCode;
 use bytes::Buf;
-use rand::{thread_rng, Rng};
 use std::io::Cursor;
 use std::net::Ipv4Addr;
 use tokio::io::{AsyncWrite, AsyncWriteExt, BufWriter};
@@ -138,8 +137,14 @@ impl ParseBytes for PeerConnectionTicket {
     type Output = Self;
 
     fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self::Output> {
-        let username = read_string(src)?;
         let ticket = src.get_u32_le();
+
+        // do we have username sometime or is nicotine doc unaccurate ?
+        let username = if src.has_remaining() {
+            read_string(src)?
+        } else {
+            String::new()
+        };
 
         Ok(Self { username, ticket })
     }

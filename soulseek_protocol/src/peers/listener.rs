@@ -1,8 +1,8 @@
-use futures::FutureExt;
 /// Code and documentation from this module have been heavily inspired by tokio [mini-redis](https://github.com/tokio-rs/mini-redis/blob/master/src/server.rs)
 /// tutorial.
 use std::future::Future;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{broadcast, mpsc, Semaphore};
@@ -26,12 +26,12 @@ use tokio::sync::mpsc::error::SendError;
 use tokio::sync::mpsc::Receiver;
 use tokio::time::timeout;
 
-type SenderPool = Arc<Mutex<HashMap<PeerAddress, mpsc::Sender<PeerRequestPacket>>>>;
+pub type SenderPool = Arc<Mutex<HashMap<PeerAddress, mpsc::Sender<PeerRequestPacket>>>>;
 
 #[derive(Debug, Clone, Eq)]
-struct PeerAddress {
-    address: String,
-    is_parent: bool,
+pub struct PeerAddress {
+    pub address: String,
+    pub is_parent: bool,
 }
 
 impl PeerAddress {
@@ -83,15 +83,14 @@ impl GlobalConnectionHandler {
         mut possible_parent_rx: Receiver<Vec<Peer>>,
         peer_message_dispatcher: Receiver<(String, PeerRequestPacket)>,
         database: Database,
+        channels: SenderPool,
     ) -> crate::Result<()> {
         let limit_connections = self.limit_connections.clone();
         let notify_shutdown = self.notify_shutdown.clone();
         let shutdown_complete_tx = self.shutdown_complete_tx.clone();
 
-        let channels: SenderPool = Arc::new(Mutex::new(HashMap::default()));
-
         let _ = tokio::join!(
-            dispatch_peer_message(peer_message_dispatcher, channels.clone(), database.clone()),
+            // dispatch_peer_message(peer_message_dispatcher, channels.clone(), database.clone()),
             listen_for_indirect_connection(
                 peer_connection_rx,
                 server_request_tx.clone(),
@@ -122,44 +121,58 @@ impl GlobalConnectionHandler {
         skip(self, channels, database)
     )]
     async fn listen(&mut self, channels: SenderPool, database: Database) -> crate::Result<()> {
-        info!("accepting inbound connections");
+        if self.limit_connections.available_permits() > 0 {
+            info!("accepting inbound connections");
 
-        loop {
-            self.limit_connections.acquire().await.unwrap().forget();
-            let socket = self.peer_listener.accept().await?;
+            loop {
+                match self.peer_listener.accept().await {
+                    Ok(socket) => {
+                        self.limit_connections.acquire().await.unwrap().forget();
 
-            debug!(
-                "Incoming direct connection from {:?} accepted",
-                socket.peer_addr()
-            );
+                        info!(
+                            "Incoming direct connection from {:?} accepted",
+                            socket.peer_addr()
+                        );
 
-            let address = socket.peer_addr()?.ip().to_string();
-            let (tx, rx) = mpsc::channel(100);
+                        debug!(
+                            "Available connections : {}/{}",
+                            self.limit_connections.available_permits(),
+                            MAX_CONNECTIONS
+                        );
 
-            let channels = channels.clone();
-            let mut channels = channels
-                .lock()
-                .expect("Unable to acquire lock on peer channels");
+                        let address = socket.peer_addr()?.ip().to_string();
+                        let (tx, rx) = mpsc::channel(100);
 
-            channels.insert(PeerAddress::new(address.clone()), tx);
+                        let channels = channels.clone();
+                        let mut channels = channels.lock().await;
 
-            let mut handler = Handler {
-                peer_username: None,
-                connection: Connection::new(socket),
-                handler_rx: rx,
-                limit_connections: self.limit_connections.clone(),
-                shutdown: Shutdown::new(self.notify_shutdown.subscribe()),
-                _shutdown_complete: self.shutdown_complete_tx.clone(),
-            };
+                        channels.insert(PeerAddress::new(address.clone()), tx);
 
-            debug!("Spawning new peer connection");
-            let db_copy = database.clone();
+                        let mut handler = Handler {
+                            peer_username: None,
+                            connection: Connection::new(socket),
+                            handler_rx: rx,
+                            limit_connections: self.limit_connections.clone(),
+                            shutdown: Shutdown::new(self.notify_shutdown.subscribe()),
+                            _shutdown_complete: self.shutdown_complete_tx.clone(),
+                        };
 
-            tokio::spawn(async move {
-                if let Err(err) = handler.listen(db_copy).await {
-                    error!(cause = ?err, "Error accepting inbound connection");
-                }
-            });
+                        let db_copy = database.clone();
+
+                        tokio::spawn(async move {
+                            match handler.listen(db_copy).await {
+                                Err(e) => error!(cause = ?e, "Error accepting inbound connection"),
+                                Ok(()) => info!("Closing handler"),
+                            };
+                        });
+                    }
+                    Err(err) => {
+                        error!("Failed to accept incoming connection : {}", err);
+                    }
+                };
+            }
+        } else {
+            Err(crate::SlskError::NoPermitAvailable)
         }
     }
 }
@@ -179,7 +192,6 @@ struct PeerListener {
         listener,
         shutdown,
         peer_connection_rx,
-        logged_in_rx,
         peer_connection_outgoing_tx,
         possible_parent_rx,
         peer_message_dispatcher,
@@ -190,17 +202,13 @@ pub async fn run(
     listener: TcpListener,
     shutdown: impl Future,
     peer_connection_rx: Receiver<PeerConnectionRequest>,
-    mut logged_in_rx: mpsc::Receiver<()>,
     peer_connection_outgoing_tx: mpsc::Sender<ServerRequest>,
     possible_parent_rx: Receiver<Vec<Peer>>,
     peer_message_dispatcher: mpsc::Receiver<(String, PeerRequestPacket)>,
     database: Database,
+    channels: SenderPool,
 ) -> crate::Result<()> {
     debug!("Waiting for user to be logged in");
-
-    while logged_in_rx.recv().now_or_never().is_none() {
-        // Waiting for login
-    }
 
     info!("User logged in, starting peer listener");
 
@@ -218,7 +226,7 @@ pub async fn run(
     };
 
     tokio::select! {
-        res = server.run(peer_connection_rx, peer_connection_outgoing_tx, possible_parent_rx, peer_message_dispatcher, database) => {
+        res = server.run(peer_connection_rx, peer_connection_outgoing_tx, possible_parent_rx, peer_message_dispatcher, database, channels) => {
             if let Err(err) = res {
                 error!(cause = %err, "failed to accept");
             }
@@ -237,6 +245,7 @@ pub async fn run(
         ..
     } = server;
 
+    debug!("Closing connection handler");
     drop(notify_shutdown);
     // Drop final `Sender` so the `Receiver` below can complete
     drop(shutdown_complete_tx);
@@ -267,12 +276,12 @@ impl PeerListener {
             // accepted, return it. Otherwise, save the error.
             match self.listener.accept().await {
                 Ok((socket, _)) => {
-                    info!("{}", socket.peer_addr().unwrap());
-                    return Ok(socket);
+                    if let Ok(_address) = socket.peer_addr() {
+                        return Ok(socket);
+                    };
                 }
                 Err(err) => {
                     if backoff > 64 {
-                        debug!("Accept error, backing off for {} sec", backoff);
                         // Accept has failed too many times. Return the error.
                         return Err(err.into());
                     }
@@ -297,7 +306,7 @@ async fn listen_for_indirect_connection(
     shutdown_complete_tx: mpsc::Sender<()>,
     database: Database,
 ) -> Result<(), SendError<ServerRequest>> {
-    while let Some(connection_request) = indirect_connection_rx.recv().now_or_never().flatten() {
+    while let Some(connection_request) = indirect_connection_rx.recv().await {
         if connection_request.username == "vessel" {
             continue;
         };
@@ -308,7 +317,7 @@ async fn listen_for_indirect_connection(
             port: connection_request.port,
         };
 
-        let handler = connect_to_peer(
+        let handler = get_connection(
             channels.clone(),
             limit_connections.clone(),
             notify_shutdown.clone(),
@@ -316,6 +325,8 @@ async fn listen_for_indirect_connection(
             peer.clone(),
         )
         .await;
+
+        let size = std::mem::size_of::<Handler>();
 
         match handler {
             Ok(mut handler) => {
@@ -329,9 +340,9 @@ async fn listen_for_indirect_connection(
 
                 tokio::spawn(async move {
                     match handler.connect(db_copy, ConnectionType::PeerToPeer).await {
-                        Ok(()) => {}
-                        Err(err) => error!(cause = ?err, "connection error"),
-                    }
+                        Ok(()) => info!("Indirect connection task completed"),
+                        Err(e) => error!(cause = %e, "Error in indirect connection"),
+                    };
                 });
             }
             Err(_) => {
@@ -371,9 +382,7 @@ async fn connect_to_parents(
                 let parent_count;
 
                 {
-                    let channel_pool = channels
-                        .lock()
-                        .expect("Unable to acquire lock on sender pool");
+                    let channel_pool = channels.lock().await;
                     parent_count = channel_pool
                         .keys()
                         .filter(|address| address.is_parent)
@@ -391,7 +400,7 @@ async fn connect_to_parents(
                     return Ok(());
                 };
 
-                let handler = connect_to_peer(
+                let handler = get_connection(
                     channels.clone(),
                     limit_connections.clone(),
                     notify_shutdown.clone(),
@@ -399,6 +408,7 @@ async fn connect_to_parents(
                     parent.clone(),
                 )
                 .await;
+
 
                 match handler {
                     Ok(mut handler) => {
@@ -444,7 +454,7 @@ async fn connect_to_parents(
     level = "debug",
     skip(limit_connections, channels, notify_shutdown, shutdown_complete_tx)
 )]
-async fn connect_to_peer(
+async fn get_connection(
     channels: SenderPool,
     limit_connections: Arc<Semaphore>,
     notify_shutdown: Sender<()>,
@@ -473,9 +483,7 @@ async fn connect_to_peer(
     {
         let (tx, rx) = mpsc::channel(100);
         let channels = channels.clone();
-        let mut channels = channels
-            .lock()
-            .expect("Unable to acquire lock on peer channels");
+        let mut channels = channels.lock().await;
 
         channels.insert(PeerAddress::new_parent(user.ip.to_string()), tx);
 
@@ -518,9 +526,7 @@ async fn dispatch_peer_message(
             debug!("Incoming peer message from HTTP API for peer {:?}", address);
             let sender;
             {
-                let channel_pool = channels
-                    .lock()
-                    .expect("Unable to acquire lock on peer channel pool");
+                let channel_pool = channels.lock().await;
                 let channel = channel_pool.get(&PeerAddress::new(address.clone()));
 
                 sender = if let Some(peer_sender) = channel {

@@ -1,6 +1,4 @@
-use std::io::Cursor;
 
-use bytes::Buf;
 
 use p2p::request::PeerRequest;
 use p2p::response::PeerResponse;

@@ -1,6 +1,5 @@
 use self::search::SearchRequest;
 use crate::frame::{read_string, ParseBytes, ToBytes};
-use crate::peers::messages::distributed::DistributedMessageCode::BranchLevel;
 use crate::SlskError;
 use bytes::Buf;
 use std::io::Cursor;

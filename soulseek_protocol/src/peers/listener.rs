@@ -63,7 +63,7 @@ impl PartialEq for PeerAddress {
 }
 
 /// TODO : Make this value configurable
-const MAX_CONNECTIONS: usize = 2048;
+const MAX_CONNECTIONS: usize = 4096;
 const MAX_PARENT: usize = 10;
 
 struct GlobalConnectionHandler {
@@ -122,7 +122,7 @@ impl GlobalConnectionHandler {
     )]
     async fn listen(&mut self, channels: SenderPool, database: Database) -> crate::Result<()> {
         if self.limit_connections.available_permits() > 0 {
-            info!("accepting inbound connections");
+            info!("Accepting inbound connections");
 
             loop {
                 match self.peer_listener.accept().await {
@@ -408,7 +408,6 @@ async fn connect_to_parents(
                     parent.clone(),
                 )
                 .await;
-
 
                 match handler {
                     Ok(mut handler) => {

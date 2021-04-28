@@ -2,11 +2,12 @@ use futures::TryFutureExt;
 use soulseek_protocol::database::Database;
 use soulseek_protocol::peers::listener::PeerAddress;
 use soulseek_protocol::peers::messages::PeerRequestPacket;
-use soulseek_protocol::server::connection::SlskConnection;
+use soulseek_protocol::server::connection::{SlskConnection};
 use soulseek_protocol::server::messages::login::LoginRequest;
 use soulseek_protocol::server::messages::peer::{Peer, PeerConnectionRequest};
 use soulseek_protocol::server::messages::request::ServerRequest;
 use soulseek_protocol::server::messages::response::ServerResponse;
+use soulseek_protocol::server::connection;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::net::TcpListener;
@@ -14,6 +15,7 @@ use tokio::signal;
 use tokio::sync::mpsc;
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
+use soulseek_protocol::SlskError;
 
 pub fn spawn_server_listener_task(
     http_rx: mpsc::Receiver<ServerRequest>,
@@ -34,22 +36,22 @@ pub fn spawn_server_listener_task(
             connection,
             logged_in_tx,
         )
-        .await;
+            .await;
     })
 }
 
 #[instrument(
-    name = "slsk_server_listener",
-    level = "debug",
-    skip(
-        http_rx,
-        sse_tx,
-        peer_listener_tx,
-        request_peer_connection_from_server_rx,
-        possible_parent_tx,
-        connection,
-        logged_in_tx
-    )
+name = "slsk_server_listener",
+level = "debug",
+skip(
+http_rx,
+sse_tx,
+peer_listener_tx,
+request_peer_connection_from_server_rx,
+possible_parent_tx,
+connection,
+logged_in_tx
+)
 )]
 async fn server_listener(
     mut http_rx: mpsc::Receiver<ServerRequest>,
@@ -68,7 +70,7 @@ async fn server_listener(
                  match server_message {
                      Ok(server_message) => {
                         if let Some(server_message) = server_message {
-                            match server_message {
+                            let err = match server_message {
                                 ServerResponse::PeerConnectionRequest(connection_request) => {
                                     info!(
                                         "connect to peer request from server : {:?} ",
@@ -77,7 +79,7 @@ async fn server_listener(
                                     peer_listener_tx
                                         .send(connection_request)
                                         .await
-                                        .expect("Cannot send peer connection request to peer handler");
+                                        .map_err(|err| SlskError::Other(Box::new(err)))
                                 }
 
                                 ServerResponse::PossibleParents(parents) => {
@@ -85,23 +87,30 @@ async fn server_listener(
                                     possible_parent_tx
                                         .send(parents)
                                         .await
-                                        .expect("Unable to send possible parent to peer handler");
+                                        .map_err(|err| SlskError::Other(Box::new(err)))
                                 }
 
                                 ServerResponse::PrivilegedUsers(_) => {
                                     logged_in_tx
                                         .send(())
                                         .await
-                                        .expect("error sending connection status to peer listener");
+                                        .map_err(|err| SlskError::Other(Box::new(err)))
                                 }
 
                                 response => {
+                                    info!("Got message from Soulseek server {}", response.kind());
                                     sse_tx
                                         .send(response)
                                         .await
-                                        .expect("Unable to send message to sse listener");
+                                        .map_err(|err| SlskError::Other(Box::new(err)))
                                 }
-                            }
+                            };
+
+                            if let Err(e) = err {
+                                error!(" Error reading Soulseek stream : {}", e);
+                                info!("Reconnecting");
+                                connection = connection::connect().await;
+                            };
                          }
                      }
                      Err(err) => error!("An error occured while reading soulseek server response : {:?}", err),
@@ -109,32 +118,60 @@ async fn server_listener(
              },
               http_command = http_rx.recv() => {
                   if let Some(request) = http_command {
-                    debug!(
-                        "Sending {} request to server: {:?}",
-                        request.kind(),
-                        request
-                    );
-                    connection
-                        .write_request(request)
+                        if let Some(new_connection) =  try_write(&mut connection, request)
                         .await
-                        .expect("failed to write to soulseek connection");
+                        .expect("Failed to write to Soulseek connection") {
+                        connection = new_connection;
+                    }
                   }
 
               }
               peer_connection_request = request_peer_connection_from_server_rx.recv() => {
 
                 if let Some(request) = peer_connection_request {
-                    debug!(
-                        "Sending {} peer connection request to server: {:?}",
-                        request.kind(),
-                        request
-                    );
-                    connection
-                        .write_request(request)
+                    if let Some(new_connection) =  try_write(&mut connection, request)
                         .await
-                        .expect("failed to write to soulseek connection");
+                        .expect("Failed to write to Soulseek connection") {
+                        connection = new_connection;
+                    }
                 }
               }
+        }
+    }
+}
+
+// Write to the soulseek TCP stream or attempt to reconnect and retry once
+async fn try_write(connection: &mut SlskConnection, request: ServerRequest) -> tokio::io::Result<Option<SlskConnection>> {
+    debug!(
+        "Sending {} request to server: {:?}",
+        request.kind(),
+        request
+    );
+
+    match &mut connection
+        .write_request(&request)
+        .await {
+        Ok(_) => Ok(None),
+        Err(e) => {
+            error!("Error writing request to soulseek connection : {}", e);
+            info!("Reconnecting");
+            let mut new_connection = connection::connect().await;
+            let login = ServerRequest::Login(LoginRequest::new("vessel", "lessev"));
+            new_connection.write_request(&login).await?;
+
+            // Wait for PrivilegedUser message, indicating the connection is ready to receive a message
+            while let Ok(response) = new_connection.read_response().await {
+                match response {
+                    Some(other) => info!("Reconnecting, got {:?} from server", other.kind()),
+                    Some(ServerResponse::PrivilegedUsers(_)) => {
+                        info!("Reconnected");
+                        break;
+                    }
+                    None => {}
+                };
+            };
+
+            Ok(Some(new_connection))
         }
     }
 }
@@ -162,6 +199,7 @@ pub fn spawn_peer_listener(
         while logged_in_rx.recv().await.is_none() {
             // Wait for soulseek login
         }
+
         soulseek_protocol::peers::listener::run(
             listener,
             signal::ctrl_c(),
@@ -172,8 +210,8 @@ pub fn spawn_peer_listener(
             database,
             channels.clone(),
         )
-        .await
-        .expect("Unable to run peer listener");
+            .await
+            .expect("Unable to run peer listener");
     })
 }
 

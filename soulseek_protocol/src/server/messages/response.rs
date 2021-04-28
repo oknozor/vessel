@@ -144,7 +144,6 @@ impl ServerResponse {
         }
     }
 
-    #[instrument(level = "debug", skip(src))]
     pub fn parse(src: &mut Cursor<&[u8]>, header: &Header) -> std::io::Result<ServerResponse> {
         match &header.code {
             MessageCode::Login => LoginResponse::parse(src).map(ServerResponse::LoginResponse),

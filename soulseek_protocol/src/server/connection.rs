@@ -50,9 +50,9 @@ impl SlskConnection {
 
     /// Send a [`ServerRequest`] the soulseek server, using `[ToBytes]` to write to the buffer.
     #[instrument(level = "debug", skip(self))]
-    pub async fn write_request(&mut self, request: ServerRequest) -> tokio::io::Result<()> {
+    pub async fn write_request(&mut self, request: &ServerRequest) -> tokio::io::Result<()> {
         request.write_to_buf(&mut self.stream).await?;
-        info!("request sent to soulseek");
+        info!("Request sent to Soulseek server : {}", request.kind());
         self.stream.flush().await
     }
 
@@ -69,7 +69,6 @@ impl SlskConnection {
         }
     }
 
-    #[instrument(level = "debug", skip(self))]
     fn parse_response(&mut self) -> crate::Result<Option<ServerResponse>> {
         use crate::SlskError::Incomplete;
         let mut buf = Cursor::new(&self.buffer[..]);

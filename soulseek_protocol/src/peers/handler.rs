@@ -13,7 +13,6 @@ use crate::peers::messages::p2p::user_info::UserInfo;
 use crate::peers::messages::PeerRequestPacket;
 use crate::peers::messages::PeerResponsePacket;
 use crate::peers::shutdown::Shutdown;
-use crate::SlskError;
 use std::time::Duration;
 
 #[derive(Debug)]
@@ -66,7 +65,7 @@ impl Handler {
                                 if backoff > 2048 {
                                     return Err(format!("Timed out listening for peer {:?} after {}ms", self.peer_username, backoff).into());
                                 }
-                                info!("No message from peer, backing off for {}ms", backoff);
+                                debug!("No message from peer, backing off for {}ms", backoff);
                                 tokio::time::sleep(Duration::from_millis(backoff)).await;
                                 backoff *= 2;
                             }
@@ -98,7 +97,6 @@ impl Handler {
         self.listen(database).await
     }
 
-    #[instrument(level = "debug", skip(self, message), fields(message = message.kind()))]
     async fn handle_peer_message(&mut self, message: &PeerResponse) -> tokio::io::Result<()> {
         match message {
             PeerResponse::SharesReply(_)
@@ -124,7 +122,6 @@ impl Handler {
         }
     }
 
-    #[instrument(level = "debug", skip(self, database))]
     async fn handle_connection_message(
         &mut self,
         message: &PeerConnectionMessage,
@@ -156,7 +153,6 @@ impl Handler {
             }
         }
     }
-
     #[instrument(level = "debug", skip(self))]
     async fn send_peer_init(&mut self) -> tokio::io::Result<()> {
         let token = random();

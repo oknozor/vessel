@@ -1,10 +1,9 @@
-use std::{io::Cursor};
+use std::io::Cursor;
 
 use bytes::{Buf, BytesMut};
 use tokio::{io::AsyncReadExt, net::TcpStream};
 use tokio::{
     io::{AsyncWriteExt, BufWriter},
-    time::timeout,
 };
 
 use crate::message_common::ConnectionType;
@@ -40,7 +39,6 @@ impl Connection {
     ///
     /// [`Header`]: crate::peers::messages::Header
     /// [`read_response_with_timeout`]: SlskConnection::read_response_with_timeout
-    #[instrument(level = "debug", skip(self))]
     pub async fn read_response(&mut self) -> crate::Result<Option<PeerResponsePacket>> {
         if 0 == self.stream.read_buf(&mut self.buffer).await? {
             // The remote closed the connection. For this to be a clean
@@ -117,7 +115,6 @@ impl Connection {
         }
     }
 
-    #[instrument(level = "debug", skip(self))]
     fn parse_connection_message(&mut self) -> crate::Result<Option<PeerConnectionMessage>> {
         use crate::SlskError::Incomplete;
         let mut buf = Cursor::new(&self.buffer[..]);
@@ -135,7 +132,6 @@ impl Connection {
         }
     }
 
-    #[instrument(level = "debug", skip(self))]
     fn parse_peer_message(&mut self) -> crate::Result<Option<PeerResponse>> {
         use crate::SlskError::Incomplete;
         let mut buf = Cursor::new(&self.buffer[..]);
@@ -151,7 +147,6 @@ impl Connection {
         }
     }
 
-    #[instrument(level = "debug", skip(self))]
     fn parse_distributed_message(&mut self) -> crate::Result<Option<DistributedMessage>> {
         use crate::SlskError::Incomplete;
         let mut buf = Cursor::new(&self.buffer[..]);

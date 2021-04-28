@@ -4,7 +4,7 @@ use bytes::Buf;
 use tokio::io::{AsyncWrite, AsyncWriteExt, BufWriter};
 
 use crate::frame::{read_string, write_string, ParseBytes, ToBytes};
-use crate::peers::messages::p2p::MessageCode;
+use crate::peers::messages::p2p::PeerMessageCode;
 
 #[derive(Debug)]
 pub struct UserInfo {
@@ -64,7 +64,7 @@ impl ToBytes for UserInfo {
 
         buffer.write_u32_le(length).await?;
         buffer
-            .write_u32_le(MessageCode::UserInfoReply as u32)
+            .write_u32_le(PeerMessageCode::UserInfoReply as u32)
             .await?;
         write_string(&self.description, buffer).await?;
         if let Some(picture) = &self.picture {

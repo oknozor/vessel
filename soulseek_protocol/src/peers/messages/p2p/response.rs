@@ -7,11 +7,11 @@ use crate::peers::messages::p2p::folder_content::FolderContentsRequest;
 use crate::peers::messages::p2p::search::SearchReply;
 use crate::peers::messages::p2p::shared_directories::SharedDirectories;
 use crate::peers::messages::p2p::transfer::{
-    PlaceInQueueReply, PlaceInQueueRequest, QueueDownload, QueueFailed, TransferReply,
-    TransferRequest, UploadFailed,
+    PlaceInQueueReply, PlaceInQueueRequest, QueueFailed, TransferReply, TransferRequest,
+    UploadFailed,
 };
 use crate::peers::messages::p2p::user_info::UserInfo;
-use crate::peers::messages::p2p::{MessageCode, PeerMessageHeader, PEER_MSG_HEADER_LEN};
+use crate::peers::messages::p2p::{PeerMessageCode, PeerMessageHeader, PEER_MSG_HEADER_LEN};
 use crate::SlskError;
 
 #[derive(Debug)]
@@ -26,7 +26,7 @@ pub enum PeerResponse {
     TransferRequest(TransferRequest),
     TransferReply(TransferReply),
     UploadPlaceholder,
-    QueueDownload(QueueDownload),
+    QueueDownload { filename: String },
     PlaceInQueueReply(PlaceInQueueReply),
     UploadFailed(UploadFailed),
     QueueFailed(QueueFailed),
@@ -63,7 +63,7 @@ impl PeerResponse {
             PeerResponse::TransferRequest(_) => "TransferRequest",
             PeerResponse::TransferReply(_) => "TransferReply",
             PeerResponse::UploadPlaceholder => "UploadPlaceholder",
-            PeerResponse::QueueDownload(_) => "QueueDownload",
+            PeerResponse::QueueDownload { .. } => "QueueDownload",
             PeerResponse::PlaceInQueueReply(_) => "PlaceInQueueReply",
             PeerResponse::UploadFailed(_) => "UploadFailed",
             PeerResponse::QueueFailed(_) => "QueueFailed",
@@ -79,28 +79,39 @@ impl PeerResponse {
         header: &PeerMessageHeader,
     ) -> std::io::Result<Self> {
         match header.code {
-            MessageCode::SharesRequest => Ok(PeerResponse::SharesRequest),
-            MessageCode::SharesReply => {
+            PeerMessageCode::SharesRequest => Ok(PeerResponse::SharesRequest),
+            PeerMessageCode::SharesReply => {
                 SharedDirectories::parse(src).map(PeerResponse::SharesReply)
             }
-            MessageCode::SearchRequest => todo!(),
-            MessageCode::SearchReply => SearchReply::parse(src).map(PeerResponse::SearchReply),
-            MessageCode::UserInfoRequest => Ok(PeerResponse::UserInfoRequest),
-            MessageCode::UserInfoReply => UserInfo::parse(src).map(PeerResponse::UserInfoReply),
-            MessageCode::FolderContentsRequest => {
+            PeerMessageCode::SearchRequest => todo!(),
+            PeerMessageCode::SearchReply => SearchReply::parse(src).map(PeerResponse::SearchReply),
+            PeerMessageCode::UserInfoRequest => Ok(PeerResponse::UserInfoRequest),
+            PeerMessageCode::UserInfoReply => UserInfo::parse(src).map(PeerResponse::UserInfoReply),
+            PeerMessageCode::FolderContentsRequest => {
                 FolderContentsRequest::parse(src).map(PeerResponse::FolderContentsRequest)
             }
-            MessageCode::FolderContentsReply => todo!(),
-            MessageCode::TransferRequest => todo!(),
-            MessageCode::TransferReply => todo!(),
-            MessageCode::UploadPlacehold => todo!(),
-            MessageCode::QueueDownload => todo!(),
-            MessageCode::PlaceInQueueReply => todo!(),
-            MessageCode::UploadFailed => todo!(),
-            MessageCode::QueueFailed => todo!(),
-            MessageCode::PlaceInQueueRequest => todo!(),
-            MessageCode::UploadQueueNotification => todo!(),
-            MessageCode::Unknown => Ok(PeerResponse::Unknown),
+            PeerMessageCode::FolderContentsReply => todo!(),
+            PeerMessageCode::TransferRequest => {
+                TransferRequest::parse(src).map(PeerResponse::TransferRequest)
+            }
+            PeerMessageCode::TransferReply => todo!(),
+            PeerMessageCode::UploadPlacehold => todo!(),
+            PeerMessageCode::QueueUpload => {
+                error!("QUEUE UPLOAD NOT IMPLEMENTED");
+                Ok(PeerResponse::UserInfoRequest)
+            },
+            PeerMessageCode::PlaceInQueueReply => todo!(),
+            PeerMessageCode::UploadFailed => todo!(),
+            PeerMessageCode::QueueFailed => QueueFailed::parse(src).map(PeerResponse::QueueFailed),
+            PeerMessageCode::PlaceInQueueRequest => {
+                error!("Place in queue request parsing not implemented");
+                Ok(PeerResponse::UserInfoRequest)
+            },
+            PeerMessageCode::UploadQueueNotification => todo!(),
+            PeerMessageCode::Unknown => {
+                warn!("Unknown message from peer : \n{:?}", src);
+                Ok(PeerResponse::Unknown)
+            }
         }
     }
 }

@@ -6,7 +6,10 @@ use crate::SlskError;
 use bytes::{Buf, BytesMut};
 use std::io::Cursor;
 use tokio::io::{AsyncReadExt, AsyncWriteExt, BufWriter};
-use tokio::net::TcpStream;
+use tokio::net::{TcpStream, TcpSocket};
+use socket2::{Type, Protocol, Domain};
+use std::net::{ToSocketAddrs};
+use std::os::unix::io::{FromRawFd, IntoRawFd};
 
 const DEFAULT_ADDRESS: &str = "server.slsknet.org:2242";
 
@@ -16,14 +19,27 @@ pub struct SlskConnection {
     buffer: BytesMut,
 }
 
-/// Connect to the official soulseek server at `server.slsknet.org:2242`.
+/// Connect to the official Soulseek server at `server.slsknet.org:2242`.
 pub async fn connect() -> SlskConnection {
-    // Main stream with the soulseek server
-    let stream = TcpStream::connect(DEFAULT_ADDRESS)
-        .await
-        .expect("Unable to connect to slsk");
-    info!("connected to soulseek server");
-    SlskConnection::new(stream)
+    // Unfortunately tokio 1.0 does not allow to set KEEP_ALIVE.
+    // We use socket2::Socket to get the keep alive option and convert back to a TcpStream
+    let socket = socket2::Socket::new(Domain::IPV4, Type::STREAM, Some(Protocol::TCP))
+        .unwrap();
+
+    socket.set_keepalive(true).unwrap();
+
+    let mut addr = DEFAULT_ADDRESS.to_socket_addrs().unwrap();
+    let addr = addr.next().unwrap();
+    let fd = socket.into_raw_fd();
+    let socket: TcpSocket = unsafe { TcpSocket::from_raw_fd(fd) };
+    let stream = socket.connect(addr).await.unwrap();
+
+    info!("connected to Soulseek server");
+
+    SlskConnection {
+        stream: BufWriter::new(stream),
+        buffer: BytesMut::with_capacity(4 * 1024),
+    }
 }
 
 impl SlskConnection {
@@ -60,13 +76,6 @@ impl SlskConnection {
     /// four bytes for the u32 message length prefix and four bytes for the u32 message code prefix.
     fn consume(&mut self, message_len: usize) {
         self.buffer.advance(HEADER_LEN as usize + message_len)
-    }
-
-    fn new(socket: TcpStream) -> SlskConnection {
-        SlskConnection {
-            stream: BufWriter::new(socket),
-            buffer: BytesMut::with_capacity(4 * 1024),
-        }
     }
 
     fn parse_response(&mut self) -> crate::Result<Option<ServerResponse>> {

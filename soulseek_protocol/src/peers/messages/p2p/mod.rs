@@ -14,7 +14,7 @@ mod zlib;
 
 #[derive(Debug)]
 pub struct PeerMessageHeader {
-    pub(crate) code: MessageCode,
+    pub(crate) code: PeerMessageCode,
     pub(crate) message_len: usize,
 }
 
@@ -22,7 +22,7 @@ impl PeerMessageHeader {
     pub fn read(src: &mut Cursor<&[u8]>) -> std::io::Result<Self> {
         let message_length = src.get_u32_le();
         let code = src.get_u32_le();
-        let code = MessageCode::from(code);
+        let code = PeerMessageCode::from(code);
 
         // We can subtract message code from the length since we already know it
         let message_len = (message_length - 4) as usize;
@@ -33,7 +33,7 @@ impl PeerMessageHeader {
 
 #[repr(u32)]
 #[derive(Debug)]
-pub enum MessageCode {
+pub enum PeerMessageCode {
     SharesRequest = 4,
     SharesReply = 5,
     SearchRequest = 8,
@@ -45,7 +45,7 @@ pub enum MessageCode {
     TransferRequest = 40,
     TransferReply = 41,
     UploadPlacehold = 42,
-    QueueDownload = 43,
+    QueueUpload = 43,
     PlaceInQueueReply = 44,
     UploadFailed = 46,
     QueueFailed = 50,
@@ -54,27 +54,27 @@ pub enum MessageCode {
     Unknown,
 }
 
-impl From<u32> for MessageCode {
+impl From<u32> for PeerMessageCode {
     fn from(code: u32) -> Self {
         match code {
-            4 => MessageCode::SharesRequest,
-            5 => MessageCode::SharesReply,
-            8 => MessageCode::SearchRequest,
-            9 => MessageCode::SearchReply,
-            15 => MessageCode::UserInfoRequest,
-            16 => MessageCode::UserInfoReply,
-            36 => MessageCode::FolderContentsRequest,
-            37 => MessageCode::FolderContentsReply,
-            40 => MessageCode::TransferRequest,
-            41 => MessageCode::TransferReply,
-            42 => MessageCode::UploadPlacehold,
-            43 => MessageCode::QueueDownload,
-            44 => MessageCode::PlaceInQueueReply,
-            46 => MessageCode::UploadFailed,
-            50 => MessageCode::QueueFailed,
-            51 => MessageCode::PlaceInQueueRequest,
-            52 => MessageCode::UploadQueueNotification,
-            _ => MessageCode::Unknown,
+            4 => PeerMessageCode::SharesRequest,
+            5 => PeerMessageCode::SharesReply,
+            8 => PeerMessageCode::SearchRequest,
+            9 => PeerMessageCode::SearchReply,
+            15 => PeerMessageCode::UserInfoRequest,
+            16 => PeerMessageCode::UserInfoReply,
+            36 => PeerMessageCode::FolderContentsRequest,
+            37 => PeerMessageCode::FolderContentsReply,
+            40 => PeerMessageCode::TransferRequest,
+            41 => PeerMessageCode::TransferReply,
+            42 => PeerMessageCode::UploadPlacehold,
+            43 => PeerMessageCode::QueueUpload,
+            44 => PeerMessageCode::PlaceInQueueReply,
+            46 => PeerMessageCode::UploadFailed,
+            50 => PeerMessageCode::QueueFailed,
+            51 => PeerMessageCode::PlaceInQueueRequest,
+            52 => PeerMessageCode::UploadQueueNotification,
+            _ => PeerMessageCode::Unknown,
         }
     }
 }

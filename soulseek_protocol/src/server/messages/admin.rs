@@ -21,7 +21,7 @@ impl ToBytes for AdminCommand {
             .map(|s| s.bytes().len() as u32 + STR_LENGTH_PREFIX)
             .sum();
         let len = STR_LENGTH_PREFIX
-            + *&self.string1.bytes().len() as u32
+            + self.string1.bytes().len() as u32
             + self.string2.len() as u32
             + str2_len;
 

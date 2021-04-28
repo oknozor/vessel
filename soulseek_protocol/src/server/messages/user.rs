@@ -30,8 +30,8 @@ impl ParseBytes for UserStatus {
 #[derive(Debug, Serialize, Deserialize)]
 pub enum Status {
     Offline = 0,
-    Online = 1,
-    Away = 2,
+    Away = 1,
+    Online = 2,
     Unknown,
 }
 

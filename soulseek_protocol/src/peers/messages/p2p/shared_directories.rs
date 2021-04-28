@@ -1,10 +1,8 @@
 use crate::frame::{read_string, write_string, ParseBytes, ToBytes};
-use crate::peers::messages::p2p::MessageCode;
+use crate::peers::messages::p2p::zlib::decompress;
+use crate::peers::messages::p2p::{zlib, PeerMessageCode};
 use bytes::Buf;
-use flate2::write::ZlibEncoder;
-use flate2::{Compression, Decompress, FlushDecompress};
 use std::io::Cursor;
-use std::io::Write;
 use tokio::io::BufWriter;
 use tokio::io::{AsyncWrite, AsyncWriteExt};
 
@@ -22,6 +20,7 @@ impl ToBytes for SharedDirectories {
         // Pack message
         let inner = &mut vec![];
         let mut message_buffer = BufWriter::new(inner);
+
         message_buffer.write_u32_le(self.dirs.len() as u32).await?;
 
         for dir in &self.dirs {
@@ -29,19 +28,19 @@ impl ToBytes for SharedDirectories {
         }
 
         message_buffer.flush().await?;
-
+        let data = message_buffer.into_inner();
         // Compress message
-        let mut e = ZlibEncoder::new(Vec::new(), Compression::default());
-        e.write_all(message_buffer.buffer()).unwrap();
-
-        let compressed_data = e.finish().unwrap();
+        let compressed_data = zlib::compress(data)?;
 
         // Write to connection buffer
         buffer
             .write_u32_le(compressed_data.len() as u32 + 4)
             .await?;
-        buffer.write_u32_le(MessageCode::SharesReply as u32).await?;
+        buffer
+            .write_u32_le(PeerMessageCode::SharesReply as u32)
+            .await?;
         buffer.write_all(compressed_data.as_slice()).await?;
+
         Ok(())
     }
 }
@@ -50,22 +49,9 @@ impl ParseBytes for SharedDirectories {
     type Output = SharedDirectories;
 
     fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self::Output> {
-        let mut data = Vec::with_capacity(100_000);
-
-        let decompress_result =
-            Decompress::new(true).decompress_vec(src.chunk(), &mut data, FlushDecompress::Sync);
-
-        match decompress_result {
-            Ok(status) => {
-                debug!("Data successfully decompressed : {:?}", status)
-            }
-            Err(e) => {
-                error!("Decompress error: {}", e);
-                return Err(std::io::Error::from(std::io::ErrorKind::InvalidData));
-            }
-        };
-
+        let data = decompress(src)?;
         let mut cursor = Cursor::new(data.as_slice());
+
         let directory_nth = cursor.get_u32_le();
         let mut dirs = Vec::with_capacity(directory_nth as usize);
 
@@ -106,7 +92,6 @@ impl ParseBytes for Directory {
     fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self::Output> {
         let name = read_string(src)?;
         let file_nth = src.get_u32_le();
-
         let mut files = Vec::with_capacity(file_nth as usize);
         for _ in 0..file_nth {
             files.push(File::parse(src)?);
@@ -183,7 +168,6 @@ impl ToBytes for Attribute {
     ) -> tokio::io::Result<()> {
         buffer.write_u32_le(self.attribute).await?;
         buffer.write_u32_le(self.place).await?;
-        buffer.write_u32_le(self.attribute).await?;
         Ok(())
     }
 }
@@ -203,6 +187,8 @@ impl ParseBytes for Attribute {
 mod test {
     use crate::frame::{ParseBytes, ToBytes};
     use crate::peers::messages::p2p::shared_directories::{Directory, File, SharedDirectories};
+    use crate::peers::messages::p2p::PeerMessageCode;
+    use bytes::Buf;
     use tokio::io::BufWriter;
     use tokio_test::block_on;
 
@@ -222,10 +208,14 @@ mod test {
 
         let mut vec = vec![];
         let mut buff = BufWriter::new(&mut vec);
-        block_on(shared_dirs.write_to_buf(&mut buff));
+        block_on(shared_dirs.write_to_buf(&mut buff)).unwrap();
+        let mut cursor = std::io::Cursor::new(buff.buffer());
 
-        let message = &buff.buffer()[8..];
-        let mut cursor = std::io::Cursor::new(message);
+        let len = cursor.get_u32_le();
+        let code = cursor.get_u32_le();
+        assert_eq!(code, PeerMessageCode::SharesReply as u32);
+        assert_eq!(cursor.position(), 8);
+
         let parse_result = SharedDirectories::parse(&mut cursor).unwrap();
 
         assert_eq!(parse_result, shared_dirs);

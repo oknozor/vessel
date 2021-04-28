@@ -63,8 +63,8 @@ pub(crate) fn read_string(src: &mut Cursor<&[u8]>) -> std::io::Result<String> {
     }
 }
 
-pub(crate) fn read_bool(src: &mut Cursor<&[u8]>) -> std::io::Result<bool> {
-    Ok(src.get_u8() == 1)
+pub(crate) fn read_bool(src: &mut Cursor<&[u8]>) -> bool {
+    src.get_u8() == 1
 }
 
 pub(crate) fn read_ipv4(src: &mut Cursor<&[u8]>) -> Ipv4Addr {

@@ -120,11 +120,17 @@ impl PeerConnectionMessage {
             InitMessageCode::PierceFireWall => {
                 Ok(PeerConnectionMessage::PierceFirewall(src.get_u32_le()))
             }
-            InitMessageCode::PeerInit => Ok(PeerConnectionMessage::PeerInit {
-                username: read_string(src)?,
-                connection_type: ConnectionType::from(read_string(src)?),
-                token: src.get_u32_le(),
-            }),
+            InitMessageCode::PeerInit => {
+                let username = read_string(src)?;
+                let connection_type = ConnectionType::from(read_string(src)?);
+                let token = src.get_u32_le();
+
+                Ok(PeerConnectionMessage::PeerInit {
+                    username,
+                    connection_type,
+                    token,
+                })
+            },
             InitMessageCode::Unknown => {
                 error!("Unkown message kind, code");
                 Err(SlskError::UnkownMessage)

@@ -1,13 +1,39 @@
-use tokio::io::{AsyncWrite, BufWriter};
+use tokio::io::{AsyncWrite, AsyncWriteExt, BufWriter};
 
-use crate::frame::ToBytes;
+use crate::frame::{read_string, write_string, ParseBytes, ToBytes, STR_LENGTH_PREFIX};
+use crate::peers::messages::p2p::{PeerMessageCode};
+use bytes::Buf;
+use std::io::Cursor;
 
 #[derive(Debug)]
 pub struct TransferRequest {
     direction: u32,
-    ticket: u32,
-    filename: String,
-    file_size: Option<u64>,
+    pub ticket: u32,
+    pub filename: String,
+    pub file_size: Option<u64>,
+}
+
+impl ParseBytes for TransferRequest {
+    type Output = Self;
+
+    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self::Output> {
+        let direction = src.get_u32_le();
+        let ticket = src.get_u32_le();
+        let filename = read_string(src)?;
+
+        let file_size = if direction == 1 {
+            Some(src.get_u64_le())
+        } else {
+            None
+        };
+
+        Ok(Self {
+            direction,
+            ticket,
+            filename,
+            file_size,
+        })
+    }
 }
 
 #[async_trait]
@@ -63,7 +89,31 @@ impl ToBytes for QueueFailed {
         &self,
         buffer: &mut BufWriter<impl AsyncWrite + Unpin + Send>,
     ) -> tokio::io::Result<()> {
-        todo!()
+        let len = STR_LENGTH_PREFIX
+            + self.filename.as_bytes().len() as u32
+            + STR_LENGTH_PREFIX
+            + self.reason.as_bytes().len() as u32
+            + 4;
+
+        buffer.write_u32_le(len).await?;
+        buffer
+            .write_u32_le(PeerMessageCode::QueueFailed as u32)
+            .await?;
+        write_string(&self.filename, buffer).await?;
+        write_string(&self.reason, buffer).await?;
+
+        Ok(())
+    }
+}
+
+impl ParseBytes for QueueFailed {
+    type Output = Self;
+
+    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self::Output> {
+        let filename = read_string(src)?;
+        let reason = read_string(src)?;
+
+        Ok(Self { filename, reason })
     }
 }
 
@@ -83,28 +133,13 @@ impl ToBytes for PlaceInQueueRequest {
 }
 
 #[derive(Debug)]
-pub struct QueueDownload {
-    filename: String,
-}
-
-#[async_trait]
-impl ToBytes for QueueDownload {
-    async fn write_to_buf(
-        &self,
-        buffer: &mut BufWriter<impl AsyncWrite + Unpin + Send>,
-    ) -> tokio::io::Result<()> {
-        todo!()
-    }
-}
-
-#[derive(Debug)]
 pub enum TransferReply {
     TransferReplyOk {
-        ticket: String,
-        file_size: Option<u64>,
+        ticket: u32,
+        file_size: u64,
     },
     TransferRejected {
-        ticket: String,
+        ticket: u32,
         reason: String,
     },
 }
@@ -115,6 +150,26 @@ impl ToBytes for TransferReply {
         &self,
         buffer: &mut BufWriter<impl AsyncWrite + Unpin + Send>,
     ) -> tokio::io::Result<()> {
-        todo!()
+        match self {
+            TransferReply::TransferReplyOk { ticket, file_size } => {
+                let len = 4  + 4 + 1 + 8;
+                buffer.write_u32_le(len).await?;
+                buffer.write_u32_le(PeerMessageCode::TransferReply as u32).await?;
+                buffer.write_u32_le(*ticket).await?;
+                buffer.write_u8(1).await?;
+                buffer.write_u64_le(*file_size).await?;
+            }
+            TransferReply::TransferRejected { ticket, reason } => {
+                let len = 4 + 4 + 1 + STR_LENGTH_PREFIX + reason.bytes().len() as u32;
+                buffer.write_u32_le(len).await?;
+                buffer.write_u32_le(PeerMessageCode::TransferReply as u32).await?;
+                buffer.write_u32_le(*ticket).await?;
+                buffer.write_u8(0).await?;
+                write_string(reason, buffer).await?;
+            }
+        };
+
+        Ok(())
+
     }
 }

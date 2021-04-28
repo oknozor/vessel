@@ -1,12 +1,12 @@
 use tokio::io::{AsyncWrite, AsyncWriteExt, BufWriter};
 
-use crate::frame::ToBytes;
+use crate::frame::{write_string, ToBytes};
 use crate::peers::messages::p2p::folder_content::FolderContentsRequest;
 use crate::peers::messages::p2p::search::SearchReply;
 use crate::peers::messages::p2p::shared_directories::SharedDirectories;
 use crate::peers::messages::p2p::transfer::*;
 use crate::peers::messages::p2p::user_info::UserInfo;
-use crate::peers::messages::p2p::MessageCode;
+use crate::peers::messages::p2p::{PeerMessageCode, PEER_MSG_HEADER_LEN};
 
 /// TODO
 #[derive(Debug)]
@@ -21,7 +21,7 @@ pub enum PeerRequest {
     TransferRequest(TransferRequest),
     TransferReply(TransferReply),
     UploadPlaceholder,
-    QueueDownload(QueueDownload),
+    QueueUpload { filename: String },
     PlaceInQueueReply(PlaceInQueueReply),
     UploadFailed(UploadFailed),
     QueueFailed(QueueFailed),
@@ -43,7 +43,7 @@ impl PeerRequest {
             PeerRequest::TransferRequest(_) => "TransferRequest",
             PeerRequest::TransferReply(_) => "TransferReply",
             PeerRequest::UploadPlaceholder => "UploadPlaceholder",
-            PeerRequest::QueueDownload(_) => "QueueDownload",
+            PeerRequest::QueueUpload { .. } => "QueueUpload",
             PeerRequest::PlaceInQueueReply(_) => "PlaceInQueueReply",
             PeerRequest::UploadFailed(_) => "UploadFailed",
             PeerRequest::QueueFailed(_) => "QueueFailed",
@@ -64,7 +64,7 @@ impl ToBytes for PeerRequest {
             PeerRequest::SharesRequest => {
                 buffer.write_u32_le(4).await?;
                 buffer
-                    .write_u32_le(MessageCode::SharesRequest as u32)
+                    .write_u32_le(PeerMessageCode::SharesRequest as u32)
                     .await?;
             }
             PeerRequest::SharesReply(shared_dirs) => {
@@ -74,7 +74,7 @@ impl ToBytes for PeerRequest {
             PeerRequest::UserInfoRequest => {
                 buffer.write_u32_le(4).await?;
                 buffer
-                    .write_u32_le(MessageCode::UserInfoRequest as u32)
+                    .write_u32_le(PeerMessageCode::UserInfoRequest as u32)
                     .await?;
             }
             PeerRequest::UserInfoReply(user_info) => user_info.write_to_buf(buffer).await?,
@@ -91,8 +91,8 @@ impl ToBytes for PeerRequest {
                 transfer_reply.write_to_buf(buffer).await?
             }
             PeerRequest::UploadPlaceholder => {}
-            PeerRequest::QueueDownload(queue_download) => {
-                queue_download.write_to_buf(buffer).await?
+            PeerRequest::QueueUpload { filename } => {
+                write_str_msg(filename, PeerMessageCode::QueueUpload, buffer).await?
             }
             PeerRequest::PlaceInQueueReply(place_in_queue_reply) => {
                 place_in_queue_reply.write_to_buf(buffer).await?
@@ -108,4 +108,17 @@ impl ToBytes for PeerRequest {
 
         Ok(())
     }
+}
+
+pub(crate) async fn write_str_msg(
+    src: &str,
+    code: PeerMessageCode,
+    buffer: &mut BufWriter<impl AsyncWrite + Unpin + Send>,
+) -> tokio::io::Result<()> {
+    let bytes = src.as_bytes();
+    let message_len = bytes.len() as u32 + PEER_MSG_HEADER_LEN;
+    buffer.write_u32_le(message_len).await?;
+    buffer.write_u32_le(code as u32).await?;
+    write_string(src, buffer).await?;
+    Ok(())
 }

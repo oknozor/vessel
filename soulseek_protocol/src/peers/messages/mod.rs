@@ -1,5 +1,3 @@
-
-
 use p2p::request::PeerRequest;
 use p2p::response::PeerResponse;
 

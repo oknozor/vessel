@@ -1,6 +1,7 @@
 #[macro_use]
 extern crate log;
 
+use serde_derive::{Deserialize, Serialize};
 use soulseek_protocol::server::messages::request::ServerRequest;
 use std::sync::Mutex;
 use tokio::sync::mpsc;
@@ -12,6 +13,11 @@ use soulseek_protocol::server::messages::chat::SayInChat;
 use soulseek_protocol::server::messages::search::SearchRequest;
 use std::sync::Arc;
 use warp::Filter;
+
+#[derive(Deserialize, Serialize)]
+struct QueueRequest {
+    filename: String,
+}
 
 pub async fn start(
     sender: mpsc::Sender<ServerRequest>,
@@ -118,6 +124,23 @@ pub async fn start(
         "ok"
     });
 
+    let peer_sender_copy = peer_sender.clone();
+    let queue_upload = warp::post()
+        .and(warp::path!("peers" / String / "queue"))
+        .and(warp::body::json())
+        .map(move |peer_name, request: QueueRequest| {
+            let peer_sender_copy = peer_sender_copy.lock().unwrap();
+            peer_sender_copy
+                .try_send((
+                    peer_name,
+                    PeerRequestPacket::Message(PeerRequest::QueueUpload {
+                        filename: request.filename,
+                    }),
+                ))
+                .unwrap();
+            "ok"
+        });
+
     let get_all_connected_users = warp::path!("peers").map(move || {
         database
             .find_all()
@@ -150,6 +173,7 @@ pub async fn start(
         .or(stop_public_chat)
         .or(get_all_connected_users)
         .or(send_share_request)
+        .or(queue_upload)
         .or(send_user_info);
 
     info!("Starting vessel http ...");

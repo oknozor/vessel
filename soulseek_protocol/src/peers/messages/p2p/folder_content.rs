@@ -1,7 +1,7 @@
 use tokio::io::{AsyncWrite, AsyncWriteExt, BufWriter};
 
 use crate::frame::{read_string, ParseBytes, ToBytes};
-use crate::peers::messages::p2p::MessageCode;
+use crate::peers::messages::p2p::PeerMessageCode;
 use bytes::Buf;
 use std::io::Cursor;
 
@@ -41,7 +41,7 @@ impl ToBytes for FolderContentsRequest {
 
         buffer.write_u32_le(length).await?;
         buffer
-            .write_u32_le(MessageCode::FolderContentsRequest as u32)
+            .write_u32_le(PeerMessageCode::FolderContentsRequest as u32)
             .await?;
         Ok(())
     }

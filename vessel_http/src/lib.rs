@@ -13,10 +13,16 @@ use soulseek_protocol::server::messages::chat::SayInChat;
 use soulseek_protocol::server::messages::search::SearchRequest;
 use std::sync::Arc;
 use warp::Filter;
+use percent_encoding::percent_decode;
 
 #[derive(Deserialize, Serialize)]
 struct QueueRequest {
     filename: String,
+}
+
+#[derive(Deserialize, Serialize)]
+struct ChatMessage {
+    message: String,
 }
 
 pub async fn start(
@@ -37,10 +43,16 @@ pub async fn start(
     });
 
     let sender_copy = sender.clone();
-    let join_room = warp::path!("rooms" / String / "join").map(move |room_name| {
+    let join_room = warp::path!("rooms" / String / "join").map(move |room: String| {
         let sender_copy = sender_copy.lock().unwrap();
+
+        let room = percent_decode(room.as_bytes())
+            .decode_utf8()
+            .unwrap()
+            .to_string();
+
         sender_copy
-            .try_send(ServerRequest::JoinRoom(room_name))
+            .try_send(ServerRequest::JoinRoom(room))
             .unwrap();
         "ok"
     });
@@ -53,16 +65,23 @@ pub async fn start(
             .unwrap();
         "ok"
     });
-
     let sender_copy = sender.clone();
-    let send_chat_message = warp::path!("chat" / String / String).map(move |room, message| {
-        let sender_copy = sender_copy.lock().unwrap();
-        sender_copy
-            .try_send(ServerRequest::SendChatMessage(SayInChat { room, message }))
-            .unwrap();
+    let send_chat_message = warp::post()
+        .and(warp::path!("rooms" / String ))
+        .and(warp::body::json())
+        .map(move |room: String, chat_message: ChatMessage| {
+            let sender_copy = sender_copy.lock().unwrap();
 
-        "ok"
-    });
+            let room = percent_decode(room.as_bytes())
+                .decode_utf8()
+                .unwrap()
+                .to_string();
+
+            sender_copy
+                .try_send(ServerRequest::SendChatMessage(SayInChat { room, message: chat_message.message }))
+                .unwrap();
+            "ok"
+        });
 
     let sender_copy = sender.clone();
     let add_user = warp::path!("user" / String / "add").map(move |username| {

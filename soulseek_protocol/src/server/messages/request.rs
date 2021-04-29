@@ -449,7 +449,7 @@ impl ServerRequest {
             ServerRequest::ConnectToPeer(_) => "ConnectToPeer",
             ServerRequest::AcknowledgePrivateMessage(_) => "AcknowledgePrivateMessage",
             ServerRequest::FileSearch(_) => "FileSearch",
-            ServerRequest::SetOnlineStatus(_) => "SetOnlyStatus",
+            ServerRequest::SetOnlineStatus(_) => "SetOnlineStatus",
             ServerRequest::SharedFolderAndFiles(_) => "SharedFolderAndFiles",
             ServerRequest::UserSearch(_) => "UserSearch",
             ServerRequest::AddLinkedInterest(_) => "AddLinkedInterest",

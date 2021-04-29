@@ -120,6 +120,7 @@ async fn server_listener(
 
               http_command = http_rx.recv() => {
                   if let Some(request) = http_command {
+                    info!("Got HTTP command {:?}", request);
                         if let Some(new_connection) =  try_write(&mut connection, request)
                         .await
                         .expect("Failed to write to Soulseek connection") {

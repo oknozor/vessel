@@ -97,3 +97,9 @@ impl SlskConnection {
         }
     }
 }
+
+impl Drop for SlskConnection {
+    fn drop(&mut self) {
+        error!("Connection dropped");
+    }
+}

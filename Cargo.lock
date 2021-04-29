@@ -1881,6 +1881,7 @@ name = "vessel_http"
 version = "0.1.0"
 dependencies = [
  "log",
+ "percent-encoding",
  "rand 0.7.3",
  "serde 1.0.125",
  "serde_derive",

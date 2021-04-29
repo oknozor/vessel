@@ -99,14 +99,14 @@ impl PeerResponse {
             PeerMessageCode::QueueUpload => {
                 error!("QUEUE UPLOAD NOT IMPLEMENTED");
                 Ok(PeerResponse::UserInfoRequest)
-            },
+            }
             PeerMessageCode::PlaceInQueueReply => todo!(),
             PeerMessageCode::UploadFailed => todo!(),
             PeerMessageCode::QueueFailed => QueueFailed::parse(src).map(PeerResponse::QueueFailed),
             PeerMessageCode::PlaceInQueueRequest => {
                 error!("Place in queue request parsing not implemented");
                 Ok(PeerResponse::UserInfoRequest)
-            },
+            }
             PeerMessageCode::UploadQueueNotification => todo!(),
             PeerMessageCode::Unknown => {
                 warn!("Unknown message from peer : \n{:?}", src);

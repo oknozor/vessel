@@ -116,9 +116,9 @@ impl GlobalConnectionHandler {
     }
 
     #[instrument(
-    name = "peer_connection_handler",
-    level = "debug",
-    skip(self, channels, database)
+        name = "peer_connection_handler",
+        level = "debug",
+        skip(self, channels, database)
     )]
     async fn listen(&mut self, channels: SenderPool, database: Database) -> crate::Result<()> {
         if self.limit_connections.available_permits() > 0 {
@@ -186,17 +186,17 @@ struct PeerListener {
 }
 
 #[instrument(
-name = "peers_listener",
-level = "debug",
-skip(
-listener,
-shutdown,
-peer_connection_rx,
-peer_connection_outgoing_tx,
-possible_parent_rx,
-peer_message_dispatcher,
-database
-)
+    name = "peers_listener",
+    level = "debug",
+    skip(
+        listener,
+        shutdown,
+        peer_connection_rx,
+        peer_connection_outgoing_tx,
+        possible_parent_rx,
+        peer_message_dispatcher,
+        database
+    )
 )]
 pub async fn run(
     listener: TcpListener,
@@ -324,7 +324,7 @@ async fn listen_for_indirect_connection(
             shutdown_complete_tx.clone(),
             peer.clone(),
         )
-            .await;
+        .await;
 
         match handler {
             Ok(mut handler) => {
@@ -354,16 +354,16 @@ async fn listen_for_indirect_connection(
 }
 
 #[instrument(
-level = "debug",
-skip(
-server_request_tx,
-channels,
-limit_connections,
-notify_shutdown,
-shutdown_complete_tx,
-possible_parent_rx,
-database
-)
+    level = "debug",
+    skip(
+        server_request_tx,
+        channels,
+        limit_connections,
+        notify_shutdown,
+        shutdown_complete_tx,
+        possible_parent_rx,
+        database
+    )
 )]
 async fn connect_to_parents(
     server_request_tx: mpsc::Sender<ServerRequest>,
@@ -405,7 +405,7 @@ async fn connect_to_parents(
                     shutdown_complete_tx.clone(),
                     parent.clone(),
                 )
-                    .await;
+                .await;
 
                 match handler {
                     Ok(mut handler) => {
@@ -448,8 +448,8 @@ async fn connect_to_parents(
 }
 
 #[instrument(
-level = "debug",
-skip(limit_connections, channels, notify_shutdown, shutdown_complete_tx)
+    level = "debug",
+    skip(limit_connections, channels, notify_shutdown, shutdown_complete_tx)
 )]
 async fn get_connection(
     channels: SenderPool,
@@ -476,7 +476,7 @@ async fn get_connection(
         Duration::from_millis(2000),
         TcpStream::connect(user.get_address()),
     )
-        .await
+    .await
     {
         let (tx, rx) = mpsc::channel(100);
         let channels = channels.clone();
@@ -504,9 +504,9 @@ async fn get_connection(
 }
 
 #[instrument(
-name = "peer_message_dispatcher",
-level = "debug",
-skip(peer_message_dispatcher, channels, database)
+    name = "peer_message_dispatcher",
+    level = "debug",
+    skip(peer_message_dispatcher, channels, database)
 )]
 async fn dispatch_peer_message(
     mut peer_message_dispatcher: Receiver<(String, PeerRequestPacket)>,

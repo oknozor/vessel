@@ -8,6 +8,7 @@ use soulseek_protocol::server::messages::login::LoginRequest;
 use soulseek_protocol::server::messages::peer::{Peer, PeerConnectionRequest};
 use soulseek_protocol::server::messages::request::ServerRequest;
 use soulseek_protocol::server::messages::response::ServerResponse;
+use soulseek_protocol::server::messages::user::Status;
 use soulseek_protocol::SlskError;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -16,7 +17,6 @@ use tokio::signal;
 use tokio::sync::mpsc;
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
-use soulseek_protocol::server::messages::user::Status;
 
 pub fn spawn_server_listener_task(
     http_rx: mpsc::Receiver<ServerRequest>,
@@ -178,10 +178,12 @@ async fn try_write(
                     Some(other) => info!("Reconnecting, got {:?} from server", other.kind()),
                     None => {}
                 };
-            };
+            }
 
             info!("Setting online status");
-            new_connection.write_request(&ServerRequest::SetOnlineStatus(Status::Online as u32)).await?;
+            new_connection
+                .write_request(&ServerRequest::SetOnlineStatus(Status::Online as u32))
+                .await?;
 
             Ok(Some(new_connection))
         }

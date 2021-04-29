@@ -1,10 +1,10 @@
 use crate::peers::messages::p2p::shared_directories::{Directory, File, SharedDirectories};
+use crate::peers::messages::p2p::transfer::TransferRequest;
 use crate::settings::CONFIG;
 use std::io;
 use std::net::Ipv4Addr;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
-use crate::peers::messages::p2p::transfer::TransferRequest;
 
 #[derive(Clone, Debug)]
 pub struct Database {
@@ -98,7 +98,9 @@ impl Database {
         let entry = DownloadDbEntry {
             file_name: request.filename.clone(),
             ticket: request.ticket,
-            file_size: request.file_size.expect("Accepted transfer request should have a file size"),
+            file_size: request
+                .file_size
+                .expect("Accepted transfer request should have a file size"),
             progress: 0,
         };
 

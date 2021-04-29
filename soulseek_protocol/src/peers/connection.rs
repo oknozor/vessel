@@ -11,11 +11,11 @@ use crate::peers::messages::{PeerRequestPacket, PeerResponsePacket};
 use crate::{frame::ToBytes, SlskError};
 use std::net::{Ipv4Addr, SocketAddr};
 
+use crate::database::Database;
 use crate::peers::messages::distributed::DistributedMessage;
 use crate::peers::messages::p2p::PEER_MSG_HEADER_LEN;
-use tokio::fs::{OpenOptions};
-use crate::database::Database;
-use std::path::{Path};
+use std::path::Path;
+use tokio::fs::OpenOptions;
 
 #[derive(Debug)]
 pub struct Connection {
@@ -51,18 +51,24 @@ impl Connection {
                     Ok(None) => {}
                     Err(e) => return Err(e),
                 },
-                Some(ConnectionType::DistributedNetwork) => match self.parse_distributed_message() {
-                    Ok(Some(message)) => return Ok(Some(PeerResponsePacket::DistributedMessage(message))),
-                    Ok(None) => {}
-                    Err(e) => return Err(e),
-                },
+                Some(ConnectionType::DistributedNetwork) => {
+                    match self.parse_distributed_message() {
+                        Ok(Some(message)) => {
+                            return Ok(Some(PeerResponsePacket::DistributedMessage(message)))
+                        }
+                        Ok(None) => {}
+                        Err(e) => return Err(e),
+                    }
+                }
                 None => match self.parse_connection_message() {
-                    Ok(Some(message)) => return Ok(Some(PeerResponsePacket::ConnectionMessage(message))),
+                    Ok(Some(message)) => {
+                        return Ok(Some(PeerResponsePacket::ConnectionMessage(message)))
+                    }
                     Ok(None) => {}
                     Err(e) => return Err(e),
                 },
                 // Transfer connection are handled separately
-                _ => unreachable!()
+                _ => unreachable!(),
             }
 
             if 0 == self.stream.read_buf(&mut self.buffer).await? {
@@ -81,7 +87,10 @@ impl Connection {
 
     /// Send a [`PeerMessage`] the soulseek server, using `[ToBytes]` to write to the buffer.
     #[instrument(level = "debug", skip(self))]
-    pub(crate) async fn write_request(&mut self, message: PeerRequestPacket) -> tokio::io::Result<()> {
+    pub(crate) async fn write_request(
+        &mut self,
+        message: PeerRequestPacket,
+    ) -> tokio::io::Result<()> {
         match message {
             PeerRequestPacket::Message(message) => {
                 message.write_to_buf(&mut self.stream).await?;
@@ -187,7 +196,7 @@ impl Connection {
         let address = self.get_peer_address_with_port()?.to_string();
         let mut cursor = Cursor::new(&mut self.buffer);
 
-        info!("Got incommig upload connection from {}", address);
+        info!("Got incoming upload connection from {}", address);
         let ticket = cursor.get_u32_le();
         self.buffer.advance(4);
 
@@ -199,7 +208,7 @@ impl Connection {
 
             let mut file = OpenOptions::new()
                 .create(true)
-                .append(true)
+                .write(true)
                 .open(path)
                 .await?;
 

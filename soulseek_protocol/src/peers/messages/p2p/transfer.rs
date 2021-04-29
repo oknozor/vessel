@@ -1,7 +1,7 @@
 use tokio::io::{AsyncWrite, AsyncWriteExt, BufWriter};
 
 use crate::frame::{read_string, write_string, ParseBytes, ToBytes, STR_LENGTH_PREFIX};
-use crate::peers::messages::p2p::{PeerMessageCode};
+use crate::peers::messages::p2p::PeerMessageCode;
 use bytes::Buf;
 use std::io::Cursor;
 
@@ -134,14 +134,8 @@ impl ToBytes for PlaceInQueueRequest {
 
 #[derive(Debug)]
 pub enum TransferReply {
-    TransferReplyOk {
-        ticket: u32,
-        file_size: u64,
-    },
-    TransferRejected {
-        ticket: u32,
-        reason: String,
-    },
+    TransferReplyOk { ticket: u32, file_size: u64 },
+    TransferRejected { ticket: u32, reason: String },
 }
 
 #[async_trait]
@@ -152,9 +146,11 @@ impl ToBytes for TransferReply {
     ) -> tokio::io::Result<()> {
         match self {
             TransferReply::TransferReplyOk { ticket, file_size } => {
-                let len = 4  + 4 + 1 + 8;
+                let len = 4 + 4 + 1 + 8;
                 buffer.write_u32_le(len).await?;
-                buffer.write_u32_le(PeerMessageCode::TransferReply as u32).await?;
+                buffer
+                    .write_u32_le(PeerMessageCode::TransferReply as u32)
+                    .await?;
                 buffer.write_u32_le(*ticket).await?;
                 buffer.write_u8(1).await?;
                 buffer.write_u64_le(*file_size).await?;
@@ -162,7 +158,9 @@ impl ToBytes for TransferReply {
             TransferReply::TransferRejected { ticket, reason } => {
                 let len = 4 + 4 + 1 + STR_LENGTH_PREFIX + reason.bytes().len() as u32;
                 buffer.write_u32_le(len).await?;
-                buffer.write_u32_le(PeerMessageCode::TransferReply as u32).await?;
+                buffer
+                    .write_u32_le(PeerMessageCode::TransferReply as u32)
+                    .await?;
                 buffer.write_u32_le(*ticket).await?;
                 buffer.write_u8(0).await?;
                 write_string(reason, buffer).await?;
@@ -170,6 +168,5 @@ impl ToBytes for TransferReply {
         };
 
         Ok(())
-
     }
 }

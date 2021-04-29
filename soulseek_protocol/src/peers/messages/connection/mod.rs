@@ -130,7 +130,7 @@ impl PeerConnectionMessage {
                     connection_type,
                     token,
                 })
-            },
+            }
             InitMessageCode::Unknown => {
                 error!("Unkown message kind, code");
                 Err(SlskError::UnkownMessage)

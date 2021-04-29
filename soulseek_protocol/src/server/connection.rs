@@ -4,12 +4,12 @@ use crate::server::messages::response::ServerResponse;
 use crate::server::messages::HEADER_LEN;
 use crate::SlskError;
 use bytes::{Buf, BytesMut};
+use socket2::{Domain, Protocol, Type};
 use std::io::Cursor;
-use tokio::io::{AsyncReadExt, AsyncWriteExt, BufWriter};
-use tokio::net::{TcpStream, TcpSocket};
-use socket2::{Type, Protocol, Domain};
-use std::net::{ToSocketAddrs};
+use std::net::ToSocketAddrs;
 use std::os::unix::io::{FromRawFd, IntoRawFd};
+use tokio::io::{AsyncReadExt, AsyncWriteExt, BufWriter};
+use tokio::net::{TcpSocket, TcpStream};
 
 const DEFAULT_ADDRESS: &str = "server.slsknet.org:2242";
 
@@ -23,8 +23,7 @@ pub struct SlskConnection {
 pub async fn connect() -> SlskConnection {
     // Unfortunately tokio 1.0 does not allow to set KEEP_ALIVE.
     // We use socket2::Socket to get the keep alive option and convert back to a TcpStream
-    let socket = socket2::Socket::new(Domain::IPV4, Type::STREAM, Some(Protocol::TCP))
-        .unwrap();
+    let socket = socket2::Socket::new(Domain::IPV4, Type::STREAM, Some(Protocol::TCP)).unwrap();
 
     socket.set_keepalive(true).unwrap();
 

@@ -70,7 +70,7 @@ pub enum ServerResponse {
 
 impl ServerResponse {
     // Fixme : replace with partial debug
-    pub fn kind(&self) -> String  {
+    pub fn kind(&self) -> String {
         match self {
             ServerResponse::LoginResponse(_) => "LoginResponse".to_string(),
             ServerResponse::RoomList(_) => "RoomList".to_string(),
@@ -101,7 +101,9 @@ impl ServerResponse {
             ServerResponse::SimilarUsers(_) => "SimilarUsers".to_string(),
             ServerResponse::ItemRecommendations(_) => "ItemRecommendations".to_string(),
             ServerResponse::ItemSimilarUsers(_) => "ItemSimilarUsers".to_string(),
-            ServerResponse::PrivateRoomInvitationEnabled(_) => "PrivateRoomInvitationEnabled".to_string(),
+            ServerResponse::PrivateRoomInvitationEnabled(_) => {
+                "PrivateRoomInvitationEnabled".to_string()
+            }
             ServerResponse::NewPassword(_) => "NewPassword".to_string(),
             ServerResponse::RoomOperatorAdd(_) => "RoomOperatorAdd".to_string(),
             ServerResponse::RoomOperatorRemove(_) => "RoomOperatorRemove".to_string(),
@@ -229,9 +231,9 @@ impl ServerResponse {
             MessageCode::PrivateRoomRemoved => {
                 Ok(ServerResponse::PrivateRoomRemoved(read_string(src)?))
             }
-            MessageCode::PrivateRoomToggle => Ok(ServerResponse::PrivateRoomInvitationEnabled(
-                read_bool(src),
-            )),
+            MessageCode::PrivateRoomToggle => {
+                Ok(ServerResponse::PrivateRoomInvitationEnabled(read_bool(src)))
+            }
             MessageCode::NewPassword => Ok(ServerResponse::NewPassword(read_string(src)?)),
             MessageCode::PrivateRoomAddOperator => {
                 UserRoomEvent::parse(src).map(ServerResponse::RoomOperatorAdd)

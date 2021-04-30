@@ -43,7 +43,7 @@ async fn main() -> std::io::Result<()> {
     let (peer_listener_tx, peer_connection_rx) = mpsc::channel::<PeerConnectionRequest>(32);
 
     // Request an indirect connection via http
-    let (request_peer_connection_from_server_tx, request_peer_connection_from_server_rx) =
+    let (request_peer_connection_tx, request_peer_connection_rx) =
         mpsc::channel::<ServerRequest>(32);
 
     // Dispatch possible parrent to the global peer handler
@@ -61,7 +61,7 @@ async fn main() -> std::io::Result<()> {
         http_rx,
         sse_tx,
         peer_listener_tx,
-        request_peer_connection_from_server_rx,
+        request_peer_connection_rx,
         possible_parent_tx,
         connection,
         logged_in_tx,
@@ -87,7 +87,7 @@ async fn main() -> std::io::Result<()> {
     let peer_listener = tasks::spawn_peer_listener(
         peer_message_dispatcher_rx,
         peer_connection_rx,
-        request_peer_connection_from_server_tx,
+        request_peer_connection_tx,
         possible_parent_rx,
         logged_in_rx,
         listener,

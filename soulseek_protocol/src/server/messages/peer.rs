@@ -104,10 +104,10 @@ impl ToBytes for RequestConnectionToPeer {
         buffer: &mut BufWriter<impl AsyncWrite + Unpin + Send>,
     ) -> tokio::io::Result<()> {
         // Header
-        let username_len = self.username.bytes().len() as u32 + 4;
-        let connection_type_len = self.connection_type.bytes().len() as u32 + 4;
+        let username_len = STR_LENGTH_PREFIX + self.username.bytes().len() as u32;
+        let connection_type_len = STR_LENGTH_PREFIX + self.connection_type.bytes().len() as u32;
 
-        let len = STR_LENGTH_PREFIX + username_len + connection_type_len + 4;
+        let len = 4 + username_len + connection_type_len + 4;
 
         buffer.write_u32_le(len).await?;
         buffer
@@ -115,13 +115,7 @@ impl ToBytes for RequestConnectionToPeer {
             .await?;
 
         buffer.write_u32_le(self.token).await?;
-        buffer
-            .write_u32_le(self.username.bytes().len() as u32)
-            .await?;
         write_string(&self.username, buffer).await?;
-        buffer
-            .write_u32_le(self.connection_type.bytes().len() as u32)
-            .await?;
         write_string(self.connection_type.as_ref(), buffer).await?;
         Ok(())
     }
@@ -129,8 +123,8 @@ impl ToBytes for RequestConnectionToPeer {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PeerConnectionTicket {
-    username: String,
-    ticket: u32,
+    pub ticket: u32,
+    pub username: String,
 }
 
 impl ParseBytes for PeerConnectionTicket {

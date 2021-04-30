@@ -67,7 +67,7 @@ impl SlskConnection {
     #[instrument(level = "debug", skip(self))]
     pub async fn write_request(&mut self, request: &ServerRequest) -> tokio::io::Result<()> {
         request.write_to_buf(&mut self.stream).await?;
-        info!("Request sent to Soulseek server : {}", request.kind());
+        info!("Request sent to Soulseek server : {:?}", request);
         self.stream.flush().await
     }
 

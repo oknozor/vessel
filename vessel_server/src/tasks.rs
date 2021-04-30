@@ -22,7 +22,7 @@ pub fn spawn_server_listener_task(
     http_rx: mpsc::Receiver<ServerRequest>,
     sse_tx: mpsc::Sender<ServerResponse>,
     peer_listener_tx: mpsc::Sender<PeerConnectionRequest>,
-    request_peer_connection_from_server_rx: mpsc::Receiver<ServerRequest>,
+    request_peer_connection_rx: mpsc::Receiver<ServerRequest>,
     possible_parent_tx: mpsc::Sender<Vec<Peer>>,
     connection: SlskConnection,
     logged_in_tx: mpsc::Sender<()>,
@@ -32,33 +32,33 @@ pub fn spawn_server_listener_task(
             http_rx,
             sse_tx,
             peer_listener_tx,
-            request_peer_connection_from_server_rx,
+            request_peer_connection_rx,
             possible_parent_tx,
             connection,
             logged_in_tx,
         )
-        .await;
+            .await;
     })
 }
 
 #[instrument(
-    name = "slsk_server_listener",
-    level = "debug",
-    skip(
-        http_rx,
-        sse_tx,
-        peer_listener_tx,
-        request_peer_connection_from_server_rx,
-        possible_parent_tx,
-        connection,
-        logged_in_tx
-    )
+name = "slsk_server_listener",
+level = "debug",
+skip(
+http_rx,
+sse_tx,
+peer_listener_tx,
+request_peer_connection_rx,
+possible_parent_tx,
+connection,
+logged_in_tx
+)
 )]
 async fn server_listener(
     mut http_rx: mpsc::Receiver<ServerRequest>,
     sse_tx: mpsc::Sender<ServerResponse>,
     peer_listener_tx: mpsc::Sender<PeerConnectionRequest>,
-    mut request_peer_connection_from_server_rx: mpsc::Receiver<ServerRequest>,
+    mut request_peer_connection_rx: mpsc::Receiver<ServerRequest>,
     possible_parent_tx: mpsc::Sender<Vec<Peer>>,
     mut connection: SlskConnection,
     logged_in_tx: mpsc::Sender<()>,
@@ -99,7 +99,7 @@ async fn server_listener(
                                 }
 
                                 response => {
-                                    info!("Got message from Soulseek server {}", response.kind());
+                                    info!("Got message from Soulseek server {:?}", response);
                                     sse_tx
                                         .send(response)
                                         .await
@@ -130,7 +130,7 @@ async fn server_listener(
 
               }
 
-              peer_connection_request = request_peer_connection_from_server_rx.recv() => {
+              peer_connection_request = request_peer_connection_rx.recv() => {
                 if let Some(request) = peer_connection_request {
                     if let Some(new_connection) =  try_write(&mut connection, request)
                         .await
@@ -149,8 +149,7 @@ async fn try_write(
     request: ServerRequest,
 ) -> tokio::io::Result<Option<SlskConnection>> {
     debug!(
-        "Sending {} request to server: {:?}",
-        request.kind(),
+        "Sending request to server: {:?}",
         request
     );
 
@@ -176,7 +175,7 @@ async fn try_write(
                         info!("Reconnected");
                         break;
                     }
-                    Some(other) => info!("Reconnecting, got {:?} from server", other.kind()),
+                    Some(other) => info!("Reconnecting, got {:?} from server", other),
                     None => {}
                 };
             }
@@ -202,7 +201,7 @@ type SenderPool = Arc<Mutex<HashMap<PeerAddress, mpsc::Sender<PeerRequestPacket>
 pub fn spawn_peer_listener(
     peer_message_dispatcher: mpsc::Receiver<(String, PeerRequestPacket)>,
     peer_connection_rx: mpsc::Receiver<PeerConnectionRequest>,
-    request_peer_connection_from_server_tx: mpsc::Sender<ServerRequest>,
+    request_peer_connection_tx: mpsc::Sender<ServerRequest>,
     possible_parent_rx: mpsc::Receiver<Vec<Peer>>,
     mut logged_in_rx: mpsc::Receiver<()>,
     listener: TcpListener,
@@ -219,14 +218,14 @@ pub fn spawn_peer_listener(
             listener,
             signal::ctrl_c(),
             peer_connection_rx,
-            request_peer_connection_from_server_tx,
+            request_peer_connection_tx,
             possible_parent_rx,
             peer_message_dispatcher,
             database,
             channels.clone(),
         )
-        .await
-        .expect("Unable to run peer listener");
+            .await
+            .expect("Unable to run peer listener");
     })
 }
 

@@ -30,30 +30,6 @@ pub enum PeerRequest {
     Unknown,
 }
 
-impl PeerRequest {
-    pub fn kind(&self) -> &str {
-        match self {
-            PeerRequest::SharesRequest => "SharesRequest",
-            PeerRequest::SharesReply(_) => "SharesReply",
-            PeerRequest::SearchReply(_) => "SearchReply",
-            PeerRequest::UserInfoRequest => "UserInfoRequest",
-            PeerRequest::UserInfoReply(_) => "UserInfoReply",
-            PeerRequest::FolderContentsRequest(_) => "FolderContentsRequest",
-            PeerRequest::FolderContentsReply(_) => "FolderContentsReply",
-            PeerRequest::TransferRequest(_) => "TransferRequest",
-            PeerRequest::TransferReply(_) => "TransferReply",
-            PeerRequest::UploadPlaceholder => "UploadPlaceholder",
-            PeerRequest::QueueUpload { .. } => "QueueUpload",
-            PeerRequest::PlaceInQueueReply(_) => "PlaceInQueueReply",
-            PeerRequest::UploadFailed(_) => "UploadFailed",
-            PeerRequest::QueueFailed(_) => "QueueFailed",
-            PeerRequest::PlaceInQueueRequest(_) => "PlaceInQueueRequest",
-            PeerRequest::UploadQueueNotification => "UploadQueueNotification",
-            PeerRequest::Unknown => "Unknown",
-        }
-    }
-}
-
 #[async_trait]
 impl ToBytes for PeerRequest {
     async fn write_to_buf(

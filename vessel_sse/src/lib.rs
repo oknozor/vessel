@@ -68,14 +68,14 @@ pub async fn start_sse_listener(mut rx: Receiver<ServerResponse>) {
                 // Once we get user list we can get out and proceed to the main event loop
                 break;
             }
-            other => debug!("SSE message : {:?}", other.kind()),
+            other => debug!("SSE message : {:?}", other),
         }
     }
 
     // Dispatch soulseek messages to SSE clients
     let event_dispatcher = tokio::task::spawn(async move {
         while let Some(message) = rx.recv().await {
-            debug!("SSE event : {}", message.kind());
+            debug!("SSE event : {:?}", message);
             let message = serde_json::to_string(&message).expect("Serialization error");
             let broadcaster = broadcaster_copy.clone();
             let mut broadcaster = broadcaster.lock().unwrap();

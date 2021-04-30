@@ -79,10 +79,10 @@ impl GlobalConnectionHandler {
     async fn run(
         &mut self,
         peer_connection_rx: Receiver<PeerConnectionRequest>,
-        server_request_tx: mpsc::Sender<ServerRequest>,
+        request_peer_connection_tx: mpsc::Sender<ServerRequest>,
         mut possible_parent_rx: Receiver<Vec<Peer>>,
         peer_message_dispatcher: Receiver<(String, PeerRequestPacket)>,
-        database: Database,
+        db: Database,
         channels: SenderPool,
     ) -> crate::Result<()> {
         let limit_connections = self.limit_connections.clone();
@@ -90,25 +90,25 @@ impl GlobalConnectionHandler {
         let shutdown_complete_tx = self.shutdown_complete_tx.clone();
 
         let _ = tokio::join!(
-            dispatch_peer_message(peer_message_dispatcher, channels.clone(), database.clone()),
+            dispatch_peer_message(peer_message_dispatcher, channels.clone(), db.clone()),
             listen_for_indirect_connection(
                 peer_connection_rx,
-                server_request_tx.clone(),
+                request_peer_connection_tx.clone(),
                 channels.clone(),
                 limit_connections.clone(),
                 notify_shutdown.clone(),
                 shutdown_complete_tx.clone(),
-                database.clone()
+                db.clone()
             ),
-            self.listen(channels.clone(), database.clone()),
+            self.listen(channels.clone(), db.clone()),
             connect_to_parents(
-                server_request_tx,
+                request_peer_connection_tx,
                 channels.clone(),
                 limit_connections,
                 notify_shutdown,
                 shutdown_complete_tx,
                 &mut possible_parent_rx,
-                database
+                db
             )
         );
 
@@ -192,7 +192,7 @@ struct PeerListener {
         listener,
         shutdown,
         peer_connection_rx,
-        peer_connection_outgoing_tx,
+    request_peer_connection_tx,
         possible_parent_rx,
         peer_message_dispatcher,
         database
@@ -202,7 +202,7 @@ pub async fn run(
     listener: TcpListener,
     shutdown: impl Future,
     peer_connection_rx: Receiver<PeerConnectionRequest>,
-    peer_connection_outgoing_tx: mpsc::Sender<ServerRequest>,
+    request_peer_connection_tx: mpsc::Sender<ServerRequest>,
     possible_parent_rx: Receiver<Vec<Peer>>,
     peer_message_dispatcher: mpsc::Receiver<(String, PeerRequestPacket)>,
     database: Database,
@@ -218,7 +218,7 @@ pub async fn run(
     // Initialize the listener state
     let mut server = GlobalConnectionHandler {
         peer_listener: PeerListener { listener },
-        server_request_tx: peer_connection_outgoing_tx.clone(),
+        server_request_tx: request_peer_connection_tx.clone(),
         limit_connections: Arc::new(Semaphore::new(MAX_CONNECTIONS)),
         notify_shutdown,
         shutdown_complete_tx,
@@ -226,7 +226,7 @@ pub async fn run(
     };
 
     tokio::select! {
-        res = server.run(peer_connection_rx, peer_connection_outgoing_tx, possible_parent_rx, peer_message_dispatcher, database, channels) => {
+        res = server.run(peer_connection_rx, request_peer_connection_tx, possible_parent_rx, peer_message_dispatcher, database, channels) => {
             if let Err(err) = res {
                 error!(cause = %err, "failed to accept");
             }
@@ -343,9 +343,8 @@ async fn listen_for_indirect_connection(
                     };
                 });
             }
-            Err(_) => {
-                warn!("Unable to establish indirect connection to peer {:?}, either port is closed or user is disconnected", peer);
-                warn!("Aborting");
+            Err(e) => {
+                warn!("Error trying indirect connection to {:?} : {}", peer, e);
             }
         }
     }
@@ -356,7 +355,7 @@ async fn listen_for_indirect_connection(
 #[instrument(
     level = "debug",
     skip(
-        server_request_tx,
+        request_peer_connection_tx,
         channels,
         limit_connections,
         notify_shutdown,
@@ -366,7 +365,7 @@ async fn listen_for_indirect_connection(
     )
 )]
 async fn connect_to_parents(
-    server_request_tx: mpsc::Sender<ServerRequest>,
+    request_peer_connection_tx: mpsc::Sender<ServerRequest>,
     channels: SenderPool,
     limit_connections: Arc<Semaphore>,
     notify_shutdown: Sender<()>,
@@ -391,7 +390,7 @@ async fn connect_to_parents(
 
                 if parent_count >= MAX_PARENT {
                     debug!("Max parent count reached");
-                    let server_request_sender = server_request_tx.clone();
+                    let server_request_sender = request_peer_connection_tx.clone();
                     server_request_sender
                         .send(ServerRequest::NoParents(false))
                         .await?;
@@ -429,14 +428,15 @@ async fn connect_to_parents(
                             }
                         });
                     }
-                    Err(_) => {
-                        warn!("Unable to establish indirect connection to parent {:?}, either port is closed or user is disconnected", parent);
-                        warn!("Falling back to indirect connection");
-                        let server_request_sender = server_request_tx.clone();
+                    Err(e) => {
+                        let token = random();
+                        warn!("Unable to establish parent connection with {:?},  cause = {}", parent, e);
+                        info!("Falling back to indirect connection with token {}", token);
+                        let server_request_sender = request_peer_connection_tx.clone();
                         server_request_sender
                             .send(ServerRequest::ConnectToPeer(RequestConnectionToPeer {
-                                token: random(),
-                                username: "vessel".to_string(),
+                                token,
+                                username: parent.username,
                                 connection_type: ConnectionType::DistributedNetwork,
                             }))
                             .await?;
@@ -472,34 +472,32 @@ async fn get_connection(
         user.get_address()
     );
 
-    if let Ok(Ok(socket)) = timeout(
+    match  timeout(
         Duration::from_millis(2000),
         TcpStream::connect(user.get_address()),
     )
     .await
     {
-        let (tx, rx) = mpsc::channel(100);
-        let channels = channels.clone();
-        let mut channels = channels.lock().await;
+        Ok(Ok(socket)) => {
+            let (tx, rx) = mpsc::channel(100);
+            let channels = channels.clone();
+            let mut channels = channels.lock().await;
 
-        channels.insert(PeerAddress::new_parent(user.ip.to_string()), tx);
+            channels.insert(PeerAddress::new_parent(user.ip.to_string()), tx);
 
-        debug!("{:?} known channels", channels.len());
+            debug!("{:?} known channels", channels.len());
 
-        Ok(Handler {
-            peer_username: Some(user.username.clone()),
-            connection: Connection::new(socket),
-            handler_rx: rx,
-            limit_connections: limit_connections.clone(),
-            shutdown: Shutdown::new(notify_shutdown.subscribe()),
-            _shutdown_complete: shutdown_complete_tx.clone(),
-        })
-    } else {
-        warn!("timeout connecting to peer : {:?}", user);
-        Err(SlskError::from(format!(
-            "Unable to connect to {:?}, falling back to indirect connection",
-            user.get_address()
-        )))
+            Ok(Handler {
+                peer_username: Some(user.username.clone()),
+                connection: Connection::new(socket),
+                handler_rx: rx,
+                limit_connections: limit_connections.clone(),
+                shutdown: Shutdown::new(notify_shutdown.subscribe()),
+                _shutdown_complete: shutdown_complete_tx.clone(),
+            })
+        }
+        Ok(Err(e)) => Err(SlskError::Other(Box::new(e))),
+        Err(e) => Err(SlskError::TimeOut(e)),
     }
 }
 

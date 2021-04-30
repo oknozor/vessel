@@ -94,11 +94,11 @@ impl Connection {
         match message {
             PeerRequestPacket::Message(message) => {
                 message.write_to_buf(&mut self.stream).await?;
-                info!("Peer request sent to peer {:?}", message.kind());
+                info!("Request sent to peer {:?}", message);
             }
             PeerRequestPacket::ConnectionMessage(message) => {
                 message.write_to_buf(&mut self.stream).await?;
-                info!("Connection request sent to peer");
+                info!("Connection request sent to peer {:?}", message);
             }
             _ => unreachable!(),
         }

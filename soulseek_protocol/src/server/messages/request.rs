@@ -429,66 +429,6 @@ impl ToBytes for ServerRequest {
     }
 }
 
-impl ServerRequest {
-    /// Pretty print the request kind for logging purpose
-    pub fn kind(&self) -> &str {
-        match self {
-            ServerRequest::Login(_) => "Login",
-            ServerRequest::SetListenPort(_) => "SetListenPort",
-            ServerRequest::GetPeerAddress(_) => "GetPeerAddress",
-            ServerRequest::AddUser(_) => "AddUser",
-            ServerRequest::RemoveUser(_) => "RemoveUser",
-            ServerRequest::GetUserStatus(_) => "GetUserStatus",
-            ServerRequest::SendChatMessage(_) => "SendChatMessage",
-            ServerRequest::JoinRoom(_) => "JoinRoom",
-            ServerRequest::LeaveRoom(_) => "LeaveRoom",
-            ServerRequest::EnablePublicChat => "EnablePublicChat",
-            ServerRequest::DisablePublicChat => "DisablePublicChat",
-            ServerRequest::GetUserStats(_) => "GetUserStats",
-            ServerRequest::NoParents(_) => "NoParent",
-            ServerRequest::ConnectToPeer(_) => "ConnectToPeer",
-            ServerRequest::AcknowledgePrivateMessage(_) => "AcknowledgePrivateMessage",
-            ServerRequest::FileSearch(_) => "FileSearch",
-            ServerRequest::SetOnlineStatus(_) => "SetOnlineStatus",
-            ServerRequest::SharedFolderAndFiles(_) => "SharedFolderAndFiles",
-            ServerRequest::UserSearch(_) => "UserSearch",
-            ServerRequest::AddLinkedInterest(_) => "AddLinkedInterest",
-            ServerRequest::RemoveLinkedInterest(_) => "RemoveLinkedInterest",
-            ServerRequest::Recommendations => "Recommendations",
-            ServerRequest::GlobalRecommendations => "GlobalRecommendations",
-            ServerRequest::GetUserInterest(_) => "GetUserInterest",
-            ServerRequest::AdminCommand(_) => "AdminCommand",
-            ServerRequest::RoomList => "RoomList",
-            ServerRequest::CheckPrivileges => "CheckPrivileges",
-            ServerRequest::AcceptChildren(_) => "AcceptChildren",
-            ServerRequest::WishlistSearch(_) => "WishlistSearch",
-            ServerRequest::GetSimilarUsers => "GetSimilarUsers",
-            ServerRequest::GetItemRecommendations(_) => "GetItemRecommendations",
-            ServerRequest::GetItemSimilarUsers(_) => "GetItemSimilarUsers",
-            ServerRequest::SetRoomTicker(_) => "SetRoomTicker",
-            ServerRequest::AddHatedInterest(_) => "AddHatedInterest",
-            ServerRequest::RemoveHatedInterest(_) => "RemoveHatedInterest",
-            ServerRequest::RoomSearch(_) => "RoomSearch",
-            ServerRequest::SendUploadSpeed(_) => "SendUploadSpeed",
-            ServerRequest::GivePrivileges(_) => "GivePrivileges",
-            ServerRequest::BranchLevel(_) => "BranchLevel",
-            ServerRequest::BranchRoot(_) => "BranchRoot",
-            ServerRequest::ChildDepth(_) => "ChildDepth",
-            ServerRequest::AddUserToPrivateRoom(_) => "AddUserToPrivateRoom",
-            ServerRequest::RemoveUserFromPrivateRoom(_) => "RemoveUserFromPrivateRoom",
-            ServerRequest::PrivateRoomDropMemberShip(_) => "PrivateRoomDropMemberShip",
-            ServerRequest::PrivateRoomDropOwnerShip(_) => "PrivateRoomDropOwnerShip",
-            ServerRequest::PrivateRoomUnknown(_) => "PrivateRoomUnknown",
-            ServerRequest::PrivateRoomToggle(_) => "PrivateRoomToggle",
-            ServerRequest::NewPassWord(_) => "NewPassWord",
-            ServerRequest::PrivateRoomAddOperator(_) => "PrivateRoomAddOperator",
-            ServerRequest::PrivateRoomRemoveOperator(_) => "PrivateRoomRemoveOperator",
-            ServerRequest::MessageUsers(_) => "MessageUsers",
-            ServerRequest::CantConnectToPeer(_) => "CantConnectToPeer",
-        }
-    }
-}
-
 pub(crate) async fn write_str_msg(
     src: &str,
     code: MessageCode,

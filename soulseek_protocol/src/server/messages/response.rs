@@ -69,67 +69,6 @@ pub enum ServerResponse {
 }
 
 impl ServerResponse {
-    // Fixme : replace with partial debug
-    pub fn kind(&self) -> String {
-        match self {
-            ServerResponse::LoginResponse(_) => "LoginResponse".to_string(),
-            ServerResponse::RoomList(_) => "RoomList".to_string(),
-            ServerResponse::PrivilegedUsers(_) => "PrivilegedUsers".to_string(),
-            ServerResponse::ParentMinSpeed(_) => "ParentMinSpeed".to_string(),
-            ServerResponse::ParentSpeedRatio(_) => "ParentSpeedRatio".to_string(),
-            ServerResponse::ListenPort(_) => "ListenPort".to_string(),
-            ServerResponse::PeerAddress(_) => "PeerAddress".to_string(),
-            ServerResponse::UserStatus(_) => "UserStatus".to_string(),
-            ServerResponse::UserAdded(_) => "UserAdded".to_string(),
-            ServerResponse::UserRemoved(_) => "UserRemoved".to_string(),
-            ServerResponse::UserJoinedRoom(_) => "UserJoinedRoom".to_string(),
-            ServerResponse::UserLeftRoom(_) => "UserLeftRoom".to_string(),
-            ServerResponse::RoomJoined(_) => "RoomJoined".to_string(),
-            ServerResponse::RoomTickers(_) => "RoomTickers".to_string(),
-            ServerResponse::RoomLeft(_) => "RoomLeft".to_string(),
-            ServerResponse::ChatMessage(_) => "ChatMessage".to_string(),
-            ServerResponse::UserStats(_) => "UserStats".to_string(),
-            ServerResponse::PeerConnectionRequest(r) => format!("{:?}", r),
-            ServerResponse::PossibleParents(_) => "PossibleParents".to_string(),
-            ServerResponse::Unknown(_, _, _) => "Unknown".to_string(),
-            ServerResponse::PrivateMessage(_) => "PrivateMessage".to_string(),
-            ServerResponse::TimeLeft(_) => "TimeLeft".to_string(),
-            ServerResponse::SearchReply(_) => "SearchReply".to_string(),
-            ServerResponse::Recommendations(_) => "Recommendation".to_string(),
-            ServerResponse::GlobalRecommendations(_) => "GlobalRecommendation".to_string(),
-            ServerResponse::UserInterests(_) => "Interests".to_string(),
-            ServerResponse::SimilarUsers(_) => "SimilarUsers".to_string(),
-            ServerResponse::ItemRecommendations(_) => "ItemRecommendations".to_string(),
-            ServerResponse::ItemSimilarUsers(_) => "ItemSimilarUsers".to_string(),
-            ServerResponse::PrivateRoomInvitationEnabled(_) => {
-                "PrivateRoomInvitationEnabled".to_string()
-            }
-            ServerResponse::NewPassword(_) => "NewPassword".to_string(),
-            ServerResponse::RoomOperatorAdd(_) => "RoomOperatorAdd".to_string(),
-            ServerResponse::RoomOperatorRemove(_) => "RoomOperatorRemove".to_string(),
-            ServerResponse::RoomOperatorAdded(_) => "RoomOperatorAdded".to_string(),
-            ServerResponse::RoomOperatorRemoved(_) => "RoomOperatorRemoved".to_string(),
-            ServerResponse::KickedFromServer => "KickedFromServer".to_string(),
-            ServerResponse::AdminMessage(_) => "AdminMessage".to_string(),
-            ServerResponse::EmbeddedMessage(_) => "EmbeddedMessage".to_string(),
-            ServerResponse::RoomTickersAdded(_) => "RoomTickersAdded".to_string(),
-            ServerResponse::RoomTickersRemoved(_) => "RoomTickersRemoved".to_string(),
-            ServerResponse::PrivateRoomUsers(_) => "PrivateRoomUsers".to_string(),
-            ServerResponse::PrivateRoomUserAdded(_) => "PrivateRoomUserAdded".to_string(),
-            ServerResponse::PrivateRoomUserRemoved(_) => "PrivateRoomUserRemoved".to_string(),
-            ServerResponse::PrivateRoomUnknown(_) => "PrivateUnknown".to_string(),
-            ServerResponse::PrivateRoomAdded(_) => "PrivateRoomAdded".to_string(),
-            ServerResponse::PrivateRoomRemoved(_) => "PrivateRoomRemoved".to_string(),
-            ServerResponse::RoomOperators(_) => "RoomOperators".to_string(),
-            ServerResponse::PublicChatMessage(_) => "PublicChatMessage".to_string(),
-            ServerResponse::CantConnectToPeer(_) => "CantConnectToPeer".to_string(),
-            ServerResponse::CantCreateRoom(_) => "CantCreateRoom".to_string(),
-            ServerResponse::WishlistInterval(_) => "WishlistInterval".to_string(),
-        }
-    }
-}
-
-impl ServerResponse {
     pub fn check(src: &mut Cursor<&[u8]>) -> Result<Header, SlskError> {
         // Check if the buffer contains enough bytes to parse the message error
         if src.remaining() < HEADER_LEN as usize {

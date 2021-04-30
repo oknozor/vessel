@@ -67,7 +67,7 @@ impl Handler {
                                     },
 
                                     Some(PeerResponsePacket::DistributedMessage(message)) => {
-                                        info!("Got Distributed message from parent {:?} : {:?}", self.peer_username, &message.kind());
+                                        info!("Got Distributed message from parent {:?} : {:?}", self.peer_username, &message);
                                     }
 
                                     None => {

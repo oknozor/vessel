@@ -29,7 +29,7 @@ async fn main() -> std::io::Result<()> {
         .with_span_events(FmtSpan::CLOSE)
         .init();
 
-    // Forward http request to the soulseek server
+    // Forward http request to the Soulseek server
     let (http_tx, http_rx) = mpsc::channel::<ServerRequest>(32);
 
     // Send http request directly to a peer connection

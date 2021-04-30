@@ -38,6 +38,7 @@ pub(crate) enum DistributedMessageCode {
     BranchRoot = 5,
     ChildDepth = 7,
     ServerSearchRequest = 93,
+    Unknown,
 }
 
 impl From<u8> for DistributedMessageCode {
@@ -49,7 +50,7 @@ impl From<u8> for DistributedMessageCode {
             5 => DistributedMessageCode::BranchRoot,
             7 => DistributedMessageCode::ChildDepth,
             93 => DistributedMessageCode::ServerSearchRequest,
-            code => unreachable!("Unexpected distributed message code: {}", code),
+            _ => DistributedMessageCode::Unknown,
         }
     }
 }
@@ -62,6 +63,7 @@ pub enum DistributedMessage {
     BranchRoot(String),
     ChildDepth(u32),
     ServerSearchRequest,
+    Unknown,
 }
 
 #[async_trait]
@@ -79,6 +81,7 @@ impl ToBytes for DistributedMessage {
             DistributedMessage::BranchRoot(_) => todo!(),
             DistributedMessage::ChildDepth(_) => todo!(),
             DistributedMessage::ServerSearchRequest => todo!(),
+            DistributedMessage::Unknown => todo!(),
         }
 
         Ok(())
@@ -123,17 +126,10 @@ impl DistributedMessage {
             DistributedMessageCode::ServerSearchRequest => {
                 Ok(DistributedMessage::ServerSearchRequest)
             }
-        }
-    }
-
-    pub fn kind(&self) -> &str {
-        match self {
-            DistributedMessage::Ping => "Ping",
-            DistributedMessage::SearchRequest(_) => "SearchRequest",
-            DistributedMessage::BranchLevel(_) => "BranchLevel",
-            DistributedMessage::BranchRoot(_) => "BranchRoot",
-            DistributedMessage::ChildDepth(_) => "ChildDepth",
-            DistributedMessage::ServerSearchRequest => "ServerSearchRequest",
+            _ => {
+                error!("Unknown distributed message type {:?}", src);
+                Ok(DistributedMessage::Unknown)
+            }
         }
     }
 }

@@ -54,8 +54,12 @@ pub struct Peer {
 }
 
 impl Peer {
-    pub fn get_address(&self) -> String {
+    pub fn get_address_with_port(&self) -> String {
         format!("{}:{}", self.ip, self.port)
+    }
+
+    pub fn get_address(&self) -> String {
+        self.ip.to_string()
     }
 }
 

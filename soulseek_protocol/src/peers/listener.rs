@@ -2,15 +2,20 @@
 /// tutorial.
 use std::future::Future;
 use std::sync::Arc;
-use tokio::sync::Mutex;
 
+use rand::random;
 use tokio::net::{TcpListener, TcpStream};
+use tokio::sync::broadcast::Sender;
+use tokio::sync::mpsc::error::SendError;
+use tokio::sync::mpsc::Receiver;
 use tokio::sync::{broadcast, mpsc, Semaphore};
+use tokio::time::timeout;
 use tokio::time::{self, Duration};
 use tracing::{error, info};
 
 use crate::database::Database;
 use crate::message_common::ConnectionType;
+use crate::peers::channels::SenderPool;
 use crate::peers::connection::Connection;
 use crate::peers::handler::Handler;
 use crate::peers::messages::PeerRequestPacket;
@@ -18,49 +23,6 @@ use crate::peers::shutdown::Shutdown;
 use crate::server::messages::peer::{Peer, PeerConnectionRequest, RequestConnectionToPeer};
 use crate::server::messages::request::ServerRequest;
 use crate::SlskError;
-use rand::random;
-use std::collections::HashMap;
-use std::hash::{Hash, Hasher};
-use tokio::sync::broadcast::Sender;
-use tokio::sync::mpsc::error::SendError;
-use tokio::sync::mpsc::Receiver;
-use tokio::time::timeout;
-
-pub type SenderPool = Arc<Mutex<HashMap<PeerAddress, mpsc::Sender<PeerRequestPacket>>>>;
-
-#[derive(Debug, Clone, Eq)]
-pub struct PeerAddress {
-    pub address: String,
-    pub is_parent: bool,
-}
-
-impl PeerAddress {
-    fn new(address: String) -> Self {
-        PeerAddress {
-            address,
-            is_parent: false,
-        }
-    }
-
-    fn new_parent(address: String) -> Self {
-        PeerAddress {
-            address,
-            is_parent: true,
-        }
-    }
-}
-
-impl Hash for PeerAddress {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.address.hash(state);
-    }
-}
-
-impl PartialEq for PeerAddress {
-    fn eq(&self, other: &Self) -> bool {
-        self.address == other.address
-    }
-}
 
 /// TODO : Make this value configurable
 const MAX_CONNECTIONS: usize = 4096;
@@ -100,7 +62,7 @@ impl GlobalConnectionHandler {
                 shutdown_complete_tx.clone(),
                 db.clone()
             ),
-            self.listen(channels.clone(), db.clone()),
+            self.accept_peer_connection(channels.clone(), db.clone()),
             connect_to_parents(
                 request_peer_connection_tx,
                 channels.clone(),
@@ -118,9 +80,13 @@ impl GlobalConnectionHandler {
     #[instrument(
         name = "peer_connection_handler",
         level = "debug",
-        skip(self, channels, database)
+        skip(self, channels, db)
     )]
-    async fn listen(&mut self, channels: SenderPool, database: Database) -> crate::Result<()> {
+    async fn accept_peer_connection(
+        &mut self,
+        mut channels: SenderPool,
+        db: Database,
+    ) -> crate::Result<()> {
         if self.limit_connections.available_permits() > 0 {
             info!("Accepting inbound connections");
 
@@ -141,15 +107,10 @@ impl GlobalConnectionHandler {
                         );
 
                         let address = socket.peer_addr()?.ip().to_string();
-                        let (tx, rx) = mpsc::channel(100);
-
-                        let channels = channels.clone();
-                        let mut channels = channels.lock().await;
-
-                        channels.insert(PeerAddress::new(address.clone()), tx);
+                        let (rx, state) = channels.update_or_create(address).await;
 
                         let mut handler = Handler {
-                            peer_username: None,
+                            peer_username: state.username.clone(),
                             connection: Connection::new(socket),
                             handler_rx: rx,
                             limit_connections: self.limit_connections.clone(),
@@ -157,10 +118,12 @@ impl GlobalConnectionHandler {
                             _shutdown_complete: self.shutdown_complete_tx.clone(),
                         };
 
-                        let db_copy = database.clone();
-
+                        let db_copy = db.clone();
                         tokio::spawn(async move {
-                            match handler.listen(db_copy).await {
+                            match handler
+                                .listen(db_copy, state.conn_state.to_connection_type())
+                                .await
+                            {
                                 Err(e) => error!(cause = ?e, "Error accepting inbound connection"),
                                 Ok(()) => info!("Closing handler"),
                             };
@@ -192,7 +155,7 @@ struct PeerListener {
         listener,
         shutdown,
         peer_connection_rx,
-    request_peer_connection_tx,
+        request_peer_connection_tx,
         possible_parent_rx,
         peer_message_dispatcher,
         database
@@ -335,9 +298,12 @@ async fn listen_for_indirect_connection(
                 );
 
                 let db_copy = database.clone();
-
+                let channel = channels.clone();
                 tokio::spawn(async move {
-                    match handler.connect(db_copy, ConnectionType::PeerToPeer).await {
+                    match handler
+                        .connect(db_copy, channel.clone(), ConnectionType::PeerToPeer)
+                        .await
+                    {
                         Ok(()) => info!("Indirect connection task completed"),
                         Err(e) => error!(cause = %e, "Error in indirect connection"),
                     };
@@ -366,7 +332,7 @@ async fn listen_for_indirect_connection(
 )]
 async fn connect_to_parents(
     request_peer_connection_tx: mpsc::Sender<ServerRequest>,
-    channels: SenderPool,
+    mut channels: SenderPool,
     limit_connections: Arc<Semaphore>,
     notify_shutdown: Sender<()>,
     shutdown_complete_tx: mpsc::Sender<()>,
@@ -376,20 +342,11 @@ async fn connect_to_parents(
     loop {
         while let Some(parents) = possible_parent_rx.recv().await {
             for parent in parents {
-                let parent_count;
-
-                {
-                    let channel_pool = channels.lock().await;
-                    parent_count = channel_pool
-                        .keys()
-                        .filter(|address| address.is_parent)
-                        .count();
-
-                    debug!("Connected to {}/{} parents", parent_count, MAX_PARENT);
-                }
+                let parent_count = channels.get_parent_count().await;
+                debug!("Connected to {}/{} parents", parent_count, MAX_PARENT);
 
                 if parent_count >= MAX_PARENT {
-                    debug!("Max parent count reached");
+                    info!("Max parent count reached");
                     let server_request_sender = request_peer_connection_tx.clone();
                     server_request_sender
                         .send(ServerRequest::NoParents(false))
@@ -417,22 +374,39 @@ async fn connect_to_parents(
                         database.insert_peer(&parent.username, parent.ip).unwrap();
 
                         let db_copy = database.clone();
+                        let channels = channels.clone();
 
                         tokio::spawn(async move {
                             match handler
-                                .connect(db_copy, ConnectionType::DistributedNetwork)
+                                .connect(db_copy, channels, ConnectionType::DistributedNetwork)
                                 .await
                             {
-                                Ok(()) => {}
+                                Ok(()) => info!("Parent connection terminated"),
                                 Err(err) => error!(cause = ?err, "connection error"),
                             }
                         });
                     }
                     Err(e) => {
                         let token = random();
-                        warn!("Unable to establish parent connection with {:?},  cause = {}", parent, e);
+                        warn!(
+                            "Unable to establish parent connection with {:?},  cause = {}",
+                            parent, e
+                        );
+
+                        // We were unable to connect to ths peer, we are now asking the server
+                        // to dispatch a connection request and expect a PierceFirewall message
+                        // before upgrading the connection to DistributedNetwork
+                        channels
+                            .new_incomming_indirect_parent_connection_pending(
+                                parent.username.clone(),
+                                parent.get_address(),
+                                token,
+                            )
+                            .await;
+
                         info!("Falling back to indirect connection with token {}", token);
                         let server_request_sender = request_peer_connection_tx.clone();
+
                         server_request_sender
                             .send(ServerRequest::ConnectToPeer(RequestConnectionToPeer {
                                 token,
@@ -452,7 +426,7 @@ async fn connect_to_parents(
     skip(limit_connections, channels, notify_shutdown, shutdown_complete_tx)
 )]
 async fn get_connection(
-    channels: SenderPool,
+    mut channels: SenderPool,
     limit_connections: Arc<Semaphore>,
     notify_shutdown: Sender<()>,
     shutdown_complete_tx: mpsc::Sender<()>,
@@ -472,23 +446,19 @@ async fn get_connection(
         user.get_address()
     );
 
-    match  timeout(
+    match timeout(
         Duration::from_millis(2000),
         TcpStream::connect(user.get_address()),
     )
     .await
     {
         Ok(Ok(socket)) => {
-            let (tx, rx) = mpsc::channel(100);
-            let channels = channels.clone();
-            let mut channels = channels.lock().await;
-
-            channels.insert(PeerAddress::new_parent(user.ip.to_string()), tx);
-
-            debug!("{:?} known channels", channels.len());
+            let rx = channels
+                .new_named_peer_connection(user.username.clone(), user.get_address())
+                .await;
 
             Ok(Handler {
-                peer_username: Some(user.username.clone()),
+                peer_username: Some(user.username),
                 connection: Connection::new(socket),
                 handler_rx: rx,
                 limit_connections: limit_connections.clone(),
@@ -508,7 +478,7 @@ async fn get_connection(
 )]
 async fn dispatch_peer_message(
     mut peer_message_dispatcher: Receiver<(String, PeerRequestPacket)>,
-    channels: SenderPool,
+    mut channels: SenderPool,
     database: Database,
 ) {
     info!("Ready to dispatch peer messages");
@@ -520,27 +490,9 @@ async fn dispatch_peer_message(
         match address {
             Some(address) => {
                 info!("Incoming peer message from HTTP API for peer {:?}", address);
-                let sender;
-                {
-                    let channel_pool = channels.lock().await;
-                    let channel = channel_pool.get(&PeerAddress::new(address.clone()));
-
-                    sender = if let Some(peer_sender) = channel {
-                        info!("Found channel for peer {}@{}", username, address);
-                        Some(peer_sender.clone())
-                    } else {
-                        error!("Channel Not found for peer {}@{}", username, address);
-                        None
-                    };
-                }
-
-                // We have a sender, let's send the message
-                if let Some(sender) = sender {
-                    debug!("Sending message to peer handler {:?}", message);
-                    sender.send(message).await.expect("Send error");
-                }
+                channels.send_message(address, message).await;
             }
             None => error!("Peer adress is unknownn cannot send message"),
-        }
+        };
     }
 }

@@ -5,6 +5,7 @@ use tokio::sync::{mpsc, Semaphore};
 
 use crate::database::Database;
 use crate::message_common::ConnectionType;
+use crate::peers::channels::{ConnectionState, SenderPool};
 use crate::peers::connection::Connection;
 use crate::peers::messages::connection::PeerConnectionMessage;
 use crate::peers::messages::p2p::request::PeerRequest;
@@ -28,17 +29,17 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub(crate) async fn listen(&mut self, db: Database) -> crate::Result<()> {
+    pub(crate) async fn listen(
+        &mut self,
+        db: Database,
+        connection_type_upgrade: Option<ConnectionType>,
+    ) -> crate::Result<()> {
         let mut backoff = 1;
 
         while !self.shutdown.is_shutdown() {
             match self.connection.connection_type {
                 Some(ConnectionType::FileTransfer) => {
-                    return self
-                        .connection
-                        .download(db.clone())
-                        .await
-                        .map_err(|err| err.into());
+                    return self.connection.download(db.clone()).await;
                 }
                 Some(_) | None => {
                     // While reading a request frame, also listen for the shutdown
@@ -48,7 +49,12 @@ impl Handler {
                             match response {
                                 Ok(message) => match message {
                                     Some(PeerResponsePacket::ConnectionMessage(message)) => {
-                                        info!("Got connection message : {:?}", &message);
+                                        info!("Got peer connection message {:?}", message);
+                                        if let PeerConnectionMessage::PierceFirewall(token) = message {
+                                            info!("Upgrading connection with {:?} to {:?}", self.connection.get_peer_address_with_port(), connection_type_upgrade);
+                                            self.connection.connection_type = connection_type_upgrade.clone()
+                                        }
+
                                         if let Err(e) = self.handle_connection_message(&message, db.clone()).await {
                                             return Err(format!("Connection error : {}", e).into());
                                         }
@@ -103,11 +109,18 @@ impl Handler {
     pub(crate) async fn connect(
         &mut self,
         database: Database,
+        mut channels: SenderPool,
         connection_type: ConnectionType,
     ) -> crate::Result<()> {
         self.send_peer_init().await?;
-        self.connection.connection_type = Some(connection_type);
-        self.listen(database).await
+        self.connection.connection_type = Some(connection_type.clone());
+        channels
+            .set_connection_state(
+                self.connection.get_peer_address()?.to_string(),
+                ConnectionState::Established,
+            )
+            .await?;
+        self.listen(database, None).await
     }
 
     async fn handle_peer_message(

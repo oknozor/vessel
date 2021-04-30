@@ -1,6 +1,11 @@
 use futures::TryFutureExt;
+use tokio::net::TcpListener;
+use tokio::signal;
+use tokio::sync::mpsc;
+use tokio::task::JoinHandle;
+
 use soulseek_protocol::database::Database;
-use soulseek_protocol::peers::listener::PeerAddress;
+use soulseek_protocol::peers::channels::SenderPool;
 use soulseek_protocol::peers::messages::PeerRequestPacket;
 use soulseek_protocol::server::connection;
 use soulseek_protocol::server::connection::SlskConnection;
@@ -10,13 +15,6 @@ use soulseek_protocol::server::messages::request::ServerRequest;
 use soulseek_protocol::server::messages::response::ServerResponse;
 use soulseek_protocol::server::messages::user::Status;
 use soulseek_protocol::SlskError;
-use std::collections::HashMap;
-use std::sync::Arc;
-use tokio::net::TcpListener;
-use tokio::signal;
-use tokio::sync::mpsc;
-use tokio::sync::Mutex;
-use tokio::task::JoinHandle;
 
 pub fn spawn_server_listener_task(
     http_rx: mpsc::Receiver<ServerRequest>,
@@ -37,22 +35,22 @@ pub fn spawn_server_listener_task(
             connection,
             logged_in_tx,
         )
-            .await;
+        .await;
     })
 }
 
 #[instrument(
-name = "slsk_server_listener",
-level = "debug",
-skip(
-http_rx,
-sse_tx,
-peer_listener_tx,
-request_peer_connection_rx,
-possible_parent_tx,
-connection,
-logged_in_tx
-)
+    name = "slsk_server_listener",
+    level = "debug",
+    skip(
+        http_rx,
+        sse_tx,
+        peer_listener_tx,
+        request_peer_connection_rx,
+        possible_parent_tx,
+        connection,
+        logged_in_tx
+    )
 )]
 async fn server_listener(
     mut http_rx: mpsc::Receiver<ServerRequest>,
@@ -148,10 +146,7 @@ async fn try_write(
     connection: &mut SlskConnection,
     request: ServerRequest,
 ) -> tokio::io::Result<Option<SlskConnection>> {
-    debug!(
-        "Sending request to server: {:?}",
-        request
-    );
+    debug!("Sending request to server: {:?}", request);
 
     match &mut connection.write_request(&request).await {
         Ok(_) => Ok(None),
@@ -196,8 +191,6 @@ pub fn spawn_sse_server(sse_rx: mpsc::Receiver<ServerResponse>) -> JoinHandle<()
     })
 }
 
-type SenderPool = Arc<Mutex<HashMap<PeerAddress, mpsc::Sender<PeerRequestPacket>>>>;
-
 pub fn spawn_peer_listener(
     peer_message_dispatcher: mpsc::Receiver<(String, PeerRequestPacket)>,
     peer_connection_rx: mpsc::Receiver<PeerConnectionRequest>,
@@ -207,7 +200,7 @@ pub fn spawn_peer_listener(
     listener: TcpListener,
     database: Database,
 ) -> JoinHandle<()> {
-    let channels: SenderPool = Arc::new(Mutex::new(HashMap::default()));
+    let channels: SenderPool = SenderPool::default();
 
     tokio::spawn(async move {
         while logged_in_rx.recv().await.is_none() {
@@ -224,8 +217,8 @@ pub fn spawn_peer_listener(
             database,
             channels.clone(),
         )
-            .await
-            .expect("Unable to run peer listener");
+        .await
+        .expect("Unable to run peer listener");
     })
 }
 

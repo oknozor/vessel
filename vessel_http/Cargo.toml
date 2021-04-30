@@ -10,8 +10,8 @@ edition = "2018"
 soulseek_protocol = { path = "../soulseek_protocol" }
 tokio = { version = "^1", features = ["io-util", "net", "macros", "sync"] }
 warp = "0.3.1"
-log = "0.4.11"
 rand = "0.7.3"
 serde_derive = "1.0.125"
 serde = "1.0.125"
 percent-encoding = "2.1.0"
+log = "0.4.14"

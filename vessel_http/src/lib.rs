@@ -6,6 +6,7 @@ use soulseek_protocol::server::messages::request::ServerRequest;
 use std::sync::Mutex;
 use tokio::sync::mpsc;
 
+use percent_encoding::percent_decode;
 use soulseek_protocol::database::Database;
 use soulseek_protocol::peers::messages::p2p::request::PeerRequest;
 use soulseek_protocol::peers::messages::PeerRequestPacket;
@@ -13,7 +14,6 @@ use soulseek_protocol::server::messages::chat::SayInChat;
 use soulseek_protocol::server::messages::search::SearchRequest;
 use std::sync::Arc;
 use warp::Filter;
-use percent_encoding::percent_decode;
 
 #[derive(Deserialize, Serialize)]
 struct QueueRequest {
@@ -51,9 +51,7 @@ pub async fn start(
             .unwrap()
             .to_string();
 
-        sender_copy
-            .try_send(ServerRequest::JoinRoom(room))
-            .unwrap();
+        sender_copy.try_send(ServerRequest::JoinRoom(room)).unwrap();
         "ok"
     });
 
@@ -67,7 +65,7 @@ pub async fn start(
     });
     let sender_copy = sender.clone();
     let send_chat_message = warp::post()
-        .and(warp::path!("rooms" / String ))
+        .and(warp::path!("rooms" / String))
         .and(warp::body::json())
         .map(move |room: String, chat_message: ChatMessage| {
             let sender_copy = sender_copy.lock().unwrap();
@@ -78,7 +76,10 @@ pub async fn start(
                 .to_string();
 
             sender_copy
-                .try_send(ServerRequest::SendChatMessage(SayInChat { room, message: chat_message.message }))
+                .try_send(ServerRequest::SendChatMessage(SayInChat {
+                    room,
+                    message: chat_message.message,
+                }))
                 .unwrap();
             "ok"
         });

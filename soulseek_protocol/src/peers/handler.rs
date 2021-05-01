@@ -50,7 +50,8 @@ impl Handler {
                                 Ok(message) => match message {
                                     Some(PeerResponsePacket::ConnectionMessage(message)) => {
                                         info!("Got peer connection message {:?}", message);
-                                        if let PeerConnectionMessage::PierceFirewall(token) = message {
+                                        // TODO : Check the token against existing channel instead of using peer address only
+                                        if let PeerConnectionMessage::PierceFirewall(_token) = message {
                                             info!("Upgrading connection with {:?} to {:?}", self.connection.get_peer_address_with_port(), connection_type_upgrade);
                                             self.connection.connection_type = connection_type_upgrade.clone()
                                         }

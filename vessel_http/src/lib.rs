@@ -3,7 +3,6 @@ extern crate log;
 
 use serde_derive::{Deserialize, Serialize};
 use soulseek_protocol::server::messages::request::ServerRequest;
-use std::sync::Mutex;
 use tokio::sync::mpsc;
 
 use percent_encoding::percent_decode;
@@ -12,8 +11,8 @@ use soulseek_protocol::peers::messages::p2p::request::PeerRequest;
 use soulseek_protocol::peers::messages::PeerRequestPacket;
 use soulseek_protocol::server::messages::chat::SayInChat;
 use soulseek_protocol::server::messages::search::SearchRequest;
-use std::sync::Arc;
-use warp::Filter;
+use warp::{Filter};
+use std::fmt::Debug;
 
 #[derive(Deserialize, Serialize)]
 struct QueueRequest {
@@ -25,122 +24,109 @@ struct ChatMessage {
     message: String,
 }
 
+#[derive(Debug)]
+struct VesselSender<T> {
+    inner: mpsc::Sender<T>,
+}
+
+impl<T> VesselSender<T> where T: Debug {
+    fn new(sender: mpsc::Sender<T>) -> Self {
+        Self {
+            inner: sender
+        }
+    }
+
+    fn send(&self, t: T) {
+        self.inner.try_send(t).unwrap();
+    }
+}
+
+impl<T> Clone for VesselSender<T> {
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone()
+        }
+    }
+}
+
+
 pub async fn start(
-    sender: mpsc::Sender<ServerRequest>,
-    peer_message_dispatcher: mpsc::Sender<(String, PeerRequestPacket)>,
+    slsk_sender: mpsc::Sender<ServerRequest>,
+    peer_message_sender: mpsc::Sender<(String, PeerRequestPacket)>,
     database: Database,
 ) {
-    let sender = Arc::new(Mutex::new(sender));
-    let peer_sender = Arc::new(Mutex::new(peer_message_dispatcher));
+    let sender = VesselSender::new(slsk_sender);
+    let peer_sender = VesselSender::new(peer_message_sender);
 
     let sender_copy = sender.clone();
     let get_peer_adress = warp::path!("user" / String / "peer_address").map(move |username| {
-        let sender_copy = sender_copy.lock().unwrap();
-        sender_copy
-            .try_send(ServerRequest::GetPeerAddress(username))
-            .unwrap();
+        sender_copy.send(ServerRequest::GetPeerAddress(username));
         "ok"
     });
 
     let sender_copy = sender.clone();
-    let join_room = warp::path!("rooms" / String / "join").map(move |room: String| {
-        let sender_copy = sender_copy.lock().unwrap();
-
-        let room = percent_decode(room.as_bytes())
-            .decode_utf8()
-            .unwrap()
-            .to_string();
-
-        sender_copy.try_send(ServerRequest::JoinRoom(room)).unwrap();
-        "ok"
-    });
+    let join_room = join_room(sender_copy);
 
     let sender_copy = sender.clone();
     let get_user_status = warp::path!("users" / String / "status").map(move |username| {
-        let sender_copy = sender_copy.lock().unwrap();
-        sender_copy
-            .try_send(ServerRequest::GetUserStatus(username))
-            .unwrap();
+        sender_copy.send(ServerRequest::GetUserStatus(username));
         "ok"
     });
+
     let sender_copy = sender.clone();
     let send_chat_message = warp::post()
         .and(warp::path!("rooms" / String))
         .and(warp::body::json())
         .map(move |room: String, chat_message: ChatMessage| {
-            let sender_copy = sender_copy.lock().unwrap();
-
             let room = percent_decode(room.as_bytes())
                 .decode_utf8()
                 .unwrap()
                 .to_string();
 
-            sender_copy
-                .try_send(ServerRequest::SendChatMessage(SayInChat {
-                    room,
-                    message: chat_message.message,
-                }))
-                .unwrap();
+            sender_copy.send(ServerRequest::SendChatMessage(SayInChat {
+                room,
+                message: chat_message.message,
+            }));
             "ok"
         });
 
     let sender_copy = sender.clone();
     let add_user = warp::path!("user" / String / "add").map(move |username| {
-        let sender_copy = sender_copy.lock().unwrap();
-        sender_copy
-            .try_send(ServerRequest::AddUser(username))
-            .unwrap();
+        sender_copy.send(ServerRequest::AddUser(username));
         "ok"
     });
 
     let sender_copy = sender.clone();
     let remove_user = warp::path!("user" / String / "remove").map(move |username| {
-        let sender_copy = sender_copy.lock().unwrap();
-        sender_copy
-            .try_send(ServerRequest::RemoveUser(username))
-            .unwrap();
+        sender_copy.send(ServerRequest::RemoveUser(username));
         "ok"
     });
 
     let sender_copy = sender.clone();
     let _start_public_chat = warp::path!("chat" / "start").map(move || {
-        let sender_copy = sender_copy.lock().unwrap();
-        sender_copy
-            .try_send(ServerRequest::EnablePublicChat)
-            .unwrap();
+        sender_copy.send(ServerRequest::EnablePublicChat);
         "ok"
     });
 
     let sender_copy = sender.clone();
     let stop_public_chat = warp::path!("chat" / "stop").map(move || {
-        let sender_copy = sender_copy.lock().unwrap();
-        sender_copy
-            .try_send(ServerRequest::DisablePublicChat)
-            .unwrap();
+        sender_copy.send(ServerRequest::DisablePublicChat);
         "ok"
     });
 
     let peer_sender_copy = peer_sender.clone();
     let send_user_info = warp::path!("peers" / String / "userinfo").map(move |peer_name| {
-        let peer_sender_copy = peer_sender_copy.lock().unwrap();
-        peer_sender_copy
-            .try_send((
-                peer_name,
-                PeerRequestPacket::Message(PeerRequest::UserInfoRequest),
-            ))
-            .unwrap();
+        peer_sender_copy.send((
+            peer_name,
+            PeerRequestPacket::Message(PeerRequest::UserInfoRequest),
+        ));
         "ok"
     });
 
     let peer_sender_copy = peer_sender.clone();
     let send_share_request = warp::path!("peers" / String / "shares").map(move |peer_name| {
-        let peer_sender_copy = peer_sender_copy.lock().unwrap();
         peer_sender_copy
-            .try_send((
-                peer_name,
-                PeerRequestPacket::Message(PeerRequest::SharesRequest),
-            ))
-            .unwrap();
+            .send((peer_name, PeerRequestPacket::Message(PeerRequest::SharesRequest), ));
         "ok"
     });
 
@@ -149,15 +135,12 @@ pub async fn start(
         .and(warp::path!("peers" / String / "queue"))
         .and(warp::body::json())
         .map(move |peer_name, request: QueueRequest| {
-            let peer_sender_copy = peer_sender_copy.lock().unwrap();
-            peer_sender_copy
-                .try_send((
-                    peer_name,
-                    PeerRequestPacket::Message(PeerRequest::QueueUpload {
-                        filename: request.filename,
-                    }),
-                ))
-                .unwrap();
+            peer_sender_copy.send((
+                peer_name,
+                PeerRequestPacket::Message(PeerRequest::QueueUpload {
+                    filename: request.filename,
+                }),
+            ));
             "ok"
         });
 
@@ -172,13 +155,10 @@ pub async fn start(
 
     let sender_copy = sender.clone();
     let search_resquest = warp::path!("search" / String).map(move |query| {
-        let sender_copy = sender_copy.lock().unwrap();
-        sender_copy
-            .try_send(ServerRequest::FileSearch(SearchRequest {
-                ticket: rand::random(),
-                query,
-            }))
-            .unwrap();
+        sender_copy.send(ServerRequest::FileSearch(SearchRequest {
+            ticket: rand::random(),
+            query,
+        }));
         "ok"
     });
 
@@ -198,4 +178,16 @@ pub async fn start(
 
     info!("Starting vessel http ...");
     warp::serve(routes).run(([127, 0, 0, 1], 3030)).await;
+}
+
+fn join_room(sender: VesselSender<ServerRequest>) -> impl Filter<Extract=impl warp::Reply, Error=warp::Rejection> + Clone {
+    warp::path!("rooms" / String / "join").map(move |room: String| {
+        let room = percent_decode(room.as_bytes())
+            .decode_utf8()
+            .unwrap()
+            .to_string();
+
+        sender.send(ServerRequest::JoinRoom(room));
+        "ok"
+    })
 }

@@ -1,13 +1,12 @@
 use warp::Filter;
 
 use soulseek_protocol::server::messages::request::ServerRequest;
-use soulseek_protocol::server::messages::search::{SearchRequest};
+use soulseek_protocol::server::messages::search::SearchRequest;
 
-use crate::sender::VesselSender;
 use crate::model::SearchQuery;
-use warp::http::StatusCode;
+use crate::sender::VesselSender;
 use warp::http::Response;
-use std::collections::HashMap;
+use warp::http::StatusCode;
 
 pub fn search(
     sender: VesselSender<ServerRequest>,
@@ -18,8 +17,7 @@ pub fn search(
 
     warp::path!("search")
         .and(opt_query)
-        .map(move |query: Option<SearchQuery>| {
-        match query {
+        .map(move |query: Option<SearchQuery>| match query {
             Some(query) => {
                 sender.send(ServerRequest::FileSearch(SearchRequest {
                     ticket: rand::random(),
@@ -32,6 +30,5 @@ pub fn search(
             None => Response::builder()
                 .status(StatusCode::BAD_REQUEST)
                 .body("Failed to decode query param."),
-        }
-    })
+        })
 }

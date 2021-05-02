@@ -5,7 +5,7 @@ use crate::peers::messages::p2p::PeerMessageCode;
 use bytes::Buf;
 use std::io::Cursor;
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct TransferRequest {
     direction: u32,
     pub ticket: u32,
@@ -46,7 +46,7 @@ impl ToBytes for TransferRequest {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct PlaceInQueueReply {
     filename: String,
     place: String,
@@ -62,7 +62,7 @@ impl ToBytes for PlaceInQueueReply {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct UploadFailed {
     filename: String,
 }
@@ -77,7 +77,7 @@ impl ToBytes for UploadFailed {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct QueueFailed {
     filename: String,
     reason: String,
@@ -117,7 +117,7 @@ impl ParseBytes for QueueFailed {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct PlaceInQueueRequest {
     filename: String,
 }
@@ -132,7 +132,7 @@ impl ToBytes for PlaceInQueueRequest {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub enum TransferReply {
     TransferReplyOk { ticket: u32, file_size: u64 },
     TransferRejected { ticket: u32, reason: String },

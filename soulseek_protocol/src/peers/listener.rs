@@ -5,7 +5,6 @@ use std::sync::Arc;
 
 use rand::random;
 use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::broadcast::Sender;
 use tokio::sync::mpsc::error::SendError;
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::{broadcast, mpsc, Semaphore};
@@ -18,6 +17,7 @@ use crate::message_common::ConnectionType;
 use crate::peers::channels::SenderPool;
 use crate::peers::connection::Connection;
 use crate::peers::handler::Handler;
+use crate::peers::messages::p2p::response::PeerResponse;
 use crate::peers::messages::PeerRequestPacket;
 use crate::peers::shutdown::Shutdown;
 use crate::server::messages::peer::{Peer, PeerConnectionRequest, RequestConnectionToPeer};
@@ -41,6 +41,7 @@ impl GlobalConnectionHandler {
     async fn run(
         &mut self,
         peer_connection_rx: Receiver<PeerConnectionRequest>,
+        sse_tx: mpsc::Sender<PeerResponse>,
         request_peer_connection_tx: mpsc::Sender<ServerRequest>,
         mut possible_parent_rx: Receiver<Vec<Peer>>,
         peer_message_dispatcher: Receiver<(String, PeerRequestPacket)>,
@@ -56,15 +57,17 @@ impl GlobalConnectionHandler {
             listen_for_indirect_connection(
                 peer_connection_rx,
                 request_peer_connection_tx.clone(),
+                sse_tx.clone(),
                 channels.clone(),
                 limit_connections.clone(),
                 notify_shutdown.clone(),
                 shutdown_complete_tx.clone(),
                 db.clone()
             ),
-            self.accept_peer_connection(channels.clone(), db.clone()),
+            self.accept_peer_connection(sse_tx.clone(), channels.clone(), db.clone()),
             connect_to_parents(
                 request_peer_connection_tx,
+                sse_tx.clone(),
                 channels.clone(),
                 limit_connections,
                 notify_shutdown,
@@ -84,6 +87,7 @@ impl GlobalConnectionHandler {
     )]
     async fn accept_peer_connection(
         &mut self,
+        sse_tx: mpsc::Sender<PeerResponse>,
         mut channels: SenderPool,
         db: Database,
     ) -> crate::Result<()> {
@@ -113,6 +117,7 @@ impl GlobalConnectionHandler {
                             peer_username: state.username.clone(),
                             connection: Connection::new(socket),
                             handler_rx: rx,
+                            sse_tx: sse_tx.clone(),
                             limit_connections: self.limit_connections.clone(),
                             shutdown: Shutdown::new(self.notify_shutdown.subscribe()),
                             _shutdown_complete: self.shutdown_complete_tx.clone(),
@@ -164,6 +169,7 @@ struct PeerListener {
 pub async fn run(
     listener: TcpListener,
     shutdown: impl Future,
+    sse_tx: mpsc::Sender<PeerResponse>,
     peer_connection_rx: Receiver<PeerConnectionRequest>,
     request_peer_connection_tx: mpsc::Sender<ServerRequest>,
     possible_parent_rx: Receiver<Vec<Peer>>,
@@ -189,7 +195,7 @@ pub async fn run(
     };
 
     tokio::select! {
-        res = server.run(peer_connection_rx, request_peer_connection_tx, possible_parent_rx, peer_message_dispatcher, database, channels) => {
+        res = server.run(peer_connection_rx, sse_tx, request_peer_connection_tx, possible_parent_rx, peer_message_dispatcher, database, channels) => {
             if let Err(err) = res {
                 error!(cause = %err, "failed to accept");
             }
@@ -263,13 +269,15 @@ impl PeerListener {
 async fn listen_for_indirect_connection(
     mut indirect_connection_rx: mpsc::Receiver<PeerConnectionRequest>,
     server_request_tx: mpsc::Sender<ServerRequest>,
+    sse_tx: mpsc::Sender<PeerResponse>,
     channels: SenderPool,
     limit_connections: Arc<Semaphore>,
-    notify_shutdown: Sender<()>,
+    notify_shutdown: broadcast::Sender<()>,
     shutdown_complete_tx: mpsc::Sender<()>,
     database: Database,
 ) -> Result<(), SendError<ServerRequest>> {
     while let Some(connection_request) = indirect_connection_rx.recv().await {
+        let sse_tx = sse_tx.clone();
         if connection_request.username == "vessel" {
             continue;
         };
@@ -283,6 +291,7 @@ async fn listen_for_indirect_connection(
         let handler = get_connection(
             channels.clone(),
             limit_connections.clone(),
+            sse_tx.clone(),
             notify_shutdown.clone(),
             shutdown_complete_tx.clone(),
             peer.clone(),
@@ -332,9 +341,10 @@ async fn listen_for_indirect_connection(
 )]
 async fn connect_to_parents(
     request_peer_connection_tx: mpsc::Sender<ServerRequest>,
+    sse_tx: mpsc::Sender<PeerResponse>,
     mut channels: SenderPool,
     limit_connections: Arc<Semaphore>,
-    notify_shutdown: Sender<()>,
+    notify_shutdown: broadcast::Sender<()>,
     shutdown_complete_tx: mpsc::Sender<()>,
     possible_parent_rx: &mut Receiver<Vec<Peer>>,
     database: Database,
@@ -357,6 +367,7 @@ async fn connect_to_parents(
                 let handler = get_connection(
                     channels.clone(),
                     limit_connections.clone(),
+                    sse_tx.clone(),
                     notify_shutdown.clone(),
                     shutdown_complete_tx.clone(),
                     parent.clone(),
@@ -428,7 +439,8 @@ async fn connect_to_parents(
 async fn get_connection(
     mut channels: SenderPool,
     limit_connections: Arc<Semaphore>,
-    notify_shutdown: Sender<()>,
+    sse_tx: mpsc::Sender<PeerResponse>,
+    notify_shutdown: broadcast::Sender<()>,
     shutdown_complete_tx: mpsc::Sender<()>,
     user: Peer,
 ) -> crate::Result<Handler> {
@@ -461,6 +473,7 @@ async fn get_connection(
                 peer_username: Some(user.username),
                 connection: Connection::new(socket),
                 handler_rx: rx,
+                sse_tx: sse_tx.clone(),
                 limit_connections: limit_connections.clone(),
                 shutdown: Shutdown::new(notify_shutdown.subscribe()),
                 _shutdown_complete: shutdown_complete_tx.clone(),
@@ -492,7 +505,7 @@ async fn dispatch_peer_message(
                 info!("Incoming peer message from HTTP API for peer {:?}", address);
                 channels.send_message(address, message).await;
             }
-            None => error!("Peer adress is unknownn cannot send message"),
+            None => error!("Peer address is unknown cannot send message"),
         };
     }
 }

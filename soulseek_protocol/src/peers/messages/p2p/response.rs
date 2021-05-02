@@ -14,7 +14,7 @@ use crate::peers::messages::p2p::user_info::UserInfo;
 use crate::peers::messages::p2p::{PeerMessageCode, PeerMessageHeader, PEER_MSG_HEADER_LEN};
 use crate::SlskError;
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub enum PeerResponse {
     SharesRequest,
     SharesReply(SharedDirectories),

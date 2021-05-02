@@ -6,6 +6,7 @@ use tokio::task::JoinHandle;
 
 use soulseek_protocol::database::Database;
 use soulseek_protocol::peers::channels::SenderPool;
+use soulseek_protocol::peers::messages::p2p::response::PeerResponse;
 use soulseek_protocol::peers::messages::PeerRequestPacket;
 use soulseek_protocol::server::connection;
 use soulseek_protocol::server::connection::SlskConnection;
@@ -184,14 +185,18 @@ async fn try_write(
     }
 }
 
-pub fn spawn_sse_server(sse_rx: mpsc::Receiver<ServerResponse>) -> JoinHandle<()> {
+pub fn spawn_sse_server(
+    sse_rx: mpsc::Receiver<ServerResponse>,
+    sse_peer_rx: mpsc::Receiver<PeerResponse>,
+) -> JoinHandle<()> {
     tokio::spawn(async {
-        vessel_sse::start_sse_listener(sse_rx).await;
+        vessel_sse::start_sse_listener(sse_rx, sse_peer_rx).await;
     })
 }
 
 pub fn spawn_peer_listener(
     peer_message_dispatcher: mpsc::Receiver<(String, PeerRequestPacket)>,
+    sse_tx: mpsc::Sender<PeerResponse>,
     peer_connection_rx: mpsc::Receiver<PeerConnectionRequest>,
     request_peer_connection_tx: mpsc::Sender<ServerRequest>,
     possible_parent_rx: mpsc::Receiver<Vec<Peer>>,
@@ -209,6 +214,7 @@ pub fn spawn_peer_listener(
         soulseek_protocol::peers::listener::run(
             listener,
             signal::ctrl_c(),
+            sse_tx,
             peer_connection_rx,
             request_peer_connection_tx,
             possible_parent_rx,

@@ -5,7 +5,7 @@ use crate::peers::messages::p2p::PeerMessageCode;
 use bytes::Buf;
 use std::io::Cursor;
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct FolderContentsRequest {
     files: Vec<String>,
 }

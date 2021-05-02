@@ -6,7 +6,7 @@ use std::io::Cursor;
 use tokio::io::BufWriter;
 use tokio::io::{AsyncWrite, AsyncWriteExt};
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize)]
 pub struct SharedDirectories {
     pub dirs: Vec<Directory>,
 }
@@ -63,7 +63,7 @@ impl ParseBytes for SharedDirectories {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize)]
 pub struct Directory {
     pub name: String,
     pub files: Vec<File>,
@@ -101,7 +101,7 @@ impl ParseBytes for Directory {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize)]
 pub struct File {
     pub name: String,
     pub size: u64,
@@ -154,7 +154,7 @@ impl ParseBytes for File {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize)]
 pub struct Attribute {
     pub place: u32,
     pub attribute: u32,

@@ -16,6 +16,7 @@ use crate::peers::messages::p2p::user_info::UserInfo;
 use crate::peers::messages::PeerRequestPacket;
 use crate::peers::messages::PeerResponsePacket;
 use crate::peers::shutdown::Shutdown;
+use crate::SlskError;
 use std::time::Duration;
 
 #[derive(Debug)]
@@ -23,6 +24,7 @@ pub struct Handler {
     pub peer_username: Option<String>,
     pub(crate) connection: Connection,
     pub(crate) handler_rx: mpsc::Receiver<PeerRequestPacket>,
+    pub(crate) sse_tx: mpsc::Sender<PeerResponse>,
     pub(crate) limit_connections: Arc<Semaphore>,
     pub(crate) shutdown: Shutdown,
     pub(crate) _shutdown_complete: mpsc::Sender<()>,
@@ -62,9 +64,14 @@ impl Handler {
                                     }
                                     Some(PeerResponsePacket::Message(message)) => {
                                         info!("Got message from peer {:?} : {:?}", self.peer_username, &message);
+
                                         if let Err(e) = self.handle_peer_message(&message, db.clone()).await {
                                             return Err(format!("Peer message error : {}", e).into());
                                         }
+
+                                        return self.sse_tx.send(message)
+                                            .await
+                                            .map_err(|err| SlskError::Other(Box::new(err)));
                                     },
 
                                     Some(PeerResponsePacket::DistributedMessage(message)) => {

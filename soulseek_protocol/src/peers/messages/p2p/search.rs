@@ -7,7 +7,7 @@ use crate::frame::{read_string, ParseBytes, ToBytes};
 use crate::peers::messages::p2p::shared_directories::File;
 use crate::peers::messages::p2p::zlib::decompress;
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct SearchReply {
     pub username: String,
     pub ticket: u32,

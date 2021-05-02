@@ -18,11 +18,11 @@ pub fn routes(
     peer_sender: VesselSender<(String, PeerRequestPacket)>,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     rooms_routes(sender.clone())
-        .or(peers_routes(peer_sender.clone()))
+        .or(peers_routes(peer_sender))
         .or(chat_routes(sender.clone()))
         .or(users_routes(sender.clone(), db))
         .or(search_routes(sender.clone()))
-        .or(rooms_routes(sender.clone()))
+        .or(rooms_routes(sender))
 }
 
 pub(crate) fn rooms_routes(

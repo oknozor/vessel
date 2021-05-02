@@ -15,12 +15,14 @@ use soulseek_protocol::server::messages::request::ServerRequest;
 use soulseek_protocol::server::messages::response::ServerResponse;
 
 use crate::tasks::spawn_server_listener_task;
+use soulseek_protocol::peers::messages::p2p::response::PeerResponse;
 
 const PEER_LISTENER_ADDRESS: &str = "0.0.0.0:2255";
 
 mod tasks;
 
 #[tokio::main]
+// #[tokio::main(flavor = "current_thread")]
 async fn main() -> std::io::Result<()> {
     let filter = std::env::var("RUST_LOG").unwrap_or_else(|_| "tracing=info,warp=debug".to_owned());
 
@@ -38,6 +40,8 @@ async fn main() -> std::io::Result<()> {
 
     // Send Soulseek server response to the SSE client
     let (sse_tx, sse_rx) = mpsc::channel::<ServerResponse>(32);
+    // Send Peer response to the SSE client
+    let (sse_peer_tx, sse_peer_rx) = mpsc::channel::<PeerResponse>(32);
 
     // Dispatch incoming indirect connection request to the global peer handler
     let (peer_listener_tx, peer_connection_rx) = mpsc::channel::<PeerConnectionRequest>(32);
@@ -69,7 +73,7 @@ async fn main() -> std::io::Result<()> {
 
     // Start the warp SSE server with a soulseek mpsc event receiver
     // this task will proxy soulseek events to the web clients
-    let sse_server = tasks::spawn_sse_server(sse_rx);
+    let sse_server = tasks::spawn_sse_server(sse_rx, sse_peer_rx);
 
     // Start the HTTP api proxy with the soulseek mpsc event sender
     // Here we are only sending request via HTTP and expect no other response
@@ -86,6 +90,7 @@ async fn main() -> std::io::Result<()> {
     // Listen for peer connection
     let peer_listener = tasks::spawn_peer_listener(
         peer_message_dispatcher_rx,
+        sse_peer_tx,
         peer_connection_rx,
         request_peer_connection_tx,
         possible_parent_rx,

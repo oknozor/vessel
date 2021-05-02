@@ -4,6 +4,7 @@ extern crate tokio;
 extern crate tracing;
 
 use futures::{Stream, StreamExt};
+use soulseek_protocol::peers::messages::p2p::response::PeerResponse;
 use soulseek_protocol::server::messages::response::ServerResponse;
 use std::convert::Infallible;
 use std::pin::Pin;
@@ -22,7 +23,10 @@ struct Broadcaster {
 
 // see : https://github.com/seanmonstar/warp/blob/master/examples/sse_chat.rs
 #[instrument(name = "sse_listener", level = "debug", skip(rx))]
-pub async fn start_sse_listener(mut rx: Receiver<ServerResponse>) {
+pub async fn start_sse_listener(
+    mut rx: Receiver<ServerResponse>,
+    mut peer_rx: Receiver<PeerResponse>,
+) {
     info!("Starting server sent event broadcast ...");
 
     let cors = warp::cors().allow_any_origin();
@@ -35,6 +39,25 @@ pub async fn start_sse_listener(mut rx: Receiver<ServerResponse>) {
         info!("Starting to dispatch vessel message to SSE clients");
         while let Some(message) = rx.recv().await {
             info!("SSE event : {:?}", message);
+            let message = serde_json::to_string(&message).expect("Serialization error");
+            broadcaster_copy.clone().send_message_to_clients(message);
+        }
+    });
+
+    let broadcaster_copy = broadcaster.clone();
+    // Dispatch soulseek messages to SSE clients
+    let peer_event_dispatcher = tokio::task::spawn(async move {
+        info!("Starting to dispatch vessel message to SSE clients");
+        while let Some(message) = peer_rx.recv().await {
+            info!("SSE event : {:?}", message);
+            match message {
+                PeerResponse::SearchReply(_) => broadcaster_copy
+                    .clone()
+                    .send_message_to_clients("event: seach_reply\n\n".to_string()),
+                _ => broadcaster_copy
+                    .clone()
+                    .send_message_to_clients("event: unknown\n\n".to_string()),
+            }
             let message = serde_json::to_string(&message).expect("Serialization error");
             broadcaster_copy.clone().send_message_to_clients(message);
         }
@@ -56,13 +79,15 @@ pub async fn start_sse_listener(mut rx: Receiver<ServerResponse>) {
 
     let _ = join!(
         warp::serve(sse_events).run(([127, 0, 0, 1], 3031)),
-        event_dispatcher
+        event_dispatcher,
+        peer_event_dispatcher,
     );
 }
 
-
 impl Broadcaster {
-    fn on_sse_event_received(&self) -> impl Stream<Item=Result<Event, serde_json::Error>> + Send + 'static {
+    fn on_sse_event_received(
+        &self,
+    ) -> impl Stream<Item = Result<Event, serde_json::Error>> + Send + 'static {
         let client = new_client(&self);
         client.map(|msg| warp::sse::Event::default().json_data(&msg.unwrap()))
     }

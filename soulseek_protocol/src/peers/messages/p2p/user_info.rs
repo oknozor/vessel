@@ -6,7 +6,7 @@ use tokio::io::{AsyncWrite, AsyncWriteExt, BufWriter};
 use crate::frame::{read_string, write_string, ParseBytes, ToBytes};
 use crate::peers::messages::p2p::PeerMessageCode;
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct UserInfo {
     pub description: String,
     pub picture: Option<String>,

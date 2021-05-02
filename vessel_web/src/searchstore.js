@@ -13,6 +13,7 @@ export const createChannelStore = () => {
     }
 
     eventSource.addEventListener("search_reply", e => {
+        console.log(e.type)
         const eventPayload = e.data
             .replaceAll("\\\"", "\"")
             .replaceAll("\\n", "");

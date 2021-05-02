@@ -14,11 +14,11 @@ use tokio::sync::mpsc::{self, Receiver, UnboundedReceiver, UnboundedSender};
 use warp::sse::Event;
 use warp::Filter;
 
-struct Client(UnboundedReceiver<String>);
+struct Client(UnboundedReceiver<Event>);
 
 #[derive(Default, Clone)]
 struct Broadcaster {
-    clients: Arc<Mutex<Vec<UnboundedSender<String>>>>,
+    clients: Arc<Mutex<Vec<UnboundedSender<Event>>>>,
 }
 
 // see : https://github.com/seanmonstar/warp/blob/master/examples/sse_chat.rs
@@ -39,8 +39,11 @@ pub async fn start_sse_listener(
         info!("Starting to dispatch vessel message to SSE clients");
         while let Some(message) = rx.recv().await {
             info!("SSE event : {:?}", message);
-            let message = serde_json::to_string(&message).expect("Serialization error");
-            broadcaster_copy.clone().send_message_to_clients(message);
+            let data = serde_json::to_string(&message).expect("Serialization error");
+            let event = "server_message".to_string();
+            broadcaster_copy
+                .clone()
+                .send_message_to_clients(&event, &data);
         }
     });
 
@@ -50,16 +53,14 @@ pub async fn start_sse_listener(
         info!("Starting to dispatch vessel message to SSE clients");
         while let Some(message) = peer_rx.recv().await {
             info!("SSE event : {:?}", message);
-            match message {
-                PeerResponse::SearchReply(_) => broadcaster_copy
-                    .clone()
-                    .send_message_to_clients("event: seach_reply\n\n".to_string()),
-                _ => broadcaster_copy
-                    .clone()
-                    .send_message_to_clients("event: unknown\n\n".to_string()),
-            }
+            let event = match message {
+                PeerResponse::SearchReply(_) => "search_reply",
+                _ => "unimplemented",
+            };
             let message = serde_json::to_string(&message).expect("Serialization error");
-            broadcaster_copy.clone().send_message_to_clients(message);
+            broadcaster_copy
+                .clone()
+                .send_message_to_clients(event, &message);
         }
     });
 
@@ -87,18 +88,18 @@ pub async fn start_sse_listener(
 impl Broadcaster {
     fn on_sse_event_received(
         &self,
-    ) -> impl Stream<Item = Result<Event, serde_json::Error>> + Send + 'static {
+    ) -> impl Stream<Item = Result<Event, Infallible>> + Send + 'static {
         let client = new_client(&self);
-        client.map(|msg| warp::sse::Event::default().json_data(&msg.unwrap()))
+        client.map(|msg| msg)
     }
 
-    fn send_message_to_clients(&self, message: String) {
+    fn send_message_to_clients(&self, event: &str, data: &str) {
         let mut clients = self.clients.lock().unwrap();
 
         // Update the client list, keeping only non errored channels
-        let mut kept_client: Vec<UnboundedSender<String>> = vec![];
+        let mut kept_client: Vec<UnboundedSender<Event>> = vec![];
         for client in clients.iter().cloned() {
-            if let Ok(()) = client.send(message.clone()) {
+            if let Ok(()) = client.send(Event::default().event(event).data(data)) {
                 kept_client.push(client);
             };
         }
@@ -111,7 +112,9 @@ fn new_client(broadcaster: &Broadcaster) -> Client {
     let mut clients = broadcaster.clients.lock().unwrap();
 
     let (tx, rx) = mpsc::unbounded_channel();
-    tx.send("data: connected\n\n".to_string()).unwrap();
+    let event = Event::default().event("new_client").data("connected");
+    tx.send(event).unwrap();
+
     info!("SSE client connected");
 
     clients.push(tx);
@@ -119,7 +122,7 @@ fn new_client(broadcaster: &Broadcaster) -> Client {
 }
 
 impl Stream for Client {
-    type Item = Result<String, Infallible>;
+    type Item = Result<Event, Infallible>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         match Pin::new(&mut self.0).poll_recv(cx) {

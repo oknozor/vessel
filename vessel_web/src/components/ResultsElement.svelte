@@ -14,7 +14,7 @@
         <div class="flex items-center">
             <div class="ml-4">
                 <span class="text-sm font-medium text-gray-900">
-                    {username}
+                    {ticket}
                 </span>
             </div>
         </div>

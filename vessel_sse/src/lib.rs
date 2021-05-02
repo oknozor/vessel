@@ -6,6 +6,7 @@ extern crate tracing;
 use futures::{Stream, StreamExt};
 use soulseek_protocol::peers::messages::p2p::response::PeerResponse;
 use soulseek_protocol::server::messages::response::ServerResponse;
+use std::collections::HashMap;
 use std::convert::Infallible;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
@@ -15,6 +16,8 @@ use warp::sse::Event;
 use warp::Filter;
 
 struct Client(UnboundedReceiver<Event>);
+
+const MAX_SEARCH_RESULT: u32 = 10;
 
 #[derive(Default, Clone)]
 struct Broadcaster {
@@ -51,16 +54,37 @@ pub async fn start_sse_listener(
     // Dispatch soulseek messages to SSE clients
     let peer_event_dispatcher = tokio::task::spawn(async move {
         info!("Starting to dispatch vessel message to SSE clients");
+        let mut ticket_counts = HashMap::<u32, u32>::new();
         while let Some(message) = peer_rx.recv().await {
-            info!("SSE event : {:?}", message);
-            let event = match message {
-                PeerResponse::SearchReply(_) => "search_reply",
-                _ => "unimplemented",
+            let data = serde_json::to_string(&message).expect("Serialization error");
+
+            let sse_event = match message {
+                PeerResponse::SearchReply(reply) => {
+                    let ticket_count = ticket_counts.get(&reply.ticket);
+
+                    let count = if let Some(count) = ticket_count {
+                        count + 1
+                    } else {
+                        0
+                    };
+
+                    println!("ticket = {}, {}/{}", reply.ticket, count, MAX_SEARCH_RESULT);
+                    ticket_counts.insert(reply.ticket, count);
+
+                    if count < MAX_SEARCH_RESULT {
+                        Some("search_reply")
+                    } else {
+                        None
+                    }
+                }
+                _ => Some("unimplemented"),
             };
-            let message = serde_json::to_string(&message).expect("Serialization error");
-            broadcaster_copy
-                .clone()
-                .send_message_to_clients(event, &message);
+
+            if let Some(event) = sse_event {
+                broadcaster_copy
+                    .clone()
+                    .send_message_to_clients(event, &data)
+            }
         }
     });
 

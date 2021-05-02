@@ -63,7 +63,7 @@ impl Handler {
                                         }
                                     }
                                     Some(PeerResponsePacket::Message(message)) => {
-                                        info!("Got message from peer {:?} : {:?}", self.peer_username, &message);
+                                        info!("Got message from peer {:?}", self.peer_username);
 
                                         if let Err(e) = self.handle_peer_message(&message, db.clone()).await {
                                             return Err(format!("Peer message error : {}", e).into());

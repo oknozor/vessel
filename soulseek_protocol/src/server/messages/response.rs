@@ -12,8 +12,9 @@ use crate::SlskError;
 use bytes::Buf;
 use std::io::Cursor;
 
-#[derive(Debug, Deserialize, Serialize)]
 /// All incoming message from the Soulseek server.
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(untagged)]
 pub enum ServerResponse {
     LoginResponse(LoginResponse),
     ListenPort(u32),

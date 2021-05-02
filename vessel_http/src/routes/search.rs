@@ -3,10 +3,9 @@ use warp::Filter;
 use soulseek_protocol::server::messages::request::ServerRequest;
 use soulseek_protocol::server::messages::search::SearchRequest;
 
-use crate::model::SearchQuery;
+use crate::model;
+use crate::model::{SearchQuery, SearchTicket};
 use crate::sender::VesselSender;
-use warp::http::Response;
-use warp::http::StatusCode;
 
 pub fn search(
     sender: VesselSender<ServerRequest>,
@@ -19,16 +18,15 @@ pub fn search(
         .and(opt_query)
         .map(move |query: Option<SearchQuery>| match query {
             Some(query) => {
+                let ticket = rand::random();
                 sender.send(ServerRequest::FileSearch(SearchRequest {
-                    ticket: rand::random(),
+                    ticket,
                     query: query.term,
                 }));
-                Response::builder()
-                    .status(StatusCode::NO_CONTENT)
-                    .body("ok")
+                warp::reply::json(&SearchTicket { ticket })
             }
-            None => Response::builder()
-                .status(StatusCode::BAD_REQUEST)
-                .body("Failed to decode query param."),
+            None => warp::reply::json(&model::Error {
+                cause: "Failed to decode query param.".to_string(),
+            }),
         })
 }

@@ -10,94 +10,45 @@ use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
 use tokio::sync::mpsc::{self, Receiver, UnboundedReceiver, UnboundedSender};
-use warp::http::Method;
+use warp::sse::Event;
 use warp::Filter;
 
 struct Client(UnboundedReceiver<String>);
 
+#[derive(Default, Clone)]
 struct Broadcaster {
-    clients: Vec<UnboundedSender<String>>,
+    clients: Arc<Mutex<Vec<UnboundedSender<String>>>>,
 }
-
-type Cache = Arc<Mutex<Vec<ServerResponse>>>;
 
 // see : https://github.com/seanmonstar/warp/blob/master/examples/sse_chat.rs
 #[instrument(name = "sse_listener", level = "debug", skip(rx))]
 pub async fn start_sse_listener(mut rx: Receiver<ServerResponse>) {
-    info!("Starting to server sent event broadcast ...");
+    info!("Starting server sent event broadcast ...");
 
-    let cors = warp::cors()
-        .allow_any_origin()
-        .allow_headers(vec![
-            "Access-Control-Allow-Headers",
-            "Access-Control-Request-Method",
-            "Access-Control-Request-Headers",
-            "Origin",
-            "Accept",
-            "X-Requested-With",
-            "Content-Type",
-        ])
-        .allow_methods(&[
-            Method::GET,
-            Method::POST,
-            Method::PUT,
-            Method::PATCH,
-            Method::DELETE,
-            Method::OPTIONS,
-            Method::HEAD,
-        ]);
+    let cors = warp::cors().allow_any_origin();
 
-    // Soulseek send user list and room list once on connect, we cache this to pass them
-    // to new sse client
-    let cache = Arc::new(Mutex::new(Vec::default()));
-
-    let broadcaster = Arc::new(Mutex::new(Broadcaster { clients: vec![] }));
+    let broadcaster = Broadcaster::default();
     let broadcaster_copy = broadcaster.clone();
-
-    // Cache room list and user list to give them to future web clients
-    while let Some(message) = rx.recv().await {
-        match message {
-            ServerResponse::RoomList(rooms) => {
-                let mut cache = cache.lock().unwrap();
-                cache.push(ServerResponse::RoomList(rooms));
-            }
-            ServerResponse::PrivilegedUsers(users) => {
-                let mut cache = cache.lock().unwrap();
-                cache.push(ServerResponse::PrivilegedUsers(users));
-
-                // Once we get user list we can get out and proceed to the main event loop
-                break;
-            }
-            other => debug!("SSE message : {:?}", other),
-        }
-    }
 
     // Dispatch soulseek messages to SSE clients
     let event_dispatcher = tokio::task::spawn(async move {
+        info!("Starting to dispatch vessel message to SSE clients");
         while let Some(message) = rx.recv().await {
-            debug!("SSE event : {:?}", message);
+            info!("SSE event : {:?}", message);
             let message = serde_json::to_string(&message).expect("Serialization error");
-            let broadcaster = broadcaster_copy.clone();
-            let mut broadcaster = broadcaster.lock().unwrap();
-
-            for client in broadcaster.clients.iter_mut() {
-                client
-                    .send(message.clone())
-                    .expect("failed to send message to sse client");
-            }
+            broadcaster_copy.clone().send_message_to_clients(message);
         }
     });
 
+    let users = warp::any().map(move || broadcaster.clone());
+
     let sse_events = warp::path!("events")
         .and(warp::get())
-        .map(move || {
+        .and(users)
+        .map(|broadcaster: Broadcaster| {
+            info!("SSE EVENT");
             // Stream incoming server event to sse
-            let stream = broadcaster
-                .lock()
-                .unwrap()
-                .new_client(cache.clone())
-                .map(|msg| warp::sse::Event::default().json_data(&msg.unwrap()));
-
+            let stream = broadcaster.on_sse_event_received();
             warp::sse::reply(warp::sse::keep_alive().stream(stream))
         })
         .with(cors)
@@ -109,24 +60,37 @@ pub async fn start_sse_listener(mut rx: Receiver<ServerResponse>) {
     );
 }
 
+
 impl Broadcaster {
-    fn new_client(&mut self, cache: Cache) -> Client {
-        info!("sse client connected");
+    fn on_sse_event_received(&self) -> impl Stream<Item=Result<Event, serde_json::Error>> + Send + 'static {
+        let client = new_client(&self);
+        client.map(|msg| warp::sse::Event::default().json_data(&msg.unwrap()))
+    }
 
-        let (tx, rx) = mpsc::unbounded_channel();
+    fn send_message_to_clients(&self, message: String) {
+        let mut clients = self.clients.lock().unwrap();
 
-        tx.send("data: connected\n\n".to_string()).unwrap();
-
-        // get every cached data and push them as a welcome pack to the client
-        let cache = cache.lock().unwrap();
-        for item in cache.iter() {
-            let json = serde_json::to_string(item).unwrap();
-            tx.clone().send(json).unwrap();
+        // Update the client list, keeping only non errored channels
+        let mut kept_client: Vec<UnboundedSender<String>> = vec![];
+        for client in clients.iter().cloned() {
+            if let Ok(()) = client.send(message.clone()) {
+                kept_client.push(client);
+            };
         }
 
-        self.clients.push(tx);
-        Client(rx)
+        *clients = kept_client;
     }
+}
+
+fn new_client(broadcaster: &Broadcaster) -> Client {
+    let mut clients = broadcaster.clients.lock().unwrap();
+
+    let (tx, rx) = mpsc::unbounded_channel();
+    tx.send("data: connected\n\n".to_string()).unwrap();
+    info!("SSE client connected");
+
+    clients.push(tx);
+    Client(rx)
 }
 
 impl Stream for Client {

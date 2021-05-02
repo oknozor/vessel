@@ -62,7 +62,6 @@ async fn server_listener(
     logged_in_tx: mpsc::Sender<()>,
 ) {
     info!("Starting Soulseek server TCP listener");
-
     loop {
         tokio::select! {
              server_message = connection.read_response() => {

@@ -23,6 +23,7 @@
   },
   "dependencies": {
     "@bjornlu/svelte-router": "^0.3.2",
+    "@svelteschool/svelte-forms": "^0.7.0",
     "moment": "^2.29.1",
     "sirv-cli": "^1.0.10"
   }

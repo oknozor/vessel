@@ -1,21 +1,46 @@
 <script>
-    import ResulsTable from "../components/ResulsTable.svelte";
+    import ResultsTable from "../components/ResultsTable.svelte";
+    import {onDestroy, onMount} from "svelte";
+    import {createChannelStore} from "../searchstore";
+
+    let searchTerm = '';
+
+    let searchResults = [];
+
+    let store;
+
+    onMount(() => {
+        store = createChannelStore();
+
+        store.subscribe(incomingMessages => {
+            searchResults = incomingMessages;
+            console.log(searchResults)
+        });
+    });
+
+    onDestroy(() => {
+        store.close()
+    })
+
+    async function doSearch() {
+        await fetch(`http://localhost:3030/search?term=${searchTerm}`);
+    }
 </script>
 
 <div class="w-full sticky top-0 flex items-center pt-8 pb-16">
-    <form class="flex-1" action=".">
+    <form on:submit|preventDefault={doSearch} class="flex-1">
         <figure class="absolute flex items-center pl-3 pt-2">
             <svg height="100%" viewBox="0 0 28 28" width="28" class="css-w9q8es">
                 <path fill-rule="evenodd" clip-rule="evenodd"
                       d="M21.0819 22.6659C21.5206 23.1114 22.2316 23.1114 22.6704 22.6659C23.1091 22.2215 23.1091 21.5026 22.6704 21.0571L19.2054 17.5921C20.1841 16.2781 20.7646 14.6491 20.7646 12.8829C20.7646 8.52913 17.2355 5 12.8829 5C8.52913 5 5 8.52913 5 12.8829C5 17.2366 8.52913 20.7657 12.8829 20.7657C14.6547 20.7657 16.2916 20.1807 17.6079 19.1941L21.0819 22.6659ZM7.25225 12.8829C7.25225 9.77338 9.77225 7.25225 12.8829 7.25225C15.9924 7.25225 18.5124 9.77225 18.5124 12.8829C18.5124 15.9924 15.9924 18.5135 12.884 18.5135C9.7745 18.5135 7.25338 15.9935 7.25338 12.8829H7.25225Z"></path>
             </svg>
         </figure>
-        <input placeholder="Search for music, or something else..." type="search" class="search-input" value="">
+        <input name="searchInput" placeholder="Search for music, or something else..." type="search" class="search-input" bind:value={searchTerm}>
     </form>
     <button class="wishlist-btn">Wishlist</button>
 </div>
 
-<ResulsTable/>
+<ResultsTable results={searchResults}/>
 
 <style>
     .search-input {

@@ -4,7 +4,6 @@
     import {createChannelStore} from "../searchstore";
 
     let searchTerm = '';
-
     let searchResults = [];
 
     let store;
@@ -14,7 +13,8 @@
         store = createChannelStore();
 
         store.subscribe(incomingMessages => {
-            searchResults = incomingMessages.filter(message => message.ticket == searchTicket);
+            // Ensure we get only search response for the current ticket
+            searchResults = incomingMessages.filter(message => message.ticket === searchTicket);
         });
     });
 

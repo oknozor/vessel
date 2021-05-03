@@ -1,8 +1,42 @@
 <script>
     import ResultsElement from "./ResultsElement.svelte";
+    import {afterUpdate, onMount} from "svelte";
+
 
     export let results = []
 
+    const offset = 10;
+    let start = 0;
+    let end = 10;
+
+    let loadedResults = []
+    let loaded = false
+
+    afterUpdate(() => {
+        let unInit = results.length > offset && !loaded;
+        if (unInit) {
+            loadResult();
+            loaded = true
+        }
+    });
+
+    window.addEventListener("scroll", () => {
+        let isMaxScroll = window.innerHeight + window.scrollY >= document.body.offsetHeight
+        if (isMaxScroll) {
+            loadResult();
+        }
+    })
+
+    const loadResult = () => {
+        loadedResults = loadedResults.concat(...results.slice(start, end))
+        start = end
+
+        if (end + offset > results.length) {
+            end = results.length
+        } else {
+            end = end + offset
+        }
+    }
 </script>
 
 <div class="flex flex-col">
@@ -46,10 +80,9 @@
                     </tr>
                     </thead>
                     <tbody class="bg-white divide-y divide-gray-200" x-max="1">
-                    {#each results as result}
+                    {#each loadedResults as result}
                         <ResultsElement {...result}/>
                     {/each}
-                    </tbody>
                 </table>
             </div>
         </div>

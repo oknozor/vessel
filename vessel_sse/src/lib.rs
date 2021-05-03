@@ -17,7 +17,7 @@ use warp::Filter;
 
 struct Client(UnboundedReceiver<Event>);
 
-const MAX_SEARCH_RESULT: u32 = 10;
+const MAX_SEARCH_RESULT: u32 = 500;
 
 #[derive(Default, Clone)]
 struct Broadcaster {

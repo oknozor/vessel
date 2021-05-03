@@ -26,6 +26,7 @@ pub async fn connect() -> SlskConnection {
     let socket = socket2::Socket::new(Domain::IPV4, Type::STREAM, Some(Protocol::TCP)).unwrap();
 
     socket.set_keepalive(true).unwrap();
+    socket.set_nonblocking(true).unwrap();
 
     let mut addr = DEFAULT_ADDRESS.to_socket_addrs().unwrap();
     let addr = addr.next().unwrap();
@@ -47,6 +48,7 @@ impl SlskConnection {
     /// length, try to parse it, otherwise, try to read more bytes from the soulseek TcpStream buffer.
     /// **WARNING**  :
     /// [`Header`]: crate::server.messages::Header
+    #[instrument(level = "debug")]
     pub async fn read_response(&mut self) -> crate::Result<Option<ServerResponse>> {
         loop {
             if let Some(message) = self.parse_response()? {
@@ -77,6 +79,7 @@ impl SlskConnection {
         self.buffer.advance(HEADER_LEN as usize + message_len)
     }
 
+    #[instrument(level = "debug")]
     fn parse_response(&mut self) -> crate::Result<Option<ServerResponse>> {
         use crate::SlskError::Incomplete;
         let mut buf = Cursor::new(&self.buffer[..]);

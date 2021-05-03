@@ -8,13 +8,13 @@
     let searchResults = [];
 
     let store;
+    let searchTicket;
 
     onMount(() => {
         store = createChannelStore();
 
         store.subscribe(incomingMessages => {
-            searchResults = incomingMessages;
-            console.log(searchResults)
+            searchResults = incomingMessages.filter(message => message.ticket == searchTicket);
         });
     });
 
@@ -23,7 +23,14 @@
     })
 
     async function doSearch() {
-        await fetch(`http://localhost:3030/search?term=${searchTerm}`);
+        searchResults = []
+        let response = await fetch(`http://localhost:3030/search?term=${searchTerm}`);
+        if (response.ok) { // if HTTP-status is 200-299
+            let json = await response.json();
+            searchTicket = json.ticket
+        } else {
+            alert("HTTP-Error: " + response.status);
+        }
     }
 </script>
 

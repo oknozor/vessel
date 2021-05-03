@@ -5,6 +5,7 @@ use tokio::sync::{mpsc, Mutex};
 
 use crate::message_common::ConnectionType;
 use crate::peers::messages::PeerRequestPacket;
+use crate::SlskError;
 use tokio::sync::mpsc::Receiver;
 
 pub type PeerAddress = String;
@@ -66,6 +67,14 @@ impl Default for SenderPool {
 }
 
 impl SenderPool {
+    pub async fn set_connection_lost(&mut self, address: String) {
+        let mut channels = self.inner.lock().await;
+        let state = channels.get_mut(&address);
+
+        if let Some(state) = state {
+            state.conn_state = ConnectionState::Lost
+        }
+    }
     pub async fn new_incomming_indirect_parent_connection_pending(
         &mut self,
         username: String,
@@ -113,7 +122,7 @@ impl SenderPool {
 
     pub async fn new_peer_connection(
         &mut self,
-        address: String,
+        address: &str,
     ) -> (Receiver<PeerRequestPacket>, PeerConnectionState) {
         let (tx, rx) = mpsc::channel(100);
         let mut channels = self.inner.lock().await;
@@ -127,11 +136,15 @@ impl SenderPool {
         };
 
         let state_copy = state.clone();
-        channels.insert(address, state);
+        channels.insert(address.to_string(), state);
         (rx, state_copy)
     }
 
-    pub async fn send_message(&mut self, address: String, message: PeerRequestPacket) {
+    pub async fn send_message(
+        &mut self,
+        address: String,
+        message: PeerRequestPacket,
+    ) -> crate::Result<()> {
         let sender;
         {
             let channel_pool = self.inner.lock().await;
@@ -139,6 +152,11 @@ impl SenderPool {
 
             sender = if let Some(state) = channel {
                 info!("Found channel for peer {:?}@{}", state.username, address);
+
+                if let ConnectionState::Lost = state.conn_state {
+                    return Err(SlskError::PeerConnectionLost);
+                }
+
                 Some(state.channel.clone())
             } else {
                 error!("Channel Not found for peer {}", address);
@@ -151,6 +169,7 @@ impl SenderPool {
                 sender.send(message).await.expect("Send error");
             }
         }
+        Ok(())
     }
 
     pub async fn get_parent_count(&self) -> usize {
@@ -178,7 +197,7 @@ impl SenderPool {
 
     pub async fn update_or_create(
         &mut self,
-        address: String,
+        address: &str,
     ) -> (Receiver<PeerRequestPacket>, PeerConnectionState) {
         match self.update_state(&address).await {
             None => self.new_peer_connection(address).await,

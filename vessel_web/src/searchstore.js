@@ -1,5 +1,4 @@
 import { writable } from 'svelte/store';
-import moment from "moment/moment";
 
 export const createChannelStore = () => {
     const { subscribe, set, update } = writable([]);
@@ -13,14 +12,7 @@ export const createChannelStore = () => {
     }
 
     eventSource.addEventListener("search_reply", e => {
-        console.log(e.type)
-        const eventPayload = e.data
-            .replaceAll("\\\"", "\"")
-            .replaceAll("\\n", "");
         let json = JSON.parse(e.data);
-
-        console.log(json)
-
         update(messages => messages.concat(json));
     });
 

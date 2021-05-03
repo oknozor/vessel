@@ -68,7 +68,6 @@ pub async fn start_sse_listener(
                         0
                     };
 
-                    println!("ticket = {}, {}/{}", reply.ticket, count, MAX_SEARCH_RESULT);
                     ticket_counts.insert(reply.ticket, count);
 
                     if count < MAX_SEARCH_RESULT {

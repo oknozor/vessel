@@ -2,7 +2,7 @@
     import File from "./File.svelte";
 
     export let files = []
-
+    export let username;
 </script>
 
 <div class="flex flex-col">
@@ -24,11 +24,15 @@
                             class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             Size
                         </th>
+                        <th scope="col"
+                            class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Download
+                        </th>
                     </tr>
                     </thead>
                     <tbody class="bg-white divide-y divide-gray-200" x-max="1">
                     {#each files as file}
-                        <File {...file}/>
+                        <File name={file.name} extension={file.extension} size={file.size} username={username}/>
                     {/each}
                     </tbody>
                 </table>

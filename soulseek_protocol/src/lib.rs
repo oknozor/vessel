@@ -47,6 +47,7 @@ pub enum SlskError {
     ConfigError(ConfigError),
     NoPermitAvailable,
     NoTicket,
+    PeerConnectionLost,
     UnkownMessage,
 
     /// Invalid message encoding
@@ -110,6 +111,9 @@ impl fmt::Display for SlskError {
             }
             SlskError::NoTicket => {
                 write!(fmt, "Ticket for download not found")
+            }
+            SlskError::PeerConnectionLost => {
+                write!(fmt, "Previous connection with peer was lost")
             }
         }
     }

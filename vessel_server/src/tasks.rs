@@ -104,8 +104,7 @@ async fn server_listener(
                                         .map_err(|err| SlskError::Other(Box::new(err)))
                                 }
                             };
-
-                            if let Err(e) = err {
+                                if let Err(e) = err {
                                 error!(" Error reading Soulseek stream : {}", e);
                                 info!("Reconnecting");
                                 connection = connection::connect().await;
@@ -125,7 +124,6 @@ async fn server_listener(
                         connection = new_connection;
                     }
                   }
-
               }
 
               peer_connection_request = request_peer_connection_rx.recv() => {

@@ -262,7 +262,6 @@ impl Handler {
 
 impl Drop for Handler {
     fn drop(&mut self) {
-        debug!("Dropping handler");
         self.limit_connections.add_permits(1);
     }
 }

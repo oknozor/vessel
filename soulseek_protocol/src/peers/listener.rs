@@ -56,7 +56,6 @@ impl GlobalConnectionHandler {
             dispatch_peer_message(peer_message_dispatcher, channels.clone(), db.clone()),
             listen_for_indirect_connection(
                 peer_connection_rx,
-                request_peer_connection_tx.clone(),
                 sse_tx.clone(),
                 channels.clone(),
                 limit_connections.clone(),
@@ -111,7 +110,7 @@ impl GlobalConnectionHandler {
                         );
 
                         let address = socket.peer_addr()?.ip().to_string();
-                        let (rx, state) = channels.update_or_create(address).await;
+                        let (rx, state) = channels.update_or_create(&address).await;
 
                         let mut handler = Handler {
                             peer_username: state.username.clone(),
@@ -124,6 +123,7 @@ impl GlobalConnectionHandler {
                         };
 
                         let db_copy = db.clone();
+                        let mut channels_coppy = channels.clone();
                         tokio::spawn(async move {
                             match handler
                                 .listen(db_copy, state.conn_state.to_connection_type())
@@ -132,6 +132,8 @@ impl GlobalConnectionHandler {
                                 Err(e) => error!(cause = ?e, "Error accepting inbound connection"),
                                 Ok(()) => info!("Closing handler"),
                             };
+
+                            channels_coppy.set_connection_lost(address).await;
                         });
                     }
                     Err(err) => {
@@ -268,7 +270,6 @@ impl PeerListener {
 
 async fn listen_for_indirect_connection(
     mut indirect_connection_rx: mpsc::Receiver<PeerConnectionRequest>,
-    server_request_tx: mpsc::Sender<ServerRequest>,
     sse_tx: mpsc::Sender<PeerResponse>,
     channels: SenderPool,
     limit_connections: Arc<Semaphore>,
@@ -299,24 +300,8 @@ async fn listen_for_indirect_connection(
         .await;
 
         match handler {
-            Ok(mut handler) => {
-                info!(
-                    "Connected to peer: {}@{:?}",
-                    &peer.username,
-                    peer.get_address()
-                );
-
-                let db_copy = database.clone();
-                let channel = channels.clone();
-                tokio::spawn(async move {
-                    match handler
-                        .connect(db_copy, channel.clone(), ConnectionType::PeerToPeer)
-                        .await
-                    {
-                        Ok(()) => info!("Indirect connection task completed"),
-                        Err(e) => error!(cause = %e, "Error in indirect connection"),
-                    };
-                });
+            Ok(handler) => {
+                spawn_peer_connection(channels.clone(), database.clone(), &peer, handler);
             }
             Err(e) => {
                 warn!("Error trying indirect connection to {:?} : {}", peer, e);
@@ -325,6 +310,28 @@ async fn listen_for_indirect_connection(
     }
 
     Ok(())
+}
+
+pub(crate) fn spawn_peer_connection(
+    channels: SenderPool,
+    database: Database,
+    peer: &Peer,
+    mut handler: Handler,
+) {
+    let peer_address = peer.get_address();
+    info!("Connected to peer: {}@{:?}", &peer.username, peer_address);
+
+    tokio::spawn(async move {
+        match handler
+            .connect(database, channels.clone(), ConnectionType::PeerToPeer)
+            .await
+        {
+            Ok(()) => info!("Indirect connection task completed"),
+            Err(e) => error!(cause = %e, "Error in indirect connection"),
+        };
+
+        channels.clone().set_connection_lost(peer_address).await;
+    });
 }
 
 #[instrument(
@@ -503,7 +510,10 @@ async fn dispatch_peer_message(
         match address {
             Some(address) => {
                 info!("Incoming peer message from HTTP API for peer {:?}", address);
-                channels.send_message(address, message).await;
+                match channels.send_message(address, message).await {
+                    Ok(()) => {}
+                    Err(e) => error!(cause = ?e, "Failed to send message to peer"),
+                };
             }
             None => error!("Peer address is unknown cannot send message"),
         };

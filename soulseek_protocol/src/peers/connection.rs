@@ -40,6 +40,7 @@ impl Connection {
     ///
     /// [`Header`]: crate::peers::messages::Header
     /// [`read_response_with_timeout`]: SlskConnection::read_response_with_timeout
+    #[instrument(level = "debug")]
     pub async fn read_response(&mut self) -> crate::Result<Option<PeerResponsePacket>> {
         // Read incoming messages according to the connection type
         loop {

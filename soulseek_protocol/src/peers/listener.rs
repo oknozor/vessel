@@ -467,7 +467,7 @@ async fn get_connection(
 
     match timeout(
         Duration::from_millis(2000),
-        TcpStream::connect(user.get_address()),
+        TcpStream::connect(user.get_address_with_port()),
     )
     .await
     {
@@ -486,7 +486,7 @@ async fn get_connection(
                 _shutdown_complete: shutdown_complete_tx.clone(),
             })
         }
-        Ok(Err(e)) => Err(SlskError::InvaildSocketAddress(user.get_address())),
+        Ok(Err(e)) => Err(SlskError::InvalidSocketAddress(user.get_address())),
         Err(e) => Err(SlskError::TimeOut(e)),
     }
 }

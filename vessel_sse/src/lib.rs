@@ -12,9 +12,9 @@ use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
 use tokio::sync::mpsc::{self, Receiver, UnboundedReceiver, UnboundedSender};
+use tokio::task::JoinHandle;
 use warp::sse::Event;
 use warp::Filter;
-use tokio::task::JoinHandle;
 
 struct Client(UnboundedReceiver<Event>);
 
@@ -27,10 +27,7 @@ struct Broadcaster {
 
 // see : https://github.com/seanmonstar/warp/blob/master/examples/sse_chat.rs
 #[instrument(name = "sse_listener", level = "debug", skip(rx))]
-pub async fn start_sse_listener(
-    rx: Receiver<ServerResponse>,
-    peer_rx: Receiver<PeerResponse>,
-) {
+pub async fn start_sse_listener(rx: Receiver<ServerResponse>, peer_rx: Receiver<PeerResponse>) {
     info!("Starting server sent event broadcast ...");
     let cors = warp::cors().allow_any_origin();
 
@@ -65,7 +62,10 @@ pub async fn start_sse_listener(
     );
 }
 
-fn dispatch_peer_message(mut peer_rx: Receiver<PeerResponse>, broadcaster_copy: Broadcaster) -> JoinHandle<()> {
+fn dispatch_peer_message(
+    mut peer_rx: Receiver<PeerResponse>,
+    broadcaster_copy: Broadcaster,
+) -> JoinHandle<()> {
     tokio::task::spawn(async move {
         info!("Starting to dispatch vessel message to SSE clients");
         let mut ticket_counts = HashMap::<u32, u32>::new();
@@ -102,7 +102,10 @@ fn dispatch_peer_message(mut peer_rx: Receiver<PeerResponse>, broadcaster_copy: 
     })
 }
 
-fn dispatch_soulseek_message(mut rx: Receiver<ServerResponse>, broadcaster_copy: Broadcaster) -> JoinHandle<()> {
+fn dispatch_soulseek_message(
+    mut rx: Receiver<ServerResponse>,
+    broadcaster_copy: Broadcaster,
+) -> JoinHandle<()> {
     tokio::task::spawn(async move {
         info!("Starting to dispatch vessel message to SSE clients");
         while let Some(message) = rx.recv().await {

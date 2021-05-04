@@ -48,7 +48,8 @@ pub enum SlskError {
     NoPermitAvailable,
     NoTicket,
     PeerConnectionLost,
-    UnkownMessage,
+    UnknownMessage,
+    InvaildSocketAddress(String),
 
     /// Invalid message encoding
     Other(crate::Error),
@@ -106,7 +107,7 @@ impl fmt::Display for SlskError {
             SlskError::NoPermitAvailable => {
                 write!(fmt, "No available connection")
             }
-            SlskError::UnkownMessage => {
+            SlskError::UnknownMessage => {
                 write!(fmt, "Got unkown message")
             }
             SlskError::NoTicket => {
@@ -114,6 +115,9 @@ impl fmt::Display for SlskError {
             }
             SlskError::PeerConnectionLost => {
                 write!(fmt, "Previous connection with peer was lost")
+            }
+            SlskError::InvaildSocketAddress(addr) => {
+                write!(fmt, "Invalid socket address : {}", addr)
             }
         }
     }

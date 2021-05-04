@@ -1,8 +1,8 @@
 import { writable } from 'svelte/store';
 
-export const createChannelStore = () => {
-    const { subscribe, set, update } = writable([]);
+export const { subscribe, set, update } = writable([]);
 
+export const createChannelStore = () => {
     const eventSource = new EventSource(
         `http://127.0.0.1:3031/events`,
     );

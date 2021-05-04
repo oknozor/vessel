@@ -14,6 +14,7 @@ use std::task::{Context, Poll};
 use tokio::sync::mpsc::{self, Receiver, UnboundedReceiver, UnboundedSender};
 use warp::sse::Event;
 use warp::Filter;
+use tokio::task::JoinHandle;
 
 struct Client(UnboundedReceiver<Event>);
 
@@ -27,32 +28,45 @@ struct Broadcaster {
 // see : https://github.com/seanmonstar/warp/blob/master/examples/sse_chat.rs
 #[instrument(name = "sse_listener", level = "debug", skip(rx))]
 pub async fn start_sse_listener(
-    mut rx: Receiver<ServerResponse>,
-    mut peer_rx: Receiver<PeerResponse>,
+    rx: Receiver<ServerResponse>,
+    peer_rx: Receiver<PeerResponse>,
 ) {
     info!("Starting server sent event broadcast ...");
-
     let cors = warp::cors().allow_any_origin();
 
     let broadcaster = Broadcaster::default();
     let broadcaster_copy = broadcaster.clone();
 
     // Dispatch soulseek messages to SSE clients
-    let event_dispatcher = tokio::task::spawn(async move {
-        info!("Starting to dispatch vessel message to SSE clients");
-        while let Some(message) = rx.recv().await {
-            info!("SSE event : {:?}", message);
-            let data = serde_json::to_string(&message).expect("Serialization error");
-            let event = "server_message".to_string();
-            broadcaster_copy
-                .clone()
-                .send_message_to_clients(&event, &data);
-        }
-    });
+    let event_dispatcher = dispatch_soulseek_message(rx, broadcaster_copy);
 
     let broadcaster_copy = broadcaster.clone();
-    // Dispatch soulseek messages to SSE clients
-    let peer_event_dispatcher = tokio::task::spawn(async move {
+    // Dispatch peer messages to SSE clients
+    let peer_event_dispatcher = dispatch_peer_message(peer_rx, broadcaster_copy);
+
+    let users = warp::any().map(move || broadcaster.clone());
+
+    let sse_events = warp::path!("events")
+        .and(warp::get())
+        .and(users)
+        .map(|broadcaster: Broadcaster| {
+            info!("SSE EVENT");
+            // Stream incoming server event to sse
+            let stream = broadcaster.on_sse_event_received();
+            warp::sse::reply(warp::sse::keep_alive().stream(stream))
+        })
+        .with(cors)
+        .with(warp::log("api"));
+
+    let _ = join!(
+        warp::serve(sse_events).run(([127, 0, 0, 1], 3031)),
+        event_dispatcher,
+        peer_event_dispatcher,
+    );
+}
+
+fn dispatch_peer_message(mut peer_rx: Receiver<PeerResponse>, broadcaster_copy: Broadcaster) -> JoinHandle<()> {
+    tokio::task::spawn(async move {
         info!("Starting to dispatch vessel message to SSE clients");
         let mut ticket_counts = HashMap::<u32, u32>::new();
         while let Some(message) = peer_rx.recv().await {
@@ -85,27 +99,21 @@ pub async fn start_sse_listener(
                     .send_message_to_clients(event, &data)
             }
         }
-    });
+    })
+}
 
-    let users = warp::any().map(move || broadcaster.clone());
-
-    let sse_events = warp::path!("events")
-        .and(warp::get())
-        .and(users)
-        .map(|broadcaster: Broadcaster| {
-            info!("SSE EVENT");
-            // Stream incoming server event to sse
-            let stream = broadcaster.on_sse_event_received();
-            warp::sse::reply(warp::sse::keep_alive().stream(stream))
-        })
-        .with(cors)
-        .with(warp::log("api"));
-
-    let _ = join!(
-        warp::serve(sse_events).run(([127, 0, 0, 1], 3031)),
-        event_dispatcher,
-        peer_event_dispatcher,
-    );
+fn dispatch_soulseek_message(mut rx: Receiver<ServerResponse>, broadcaster_copy: Broadcaster) -> JoinHandle<()> {
+    tokio::task::spawn(async move {
+        info!("Starting to dispatch vessel message to SSE clients");
+        while let Some(message) = rx.recv().await {
+            info!("SSE event : {:?}", message);
+            let data = serde_json::to_string(&message).expect("Serialization error");
+            let event = "server_message".to_string();
+            broadcaster_copy
+                .clone()
+                .send_message_to_clients(&event, &data);
+        }
+    })
 }
 
 impl Broadcaster {

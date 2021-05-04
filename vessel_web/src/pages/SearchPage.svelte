@@ -9,6 +9,7 @@
     let store;
     let searchTicket;
 
+
     onMount(() => {
         store = createChannelStore();
 
@@ -16,11 +17,15 @@
             // Ensure we get only search response for the current ticket
             searchResults = incomingMessages.filter(message => message.ticket === searchTicket);
         });
+
+        return () => {
+            if(store.readyState === 1) {
+                console.log("Closing event source")
+                store.close();
+            }
+        };
     });
 
-    onDestroy(() => {
-        store.close()
-    })
 
     async function doSearch() {
         searchResults = []

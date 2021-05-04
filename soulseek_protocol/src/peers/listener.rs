@@ -486,7 +486,7 @@ async fn get_connection(
                 _shutdown_complete: shutdown_complete_tx.clone(),
             })
         }
-        Ok(Err(e)) => Err(SlskError::Other(Box::new(e))),
+        Ok(Err(e)) => Err(SlskError::InvaildSocketAddress(user.get_address())),
         Err(e) => Err(SlskError::TimeOut(e)),
     }
 }

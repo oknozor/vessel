@@ -9,7 +9,6 @@
     let store;
     let searchTicket;
 
-
     onMount(() => {
         store = createChannelStore();
 
@@ -52,7 +51,7 @@
     <button class="wishlist-btn">Wishlist</button>
 </div>
 
-<ResultsTable results={searchResults}/>
+<ResultsTable results={searchResults} searchTicket={searchTicket}/>
 
 <style>
     .search-input {

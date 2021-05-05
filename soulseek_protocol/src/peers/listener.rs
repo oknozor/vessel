@@ -6,7 +6,7 @@ use std::sync::Arc;
 use rand::random;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::mpsc::error::SendError;
-use tokio::sync::mpsc::Receiver;
+use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::sync::{broadcast, mpsc, Semaphore};
 use tokio::time::timeout;
 use tokio::time::{self, Duration};
@@ -28,50 +28,59 @@ use crate::SlskError;
 const MAX_CONNECTIONS: usize = 4096;
 const MAX_PARENT: usize = 10;
 
+#[derive(Debug, Clone)]
+pub(crate) struct ShutdownHelper {
+    notify_shutdown: broadcast::Sender<()>,
+    shutdown_complete_tx: mpsc::Sender<()>,
+    limit_connections: Arc<Semaphore>,
+}
+
 struct GlobalConnectionHandler {
     peer_listener: PeerListener,
-    server_request_tx: mpsc::Sender<ServerRequest>,
-    limit_connections: Arc<Semaphore>,
-    notify_shutdown: broadcast::Sender<()>,
+    senders: PeerListenerSenders,
+    db: Database,
+    channels: SenderPool,
     shutdown_complete_rx: mpsc::Receiver<()>,
-    shutdown_complete_tx: mpsc::Sender<()>,
+    shutdown_helper: ShutdownHelper,
+}
+
+pub struct PeerListenerSenders {
+    pub sse_tx: mpsc::Sender<PeerResponse>,
+    pub server_request_tx: Sender<ServerRequest>,
+}
+
+// This is mainly used to avoid having to much arguments in function definition
+pub struct PeerListenerReceivers {
+    pub peer_connection_rx: Receiver<PeerConnectionRequest>,
+    pub possible_parent_rx: Receiver<Vec<Peer>>,
+    pub peer_request_rx: Receiver<(String, PeerRequestPacket)>,
 }
 
 impl GlobalConnectionHandler {
-    async fn run(
-        &mut self,
-        peer_connection_rx: Receiver<PeerConnectionRequest>,
-        sse_tx: mpsc::Sender<PeerResponse>,
-        request_peer_connection_tx: mpsc::Sender<ServerRequest>,
-        mut possible_parent_rx: Receiver<Vec<Peer>>,
-        peer_message_dispatcher: Receiver<(String, PeerRequestPacket)>,
-        db: Database,
-        channels: SenderPool,
-    ) -> crate::Result<()> {
-        let limit_connections = self.limit_connections.clone();
-        let notify_shutdown = self.notify_shutdown.clone();
-        let shutdown_complete_tx = self.shutdown_complete_tx.clone();
+    async fn run(&mut self, mut receivers: PeerListenerReceivers) -> crate::Result<()> {
+        let server_request_tx = self.senders.server_request_tx.clone();
+        let sse_tx = self.senders.sse_tx.clone();
+        let channels = self.channels.clone();
+        let db = self.db.clone();
+
+        let shutdown_helper = self.shutdown_helper.clone();
 
         let _ = tokio::join!(
-            dispatch_peer_message(peer_message_dispatcher, channels.clone(), db.clone()),
+            dispatch_peer_message(receivers.peer_request_rx, channels.clone(), db.clone()),
             listen_for_indirect_connection(
-                peer_connection_rx,
+                receivers.peer_connection_rx,
                 sse_tx.clone(),
                 channels.clone(),
-                limit_connections.clone(),
-                notify_shutdown.clone(),
-                shutdown_complete_tx.clone(),
+                shutdown_helper.clone(),
                 db.clone()
             ),
             self.accept_peer_connection(sse_tx.clone(), channels.clone(), db.clone()),
             connect_to_parents(
-                request_peer_connection_tx,
-                sse_tx.clone(),
-                channels.clone(),
-                limit_connections,
-                notify_shutdown,
-                shutdown_complete_tx,
-                &mut possible_parent_rx,
+                server_request_tx,
+                sse_tx,
+                channels,
+                shutdown_helper.clone(),
+                &mut receivers.possible_parent_rx,
                 db
             )
         );
@@ -90,13 +99,18 @@ impl GlobalConnectionHandler {
         mut channels: SenderPool,
         db: Database,
     ) -> crate::Result<()> {
-        if self.limit_connections.available_permits() > 0 {
+        if self.shutdown_helper.limit_connections.available_permits() > 0 {
             info!("Accepting inbound connections");
 
             loop {
                 match self.peer_listener.accept().await {
                     Ok(socket) => {
-                        self.limit_connections.acquire().await.unwrap().forget();
+                        self.shutdown_helper
+                            .limit_connections
+                            .acquire()
+                            .await
+                            .unwrap()
+                            .forget();
 
                         info!(
                             "Incoming direct connection from {:?} accepted",
@@ -105,7 +119,7 @@ impl GlobalConnectionHandler {
 
                         debug!(
                             "Available connections : {}/{}",
-                            self.limit_connections.available_permits(),
+                            self.shutdown_helper.limit_connections.available_permits(),
                             MAX_CONNECTIONS
                         );
 
@@ -117,9 +131,11 @@ impl GlobalConnectionHandler {
                             connection: Connection::new(socket),
                             handler_rx: rx,
                             sse_tx: sse_tx.clone(),
-                            limit_connections: self.limit_connections.clone(),
-                            shutdown: Shutdown::new(self.notify_shutdown.subscribe()),
-                            _shutdown_complete: self.shutdown_complete_tx.clone(),
+                            shutdown: Shutdown::new(
+                                self.shutdown_helper.notify_shutdown.subscribe(),
+                            ),
+                            limit_connections: self.shutdown_helper.limit_connections.clone(),
+                            _shutdown_complete: self.shutdown_helper.shutdown_complete_tx.clone(),
                         };
 
                         let db_copy = db.clone();
@@ -158,25 +174,14 @@ struct PeerListener {
 #[instrument(
     name = "peers_listener",
     level = "debug",
-    skip(
-        listener,
-        shutdown,
-        peer_connection_rx,
-        request_peer_connection_tx,
-        possible_parent_rx,
-        peer_message_dispatcher,
-        database
-    )
+    skip(listener, shutdown, senders, receivers, db, channels)
 )]
 pub async fn run(
     listener: TcpListener,
     shutdown: impl Future,
-    sse_tx: mpsc::Sender<PeerResponse>,
-    peer_connection_rx: Receiver<PeerConnectionRequest>,
-    request_peer_connection_tx: mpsc::Sender<ServerRequest>,
-    possible_parent_rx: Receiver<Vec<Peer>>,
-    peer_message_dispatcher: mpsc::Receiver<(String, PeerRequestPacket)>,
-    database: Database,
+    senders: PeerListenerSenders,
+    receivers: PeerListenerReceivers,
+    db: Database,
     channels: SenderPool,
 ) -> crate::Result<()> {
     debug!("Waiting for user to be logged in");
@@ -186,18 +191,26 @@ pub async fn run(
     let (notify_shutdown, _) = broadcast::channel(1);
     let (shutdown_complete_tx, shutdown_complete_rx) = mpsc::channel(1);
 
-    // Initialize the listener state
-    let mut server = GlobalConnectionHandler {
-        peer_listener: PeerListener { listener },
-        server_request_tx: request_peer_connection_tx.clone(),
-        limit_connections: Arc::new(Semaphore::new(MAX_CONNECTIONS)),
+    let shutdown_helper = ShutdownHelper {
         notify_shutdown,
         shutdown_complete_tx,
+        limit_connections: Arc::new(Semaphore::new(MAX_CONNECTIONS)),
+    };
+
+    // Initialize the listener state
+    let peer_listener = PeerListener { listener };
+
+    let mut server = GlobalConnectionHandler {
+        peer_listener,
+        senders,
+        db,
+        channels,
+        shutdown_helper,
         shutdown_complete_rx,
     };
 
     tokio::select! {
-        res = server.run(peer_connection_rx, sse_tx, request_peer_connection_tx, possible_parent_rx, peer_message_dispatcher, database, channels) => {
+        res = server.run(receivers) => {
             if let Err(err) = res {
                 error!(cause = %err, "failed to accept");
             }
@@ -210,16 +223,14 @@ pub async fn run(
 
     let GlobalConnectionHandler {
         mut shutdown_complete_rx,
-        shutdown_complete_tx,
-        server_request_tx,
-        notify_shutdown,
+        shutdown_helper,
         ..
     } = server;
 
     debug!("Closing connection handler");
-    drop(notify_shutdown);
+    drop(shutdown_helper.notify_shutdown);
     // Drop final `Sender` so the `Receiver` below can complete
-    drop(shutdown_complete_tx);
+    drop(shutdown_helper.shutdown_complete_tx);
 
     // Wait for all active connections to finish processing. As the `Sender`
     // handle held by the listener has been dropped above, the only remaining
@@ -268,13 +279,12 @@ impl PeerListener {
     }
 }
 
+// Receive connection request from server, and attempt direct connection to peeer
 async fn listen_for_indirect_connection(
     mut indirect_connection_rx: mpsc::Receiver<PeerConnectionRequest>,
     sse_tx: mpsc::Sender<PeerResponse>,
     channels: SenderPool,
-    limit_connections: Arc<Semaphore>,
-    notify_shutdown: broadcast::Sender<()>,
-    shutdown_complete_tx: mpsc::Sender<()>,
+    shutdown_helper: ShutdownHelper,
     database: Database,
 ) -> Result<(), SendError<ServerRequest>> {
     while let Some(connection_request) = indirect_connection_rx.recv().await {
@@ -291,10 +301,8 @@ async fn listen_for_indirect_connection(
 
         let handler = get_connection(
             channels.clone(),
-            limit_connections.clone(),
             sse_tx.clone(),
-            notify_shutdown.clone(),
-            shutdown_complete_tx.clone(),
+            shutdown_helper.clone(),
             peer.clone(),
         )
         .await;
@@ -323,7 +331,7 @@ pub(crate) fn spawn_peer_connection(
 
     tokio::spawn(async move {
         match handler
-            .connect(database, channels.clone(), ConnectionType::PeerToPeer)
+            .connection_handshake(database, channels.clone(), ConnectionType::PeerToPeer)
             .await
         {
             Ok(()) => info!("Indirect connection task completed"),
@@ -339,9 +347,7 @@ pub(crate) fn spawn_peer_connection(
     skip(
         request_peer_connection_tx,
         channels,
-        limit_connections,
-        notify_shutdown,
-        shutdown_complete_tx,
+        shutdown_helper,
         possible_parent_rx,
         database
     )
@@ -350,9 +356,7 @@ async fn connect_to_parents(
     request_peer_connection_tx: mpsc::Sender<ServerRequest>,
     sse_tx: mpsc::Sender<PeerResponse>,
     mut channels: SenderPool,
-    limit_connections: Arc<Semaphore>,
-    notify_shutdown: broadcast::Sender<()>,
-    shutdown_complete_tx: mpsc::Sender<()>,
+    shutdown_helper: ShutdownHelper,
     possible_parent_rx: &mut Receiver<Vec<Peer>>,
     database: Database,
 ) -> Result<(), SendError<ServerRequest>> {
@@ -373,65 +377,27 @@ async fn connect_to_parents(
 
                 let handler = get_connection(
                     channels.clone(),
-                    limit_connections.clone(),
                     sse_tx.clone(),
-                    notify_shutdown.clone(),
-                    shutdown_complete_tx.clone(),
+                    shutdown_helper.clone(),
                     parent.clone(),
                 )
                 .await;
 
                 match handler {
-                    Ok(mut handler) => {
-                        info!(
-                            "Connected to distributed parent: {}@{:?}",
-                            &parent.username,
-                            parent.get_address()
-                        );
-
-                        database.insert_peer(&parent.username, parent.ip).unwrap();
-
-                        let db_copy = database.clone();
-                        let channels = channels.clone();
-
-                        tokio::spawn(async move {
-                            match handler
-                                .connect(db_copy, channels, ConnectionType::DistributedNetwork)
-                                .await
-                            {
-                                Ok(()) => info!("Parent connection terminated"),
-                                Err(err) => error!(cause = ?err, "connection error"),
-                            }
-                        });
+                    Ok(handler) => {
+                        spawn_parent_connection(&mut channels, database.clone(), &parent, handler);
                     }
                     Err(e) => {
-                        let token = random();
                         warn!(
                             "Unable to establish parent connection with {:?},  cause = {}",
                             parent, e
                         );
-
-                        // We were unable to connect to ths peer, we are now asking the server
-                        // to dispatch a connection request and expect a PierceFirewall message
-                        // before upgrading the connection to DistributedNetwork
-                        channels
-                            .new_incomming_indirect_parent_connection_pending(
-                                parent.username.clone(),
-                                parent.get_address(),
-                                token,
-                            )
-                            .await;
-
-                        info!("Falling back to indirect connection with token {}", token);
-                        let server_request_sender = request_peer_connection_tx.clone();
-
-                        server_request_sender
-                            .send(ServerRequest::ConnectToPeer(RequestConnectionToPeer {
-                                token,
-                                username: parent.username,
-                                connection_type: ConnectionType::DistributedNetwork,
-                            }))
-                            .await?;
+                        request_indirect_connection(
+                            request_peer_connection_tx.clone(),
+                            &mut channels,
+                            parent,
+                        )
+                        .await?;
                     }
                 }
             }
@@ -439,22 +405,83 @@ async fn connect_to_parents(
     }
 }
 
-#[instrument(
-    level = "debug",
-    skip(limit_connections, channels, notify_shutdown, shutdown_complete_tx)
-)]
+async fn request_indirect_connection(
+    request_peer_connection_tx: Sender<ServerRequest>,
+    channels: &mut SenderPool,
+    parent: Peer,
+) -> Result<(), SendError<ServerRequest>> {
+    let token = random();
+
+    // We were unable to connect to ths peer, we are now asking the server
+    // to dispatch a connection request and expect a PierceFirewall message
+    // before upgrading the connection to DistributedNetwork
+    channels
+        .new_incomming_indirect_parent_connection_pending(
+            parent.username.clone(),
+            parent.get_address(),
+            token,
+        )
+        .await;
+
+    info!("Falling back to indirect connection with token {}", token);
+    let server_request_sender = request_peer_connection_tx.clone();
+
+    server_request_sender
+        .send(ServerRequest::ConnectToPeer(RequestConnectionToPeer {
+            token,
+            username: parent.username,
+            connection_type: ConnectionType::DistributedNetwork,
+        }))
+        .await
+}
+
+fn spawn_parent_connection(
+    channels: &mut SenderPool,
+    database: Database,
+    parent: &Peer,
+    mut handler: Handler,
+) {
+    info!(
+        "Connected to distributed parent: {}@{:?}",
+        &parent.username,
+        parent.get_address()
+    );
+
+    database.insert_peer(&parent.username, parent.ip).unwrap();
+
+    let channels = channels.clone();
+
+    tokio::spawn(async move {
+        match handler
+            .connection_handshake(
+                database.clone(),
+                channels,
+                ConnectionType::DistributedNetwork,
+            )
+            .await
+        {
+            Ok(()) => info!("Parent connection terminated"),
+            Err(err) => error!(cause = ?err, "connection error"),
+        }
+    });
+}
+
+#[instrument(level = "debug", skip(channels, shutdown_helper))]
 async fn get_connection(
     mut channels: SenderPool,
-    limit_connections: Arc<Semaphore>,
     sse_tx: mpsc::Sender<PeerResponse>,
-    notify_shutdown: broadcast::Sender<()>,
-    shutdown_complete_tx: mpsc::Sender<()>,
+    shutdown_helper: ShutdownHelper,
     user: Peer,
 ) -> crate::Result<Handler> {
-    limit_connections.acquire().await.unwrap().forget();
+    shutdown_helper
+        .limit_connections
+        .acquire()
+        .await
+        .unwrap()
+        .forget();
     debug!(
         "Available permit : {:?}",
-        limit_connections.available_permits()
+        shutdown_helper.limit_connections.available_permits()
     );
 
     // Accept a new socket. This will attempt to perform error handling.
@@ -481,12 +508,12 @@ async fn get_connection(
                 connection: Connection::new(socket),
                 handler_rx: rx,
                 sse_tx: sse_tx.clone(),
-                limit_connections: limit_connections.clone(),
-                shutdown: Shutdown::new(notify_shutdown.subscribe()),
-                _shutdown_complete: shutdown_complete_tx.clone(),
+                shutdown: Shutdown::new(shutdown_helper.notify_shutdown.subscribe()),
+                limit_connections: shutdown_helper.limit_connections.clone(),
+                _shutdown_complete: shutdown_helper.shutdown_complete_tx.clone(),
             })
         }
-        Ok(Err(e)) => Err(SlskError::InvalidSocketAddress(user.get_address())),
+        Ok(Err(_e)) => Err(SlskError::InvalidSocketAddress(user.get_address())),
         Err(e) => Err(SlskError::TimeOut(e)),
     }
 }
@@ -512,7 +539,9 @@ async fn dispatch_peer_message(
                 info!("Incoming peer message from HTTP API for peer {:?}", address);
                 match channels.send_message(address, message).await {
                     Ok(()) => {}
-                    Err(e) => error!(cause = ?e, "Failed to send message to peer"),
+                    Err(e) => {
+                        error!(cause = ?e, "Failed to send message to peer")
+                    }
                 };
             }
             None => error!("Peer address is unknown cannot send message"),

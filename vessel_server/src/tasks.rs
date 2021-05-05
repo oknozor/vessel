@@ -1,11 +1,11 @@
 use futures::TryFutureExt;
 use tokio::net::TcpListener;
 use tokio::signal;
-use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
 use soulseek_protocol::database::Database;
 use soulseek_protocol::peers::channels::SenderPool;
+use soulseek_protocol::peers::listener::{PeerListenerReceivers, PeerListenerSenders};
 use soulseek_protocol::peers::messages::p2p::response::PeerResponse;
 use soulseek_protocol::peers::messages::PeerRequestPacket;
 use soulseek_protocol::server::connection;
@@ -16,15 +16,16 @@ use soulseek_protocol::server::messages::request::ServerRequest;
 use soulseek_protocol::server::messages::response::ServerResponse;
 use soulseek_protocol::server::messages::user::Status;
 use soulseek_protocol::SlskError;
+use tokio::sync::mpsc::{Receiver, Sender};
 
 pub fn spawn_server_listener_task(
-    http_rx: mpsc::Receiver<ServerRequest>,
-    sse_tx: mpsc::Sender<ServerResponse>,
-    peer_listener_tx: mpsc::Sender<PeerConnectionRequest>,
-    request_peer_connection_rx: mpsc::Receiver<ServerRequest>,
-    possible_parent_tx: mpsc::Sender<Vec<Peer>>,
+    http_rx: Receiver<ServerRequest>,
+    sse_tx: Sender<ServerResponse>,
+    peer_listener_tx: Sender<PeerConnectionRequest>,
+    request_peer_connection_rx: Receiver<ServerRequest>,
+    possible_parent_tx: Sender<Vec<Peer>>,
     connection: SlskConnection,
-    logged_in_tx: mpsc::Sender<()>,
+    logged_in_tx: Sender<()>,
 ) -> JoinHandle<()> {
     tokio::spawn(async move {
         server_listener(
@@ -54,13 +55,13 @@ pub fn spawn_server_listener_task(
     )
 )]
 async fn server_listener(
-    mut http_rx: mpsc::Receiver<ServerRequest>,
-    sse_tx: mpsc::Sender<ServerResponse>,
-    peer_listener_tx: mpsc::Sender<PeerConnectionRequest>,
-    mut request_peer_connection_rx: mpsc::Receiver<ServerRequest>,
-    possible_parent_tx: mpsc::Sender<Vec<Peer>>,
+    mut http_rx: Receiver<ServerRequest>,
+    sse_tx: Sender<ServerResponse>,
+    peer_listener_tx: Sender<PeerConnectionRequest>,
+    mut request_peer_connection_rx: Receiver<ServerRequest>,
+    possible_parent_tx: Sender<Vec<Peer>>,
     mut connection: SlskConnection,
-    logged_in_tx: mpsc::Sender<()>,
+    logged_in_tx: Sender<()>,
 ) {
     info!("Starting Soulseek server TCP listener");
     loop {
@@ -184,8 +185,8 @@ async fn try_write(
 }
 
 pub fn spawn_sse_server(
-    sse_rx: mpsc::Receiver<ServerResponse>,
-    sse_peer_rx: mpsc::Receiver<PeerResponse>,
+    sse_rx: Receiver<ServerResponse>,
+    sse_peer_rx: Receiver<PeerResponse>,
 ) -> JoinHandle<()> {
     tokio::spawn(async {
         vessel_sse::start_sse_listener(sse_rx, sse_peer_rx).await;
@@ -193,12 +194,9 @@ pub fn spawn_sse_server(
 }
 
 pub fn spawn_peer_listener(
-    peer_message_dispatcher: mpsc::Receiver<(String, PeerRequestPacket)>,
-    sse_tx: mpsc::Sender<PeerResponse>,
-    peer_connection_rx: mpsc::Receiver<PeerConnectionRequest>,
-    request_peer_connection_tx: mpsc::Sender<ServerRequest>,
-    possible_parent_rx: mpsc::Receiver<Vec<Peer>>,
-    mut logged_in_rx: mpsc::Receiver<()>,
+    senders: PeerListenerSenders,
+    receivers: PeerListenerReceivers,
+    mut logged_in_rx: Receiver<()>,
     listener: TcpListener,
     database: Database,
 ) -> JoinHandle<()> {
@@ -212,11 +210,8 @@ pub fn spawn_peer_listener(
         soulseek_protocol::peers::listener::run(
             listener,
             signal::ctrl_c(),
-            sse_tx,
-            peer_connection_rx,
-            request_peer_connection_tx,
-            possible_parent_rx,
-            peer_message_dispatcher,
+            senders,
+            receivers,
             database,
             channels.clone(),
         )
@@ -225,7 +220,7 @@ pub fn spawn_peer_listener(
     })
 }
 
-pub fn spawn_login_task(login_sender: mpsc::Sender<ServerRequest>) -> JoinHandle<()> {
+pub fn spawn_login_task(login_sender: Sender<ServerRequest>) -> JoinHandle<()> {
     debug!("Spawing loggin task");
     tokio::spawn(async move {
         let listen_port_sender = login_sender.clone();
@@ -242,8 +237,8 @@ pub fn spawn_login_task(login_sender: mpsc::Sender<ServerRequest>) -> JoinHandle
 }
 
 pub fn spawn_http_listener(
-    http_tx: mpsc::Sender<ServerRequest>,
-    peer_message_dispatcher_tx: mpsc::Sender<(String, PeerRequestPacket)>,
+    http_tx: Sender<ServerRequest>,
+    peer_message_dispatcher_tx: Sender<(String, PeerRequestPacket)>,
     database: Database,
 ) -> JoinHandle<()> {
     tokio::spawn(async { vessel_http::start(http_tx, peer_message_dispatcher_tx, database).await })

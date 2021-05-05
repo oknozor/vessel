@@ -25,8 +25,8 @@ pub struct Handler {
     pub(crate) connection: Connection,
     pub(crate) handler_rx: mpsc::Receiver<PeerRequestPacket>,
     pub(crate) sse_tx: mpsc::Sender<PeerResponse>,
-    pub(crate) limit_connections: Arc<Semaphore>,
     pub(crate) shutdown: Shutdown,
+    pub(crate) limit_connections: Arc<Semaphore>,
     pub(crate) _shutdown_complete: mpsc::Sender<()>,
 }
 
@@ -114,7 +114,7 @@ impl Handler {
         Ok(())
     }
 
-    pub(crate) async fn connect(
+    pub(crate) async fn connection_handshake(
         &mut self,
         database: Database,
         mut channels: SenderPool,

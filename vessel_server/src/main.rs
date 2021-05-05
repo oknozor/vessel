@@ -15,6 +15,7 @@ use soulseek_protocol::server::messages::request::ServerRequest;
 use soulseek_protocol::server::messages::response::ServerResponse;
 
 use crate::tasks::spawn_server_listener_task;
+use soulseek_protocol::peers::listener::{PeerListenerReceivers, PeerListenerSenders};
 use soulseek_protocol::peers::messages::p2p::response::PeerResponse;
 
 const PEER_LISTENER_ADDRESS: &str = "0.0.0.0:2255";
@@ -89,14 +90,18 @@ async fn main() -> std::io::Result<()> {
 
     // Listen for peer connection
     let peer_listener = tasks::spawn_peer_listener(
-        peer_message_dispatcher_rx,
-        sse_peer_tx,
-        peer_connection_rx,
-        request_peer_connection_tx,
-        possible_parent_rx,
+        PeerListenerSenders {
+            sse_tx: sse_peer_tx,
+            server_request_tx: request_peer_connection_tx,
+        },
+        PeerListenerReceivers {
+            peer_connection_rx,
+            possible_parent_rx,
+            peer_request_rx: peer_message_dispatcher_rx,
+        },
         logged_in_rx,
         listener,
-        database.clone(),
+        database,
     );
 
     // Wraps everything with tokio::join so we don't block on servers startup

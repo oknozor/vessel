@@ -28,22 +28,21 @@ pub struct Handler {
     pub(crate) shutdown: Shutdown,
     pub(crate) limit_connections: Arc<Semaphore>,
     pub(crate) _shutdown_complete: mpsc::Sender<()>,
+    // We need this when a peer send use pierce firewall to upgrade the connection to
+    // the correct protocol (distributed, download, or peer to peer)
+    pub(crate) connection_upgrade: ConnectionType,
 }
 
 impl Handler {
-    pub(crate) async fn listen(
-        &mut self,
-        db: Database,
-        connection_type_upgrade: Option<ConnectionType>,
-    ) -> crate::Result<()> {
+    pub(crate) async fn listen(&mut self, db: Database) -> crate::Result<()> {
         let mut backoff = 1;
 
         while !self.shutdown.is_shutdown() {
-            match self.connection.connection_type {
-                Some(ConnectionType::FileTransfer) => {
+            match &self.connection.connection_type {
+                ConnectionType::FileTransfer => {
                     return self.connection.download(db.clone()).await;
                 }
-                Some(_) | None => {
+                _other => {
                     // While reading a request frame, also listen for the shutdown
                     // signal.
                     tokio::select! {
@@ -51,14 +50,7 @@ impl Handler {
                             match response {
                                 Ok(message) => match message {
                                     Some(PeerResponsePacket::ConnectionMessage(message)) => {
-                                        info!("Got peer connection message {:?}", message);
-                                        // TODO : Check the token against existing channel instead of using peer address only
-                                        if let PeerConnectionMessage::PierceFirewall(_token) = message {
-                                            info!("Upgrading connection with {:?} to {:?}", self.connection.get_peer_address_with_port(), connection_type_upgrade);
-                                            self.connection.connection_type = connection_type_upgrade.clone()
-                                        }
-
-                                        if let Err(e) = self.handle_connection_message(&message, db.clone()).await {
+                                        if let Err(e) = self.handle_connection_message(&message).await {
                                             return Err(format!("Connection error : {}", e).into());
                                         }
                                     }
@@ -93,12 +85,10 @@ impl Handler {
                             }
 
                         },
-                        request = self.handler_rx.recv() => {
-                            if let Some(request) = request {
-                                debug!("Sending request {:?} to {:?}", request, self.peer_username);
-                                if let Err(err) = self.connection.write_request(request).await {
-                                    error!("Handler write error, {:?}", err);
-                                }
+                        request = self.handler_rx.recv() => if let Some(request) = request  {
+                            debug!("Sending request {:?} to {:?}", request, self.peer_username);
+                            if let Err(err) = self.connection.write_request(request).await {
+                                error!("Handler write error, {:?}", err);
                             }
                         },
                         _ = self.shutdown.recv() => {
@@ -121,14 +111,14 @@ impl Handler {
         connection_type: ConnectionType,
     ) -> crate::Result<()> {
         self.send_peer_init().await?;
-        self.connection.connection_type = Some(connection_type.clone());
+        self.connection.connection_type = connection_type.clone();
         channels
             .set_connection_state(
                 self.connection.get_peer_address()?.to_string(),
-                ConnectionState::Established,
+                ConnectionState::Established(connection_type),
             )
             .await?;
-        self.listen(database, None).await
+        self.listen(database).await
     }
 
     async fn handle_peer_message(
@@ -163,11 +153,15 @@ impl Handler {
     async fn handle_connection_message(
         &mut self,
         message: &PeerConnectionMessage,
-        database: Database,
     ) -> Result<(), std::io::Error> {
         match message {
             PeerConnectionMessage::PierceFirewall(_pierce_firewall) => {
-                debug!("Got PierceFirewall");
+                info!(
+                    "Upgrading connection with {:?} to {:?}",
+                    self.connection.get_peer_address_with_port(),
+                    self.connection_upgrade
+                );
+                self.connection.connection_type = self.connection_upgrade;
                 Ok(())
             }
             PeerConnectionMessage::PeerInit {
@@ -175,15 +169,11 @@ impl Handler {
                 connection_type,
                 token,
             } => {
-                self.connection.connection_type = Some(connection_type.clone());
+                self.connection.connection_type = *connection_type;
                 self.peer_username = Some(username.clone());
                 match self.connection.get_peer_address() {
                     Ok(peer_address) => {
-                        database
-                            .insert_peer(&username, peer_address)
-                            .expect("Database error");
-
-                        debug!("connected");
+                        // Todo : update channel state
                         Ok(())
                     }
                     Err(e) => Err(e),

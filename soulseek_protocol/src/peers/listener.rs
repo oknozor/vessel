@@ -12,6 +12,7 @@ use tokio::time::timeout;
 use tokio::time::{self, Duration};
 use tracing::{error, info};
 
+use crate::database::entities::PeerEntity;
 use crate::database::Database;
 use crate::message_common::ConnectionType;
 use crate::peers::channels::SenderPool;
@@ -136,15 +137,13 @@ impl GlobalConnectionHandler {
                             ),
                             limit_connections: self.shutdown_helper.limit_connections.clone(),
                             _shutdown_complete: self.shutdown_helper.shutdown_complete_tx.clone(),
+                            connection_upgrade: state.conn_state.to_connection_type(),
                         };
 
                         let db_copy = db.clone();
                         let mut channels_coppy = channels.clone();
                         tokio::spawn(async move {
-                            match handler
-                                .listen(db_copy, state.conn_state.to_connection_type())
-                                .await
-                            {
+                            match handler.listen(db_copy).await {
                                 Err(e) => error!(cause = ?e, "Error accepting inbound connection"),
                                 Ok(()) => info!("Closing handler"),
                             };
@@ -293,14 +292,15 @@ async fn listen_for_indirect_connection(
             continue;
         };
 
-        let connection_type = connection_request.connection_type.clone();
-        let peer = Peer::from(connection_request);
+        let connection_type = connection_request.connection_type;
+        let peer = PeerEntity::from(connection_request);
 
         let handler = get_connection(
             channels.clone(),
             sse_tx.clone(),
             shutdown_helper.clone(),
             peer.clone(),
+            connection_type,
         )
         .await;
 
@@ -345,6 +345,7 @@ async fn connect_to_parents(
     loop {
         while let Some(parents) = possible_parent_rx.recv().await {
             for parent in parents {
+                let parent = PeerEntity::from(parent);
                 let parent_count = channels.get_parent_count().await;
                 debug!("Connected to {}/{} parents", parent_count, MAX_PARENT);
 
@@ -379,7 +380,7 @@ async fn connect_to_peer(
     mut channels: &mut SenderPool,
     shutdown_helper: ShutdownHelper,
     database: Database,
-    peer: &Peer,
+    peer: &PeerEntity,
     connection_type: ConnectionType,
 ) -> Result<(), crate::Error> {
     let handler = get_connection(
@@ -387,6 +388,7 @@ async fn connect_to_peer(
         sse_tx.clone(),
         shutdown_helper.clone(),
         peer.clone(),
+        connection_type,
     )
     .await;
 
@@ -417,7 +419,7 @@ async fn connect_to_peer(
 async fn request_indirect_connection(
     request_peer_connection_tx: Sender<ServerRequest>,
     channels: &mut SenderPool,
-    peer: &Peer,
+    peer: &PeerEntity,
 ) -> Result<(), SendError<ServerRequest>> {
     let token = random();
 
@@ -447,7 +449,7 @@ async fn request_indirect_connection(
 async fn spawn_peer_connection(
     channels: SenderPool,
     database: Database,
-    peer: Peer,
+    peer: PeerEntity,
     connection_type: ConnectionType,
     mut handler: Handler,
 ) {
@@ -457,7 +459,7 @@ async fn spawn_peer_connection(
         peer.get_address()
     );
 
-    database.insert_peer(&peer.username, peer.ip).unwrap();
+    database.insert_peer(&peer).unwrap();
 
     tokio::spawn(async move {
         match handler
@@ -480,7 +482,8 @@ async fn get_connection(
     mut channels: SenderPool,
     sse_tx: mpsc::Sender<PeerResponse>,
     shutdown_helper: ShutdownHelper,
-    user: Peer,
+    user: PeerEntity,
+    connection_type: ConnectionType,
 ) -> crate::Result<Handler> {
     shutdown_helper
         .limit_connections
@@ -520,6 +523,7 @@ async fn get_connection(
                 shutdown: Shutdown::new(shutdown_helper.notify_shutdown.subscribe()),
                 limit_connections: shutdown_helper.limit_connections.clone(),
                 _shutdown_complete: shutdown_helper.shutdown_complete_tx.clone(),
+                connection_upgrade: connection_type,
             })
         }
         Ok(Err(_e)) => Err(SlskError::InvalidSocketAddress(user.get_address())),
@@ -544,9 +548,9 @@ async fn dispatch_peer_message(
         // If we have an adress, try to get the sender for this peer
 
         match address {
-            Some(address) => {
-                info!("Incoming peer message from HTTP API for peer {:?}", address);
-                match channels.send_message(address, message).await {
+            Some(peer) => {
+                info!("Incoming peer message from HTTP API for peer {:?}", peer);
+                match channels.send_message(peer.get_address(), message).await {
                     Ok(()) => {}
                     Err(e) => {
                         warn!(cause = ?e, "Failed to send message to peer")

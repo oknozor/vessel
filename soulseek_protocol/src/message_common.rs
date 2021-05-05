@@ -3,11 +3,12 @@ use crate::message_common::ConnectionType::{DistributedNetwork, FileTransfer, Pe
 use std::io::Cursor;
 use std::str::Bytes;
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub enum ConnectionType {
     PeerToPeer,
     FileTransfer,
     DistributedNetwork,
+    HandShake,
 }
 
 impl ParseBytes for ConnectionType {
@@ -36,6 +37,7 @@ impl AsRef<str> for ConnectionType {
             PeerToPeer => "P",
             FileTransfer => "F",
             DistributedNetwork => "D",
+            _ => unreachable!(),
         }
     }
 }
@@ -46,6 +48,7 @@ impl ConnectionType {
             PeerToPeer => "P".bytes(),
             FileTransfer => "F".bytes(),
             DistributedNetwork => "D".bytes(),
+            _ => unreachable!(),
         }
     }
 }

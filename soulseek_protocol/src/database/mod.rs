@@ -1,10 +1,12 @@
-use crate::peers::messages::p2p::shared_directories::{Directory, File, SharedDirectories};
-use crate::peers::messages::p2p::transfer::TransferRequest;
-use crate::settings::CONFIG;
-use std::io;
-use std::net::Ipv4Addr;
-use std::path::Path;
 use std::sync::{Arc, Mutex};
+
+use entities::DownloadDbEntry;
+
+use crate::database::entities::PeerEntity;
+use crate::peers::messages::p2p::shared_directories::SharedDirectories;
+use crate::peers::messages::p2p::transfer::TransferRequest;
+
+pub mod entities;
 
 #[derive(Clone, Debug)]
 pub struct Database {
@@ -16,57 +18,6 @@ lazy_static! {
         Arc::new(Mutex::new(SharedDirectories::from_config().unwrap()));
 }
 
-impl SharedDirectories {
-    pub fn from_config() -> io::Result<Self> {
-        let paths = &CONFIG.shared_directories;
-        let mut shared_directories = SharedDirectories { dirs: vec![] };
-
-        for path in paths {
-            visit_dir(path, &mut shared_directories.dirs)?;
-        }
-
-        Ok(shared_directories)
-    }
-}
-
-fn visit_dir(path: &Path, dirs: &mut Vec<Directory>) -> io::Result<()> {
-    if path.is_dir() {
-        for entry in std::fs::read_dir(path)? {
-            let entry = entry?;
-            let mut dir = Directory {
-                name: path.to_str().unwrap().to_string(),
-                files: vec![],
-            };
-
-            if entry.path().is_dir() {
-                visit_dir(&entry.path(), dirs)?;
-            } else {
-                let metadata = entry.metadata()?;
-                dir.files.push(File {
-                    name: entry.file_name().to_str().unwrap().to_string(),
-                    size: metadata.len(),
-                    extension: entry
-                        .file_name()
-                        .to_str()
-                        .unwrap()
-                        .split('.')
-                        .last()
-                        .unwrap()
-                        .to_string(),
-                    // TODO
-                    attributes: vec![],
-                })
-            }
-
-            dirs.push(dir);
-        }
-    } else {
-        error!("{:?} is not a directory", path)
-    }
-
-    Ok(())
-}
-
 impl Default for Database {
     fn default() -> Self {
         Database {
@@ -75,20 +26,15 @@ impl Default for Database {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct DownloadDbEntry {
-    pub file_name: String,
-    pub ticket: u32,
-    pub file_size: u64,
-    pub progress: u64,
-}
-
 impl Database {
-    pub fn insert_peer(&self, username: &str, address: Ipv4Addr) -> sled::Result<()> {
-        debug!("Writing peer {}@{} to db:", username, address.to_string());
+    pub fn insert_peer(&self, peer: &PeerEntity) -> sled::Result<()> {
+        debug!("Writing peer {:?} to db:", peer);
+
+        let json = serde_json::to_string(&peer).expect("Serialization error");
+
         self.inner
             .open_tree("users")?
-            .insert(username.as_bytes(), address.to_string().as_bytes())
+            .insert(peer.username.as_bytes(), json.as_bytes())
             .map(|_res| ())
     }
 
@@ -119,20 +65,25 @@ impl Database {
             .get(ticket.to_le_bytes())
             .ok()
             .flatten()
-            .map(|res| {
-                let json = String::from_utf8(res.to_vec()).expect("UTF-8 parsing error");
-                serde_json::from_str(&json).expect("Serde error")
-            })
+            .map(|data| data.to_vec())
+            .map(String::from_utf8)
+            .map(Result::unwrap)
+            .map(|raw| serde_json::from_str(&raw))
+            .map(Result::unwrap)
     }
 
-    pub fn get_peer_by_name(&self, username: &str) -> Option<String> {
+    pub fn get_peer_by_name(&self, username: &str) -> Option<PeerEntity> {
         self.inner
             .open_tree("users")
             .unwrap()
             .get(username)
             .ok()
             .flatten()
-            .map(|res| String::from_utf8(res.to_vec()).expect("UTF-8 parsing error"))
+            .map(|data| data.to_vec())
+            .map(String::from_utf8)
+            .map(Result::unwrap)
+            .map(|raw| serde_json::from_str(&raw))
+            .map(Result::unwrap)
     }
 
     pub fn find_all(&self) -> Vec<(String, String)> {
@@ -153,32 +104,38 @@ impl Database {
 
 #[cfg(test)]
 mod test {
-    use crate::database::{Database, DownloadDbEntry};
     use std::net::Ipv4Addr;
+
+    use crate::database::entities::{DownloadDbEntry, PeerEntity};
+    use crate::database::Database;
+    use crate::server::messages::peer::Peer;
 
     #[test]
     fn should_open_db() {
         let db = Database::default();
-        assert!(db.insert_peer("toto", Ipv4Addr::new(127, 0, 0, 1)).is_ok())
+        assert!(db
+            .insert_peer(&PeerEntity {
+                username: "toto".to_string(),
+                ip: Ipv4Addr::new(127, 0, 0, 1),
+                port: 0,
+            })
+            .is_ok())
     }
 
     #[test]
     fn should_get_peer() {
         let db = Database::default();
-        db.insert_peer("toto", Ipv4Addr::new(127, 0, 0, 1)).unwrap();
-        let address = db.get_peer_by_name("toto").unwrap();
-        assert_eq!(address.to_string(), "127.0.0.1");
-    }
+        db.insert_peer(&PeerEntity {
+            username: "toto".to_string(),
+            ip: Ipv4Addr::new(127, 0, 0, 1),
+            port: 0,
+        })
+        .unwrap();
+        let peer = db.get_peer_by_name("toto").unwrap();
 
-    #[test]
-    fn should_convert_download_entry() {
-        let entry = DownloadDbEntry {
-            file_name: "test".to_string(),
-            ticket: 0,
-            file_size: 3,
-            progress: 2,
-        };
-
-        let bytes = entry.as_bytes();
+        assert_eq!(peer.username, "toto");
+        assert_eq!(peer.get_address(), "127.0.0.1");
+        assert_eq!(peer.get_address_with_port(), "127.0.0.1:0");
+        assert_eq!(peer.port, 0);
     }
 }

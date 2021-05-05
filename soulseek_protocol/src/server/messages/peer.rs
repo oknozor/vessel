@@ -53,26 +53,6 @@ pub struct Peer {
     pub(crate) port: u32,
 }
 
-impl From<PeerConnectionRequest> for Peer {
-    fn from(request: PeerConnectionRequest) -> Self {
-        Peer {
-            username: request.username,
-            ip: request.ip,
-            port: request.port,
-        }
-    }
-}
-
-impl Peer {
-    pub fn get_address_with_port(&self) -> String {
-        format!("{}:{}", self.ip, self.port)
-    }
-
-    pub fn get_address(&self) -> String {
-        self.ip.to_string()
-    }
-}
-
 impl ParseBytes for Vec<Peer> {
     type Output = Vec<Peer>;
 

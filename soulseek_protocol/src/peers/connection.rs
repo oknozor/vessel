@@ -21,7 +21,7 @@ use tokio::fs::OpenOptions;
 pub struct Connection {
     stream: BufWriter<TcpStream>,
     buffer: BytesMut,
-    pub(crate) connection_type: Option<ConnectionType>,
+    pub(crate) connection_type: ConnectionType,
 }
 
 impl Drop for Connection {
@@ -45,32 +45,30 @@ impl Connection {
         // Read incoming messages according to the connection type
         loop {
             match self.connection_type {
-                Some(ConnectionType::PeerToPeer) => match self.parse_peer_message() {
+                ConnectionType::PeerToPeer => match self.parse_peer_message() {
                     Ok(Some(message)) => {
                         return Ok(Some(PeerResponsePacket::Message(message)));
                     }
                     Ok(None) => {}
                     Err(e) => return Err(e),
                 },
-                Some(ConnectionType::DistributedNetwork) => {
-                    match self.parse_distributed_message() {
-                        Ok(Some(message)) => {
-                            return Ok(Some(PeerResponsePacket::DistributedMessage(message)))
-                        }
-                        Ok(None) => {}
-                        Err(e) => return Err(e),
-                    }
-                }
-                None => match self.parse_connection_message() {
+                ConnectionType::DistributedNetwork => match self.parse_distributed_message() {
                     Ok(Some(message)) => {
-                        return Ok(Some(PeerResponsePacket::ConnectionMessage(message)))
+                        return Ok(Some(PeerResponsePacket::DistributedMessage(message)));
+                    }
+                    Ok(None) => {}
+                    Err(e) => return Err(e),
+                },
+                ConnectionType::HandShake => match self.parse_connection_message() {
+                    Ok(Some(message)) => {
+                        return Ok(Some(PeerResponsePacket::ConnectionMessage(message)));
                     }
                     Ok(None) => {}
                     Err(e) => return Err(e),
                 },
                 // Transfer connection are handled separately
-                _ => unreachable!(),
-            }
+                ConnectionType::FileTransfer => unreachable!(),
+            };
 
             if 0 == self.stream.read_buf(&mut self.buffer).await? {
                 // The remote closed the connection. For this to be a clean
@@ -112,12 +110,12 @@ impl Connection {
     /// otherwise consume the peer message plus the 8 bytes header prefix.
     fn consume(&mut self, message_len: usize) {
         match self.connection_type {
-            Some(_) => self
-                .buffer
-                .advance(message_len + PEER_MSG_HEADER_LEN as usize),
-            None => self
+            ConnectionType::HandShake => self
                 .buffer
                 .advance(message_len + CONNECTION_MSG_HEADER_LEN as usize),
+            _ => self
+                .buffer
+                .advance(message_len + PEER_MSG_HEADER_LEN as usize),
         }
     }
 
@@ -125,7 +123,7 @@ impl Connection {
         Connection {
             stream: BufWriter::new(socket),
             buffer: BytesMut::with_capacity(4 * 1024),
-            connection_type: None,
+            connection_type: ConnectionType::HandShake,
         }
     }
 

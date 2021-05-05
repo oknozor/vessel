@@ -30,10 +30,10 @@ impl PeerConnectionState {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum ConnectionState {
     // Successful connection
-    Established,
+    Established(ConnectionType),
     // We still need to send or receive a PeerInit message to upgrade this connection
     PeerInitPending,
     // We received a peer ConnectToPeer request from soulseek we need to attemp a connection
@@ -49,11 +49,12 @@ pub enum ConnectionState {
 }
 
 impl ConnectionState {
-    pub(crate) fn to_connection_type(&self) -> Option<ConnectionType> {
+    pub(crate) fn to_connection_type(&self) -> ConnectionType {
         match self {
             ConnectionState::IndirectConnectionPending(conn_type)
-            | ConnectionState::ExpectingIndirectConnection(conn_type) => Some(conn_type.clone()),
-            _ => None,
+            | ConnectionState::ExpectingIndirectConnection(conn_type)
+            | ConnectionState::Established(conn_type) => *conn_type,
+            _ => ConnectionType::HandShake,
         }
     }
 }
@@ -187,7 +188,10 @@ impl SenderPool {
         match channels.get_mut(&address.to_string()) {
             None => error!("Channel not found for address {:?}", address),
             Some(channel) => {
-                info!("Successfully upgraded connection state to {:?}", state);
+                info!(
+                    "Successfully upgraded connection {:?} state to {:?}",
+                    address, state
+                );
                 channel.set_conn_state(state)
             }
         }

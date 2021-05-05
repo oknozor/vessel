@@ -89,9 +89,9 @@ impl GlobalConnectionHandler {
     }
 
     #[instrument(
-        name = "peer_connection_handler",
-        level = "debug",
-        skip(self, channels, db)
+    name = "peer_connection_handler",
+    level = "debug",
+    skip(self, channels, db)
     )]
     async fn accept_peer_connection(
         &mut self,
@@ -172,9 +172,9 @@ struct PeerListener {
 }
 
 #[instrument(
-    name = "peers_listener",
-    level = "debug",
-    skip(listener, shutdown, senders, receivers, db, channels)
+name = "peers_listener",
+level = "debug",
+skip(listener, shutdown, senders, receivers, db, channels)
 )]
 pub async fn run(
     listener: TcpListener,
@@ -286,7 +286,7 @@ async fn listen_for_indirect_connection(
     channels: SenderPool,
     shutdown_helper: ShutdownHelper,
     database: Database,
-) -> Result<(), SendError<ServerRequest>> {
+) -> Result<(), crate::Error> {
     while let Some(connection_request) = indirect_connection_rx.recv().await {
         let sse_tx = sse_tx.clone();
         if connection_request.username == "vessel" {
@@ -305,11 +305,11 @@ async fn listen_for_indirect_connection(
             shutdown_helper.clone(),
             peer.clone(),
         )
-        .await;
+            .await;
 
         match handler {
             Ok(handler) => {
-                spawn_peer_connection(channels.clone(), database.clone(), &peer, handler);
+                spawn_peer_connection(channels.clone(), database.clone(), peer.clone(), connection_request.connection_type, handler).await;
             }
             Err(e) => {
                 warn!("Error trying indirect connection to {:?} : {}", peer, e);
@@ -320,37 +320,15 @@ async fn listen_for_indirect_connection(
     Ok(())
 }
 
-pub(crate) fn spawn_peer_connection(
-    channels: SenderPool,
-    database: Database,
-    peer: &Peer,
-    mut handler: Handler,
-) {
-    let peer_address = peer.get_address();
-    info!("Connected to peer: {}@{:?}", &peer.username, peer_address);
-
-    tokio::spawn(async move {
-        match handler
-            .connection_handshake(database, channels.clone(), ConnectionType::PeerToPeer)
-            .await
-        {
-            Ok(()) => info!("Indirect connection task completed"),
-            Err(e) => error!(cause = %e, "Error in indirect connection"),
-        };
-
-        channels.clone().set_connection_lost(peer_address).await;
-    });
-}
-
 #[instrument(
-    level = "debug",
-    skip(
-        request_peer_connection_tx,
-        channels,
-        shutdown_helper,
-        possible_parent_rx,
-        database
-    )
+level = "debug",
+skip(
+request_peer_connection_tx,
+channels,
+shutdown_helper,
+possible_parent_rx,
+database
+)
 )]
 async fn connect_to_parents(
     request_peer_connection_tx: mpsc::Sender<ServerRequest>,
@@ -359,7 +337,7 @@ async fn connect_to_parents(
     shutdown_helper: ShutdownHelper,
     possible_parent_rx: &mut Receiver<Vec<Peer>>,
     database: Database,
-) -> Result<(), SendError<ServerRequest>> {
+) -> Result<(), crate::Error> {
     loop {
         while let Some(parents) = possible_parent_rx.recv().await {
             for parent in parents {
@@ -372,35 +350,42 @@ async fn connect_to_parents(
                     server_request_sender
                         .send(ServerRequest::NoParents(false))
                         .await?;
+
                     return Ok(());
                 };
 
-                let handler = get_connection(
-                    channels.clone(),
-                    sse_tx.clone(),
-                    shutdown_helper.clone(),
-                    parent.clone(),
-                )
-                .await;
+                connect_to_peer(request_peer_connection_tx.clone(), sse_tx.clone(), &mut channels, shutdown_helper.clone(), database.clone(), &parent, ConnectionType::DistributedNetwork).await?;
+            };
+        };
+    };
+}
 
-                match handler {
-                    Ok(handler) => {
-                        spawn_parent_connection(&mut channels, database.clone(), &parent, handler);
-                    }
-                    Err(e) => {
-                        warn!(
-                            "Unable to establish parent connection with {:?},  cause = {}",
-                            parent, e
-                        );
-                        request_indirect_connection(
-                            request_peer_connection_tx.clone(),
-                            &mut channels,
-                            parent,
-                        )
-                        .await?;
-                    }
-                }
-            }
+async fn connect_to_peer(request_peer_connection_tx: Sender<ServerRequest>, sse_tx: Sender<PeerResponse>, mut channels: &mut SenderPool, shutdown_helper: ShutdownHelper, database: Database, peer: &Peer, connection_type: ConnectionType)
+                         -> Result<(), crate::Error> {
+    let handler = get_connection(
+        channels.clone(),
+        sse_tx.clone(),
+        shutdown_helper.clone(),
+        peer.clone(),
+    )
+        .await;
+
+    match handler {
+        Ok(handler) => {
+            spawn_peer_connection(channels.clone(), database.clone(), peer.clone(), connection_type, handler).await;
+            Ok(())
+        }
+        Err(e) => {
+            warn!(
+                "Unable to establish parent connection with {:?},  cause = {}",
+                peer, e
+            );
+            request_indirect_connection(
+                request_peer_connection_tx.clone(),
+                &mut channels,
+                peer,
+            ).await
+                .map_err(|err| err.into())
         }
     }
 }
@@ -408,7 +393,7 @@ async fn connect_to_parents(
 async fn request_indirect_connection(
     request_peer_connection_tx: Sender<ServerRequest>,
     channels: &mut SenderPool,
-    parent: Peer,
+    peer: &Peer,
 ) -> Result<(), SendError<ServerRequest>> {
     let token = random();
 
@@ -417,8 +402,8 @@ async fn request_indirect_connection(
     // before upgrading the connection to DistributedNetwork
     channels
         .new_incomming_indirect_parent_connection_pending(
-            parent.username.clone(),
-            parent.get_address(),
+            peer.username.clone(),
+            peer.get_address(),
             token,
         )
         .await;
@@ -429,40 +414,41 @@ async fn request_indirect_connection(
     server_request_sender
         .send(ServerRequest::ConnectToPeer(RequestConnectionToPeer {
             token,
-            username: parent.username,
+            username: peer.username.clone(),
             connection_type: ConnectionType::DistributedNetwork,
         }))
         .await
 }
 
-fn spawn_parent_connection(
-    channels: &mut SenderPool,
+async fn spawn_peer_connection(
+    channels: SenderPool,
     database: Database,
-    parent: &Peer,
+    peer: Peer,
+    connection_type: ConnectionType,
     mut handler: Handler,
 ) {
     info!(
         "Connected to distributed parent: {}@{:?}",
-        &parent.username,
-        parent.get_address()
+        &peer.username,
+        peer.get_address()
     );
 
-    database.insert_peer(&parent.username, parent.ip).unwrap();
-
-    let channels = channels.clone();
+    database.insert_peer(&peer.username, peer.ip).unwrap();
 
     tokio::spawn(async move {
         match handler
             .connection_handshake(
                 database.clone(),
-                channels,
-                ConnectionType::DistributedNetwork,
+                channels.clone(),
+                connection_type,
             )
             .await
         {
-            Ok(()) => info!("Parent connection terminated"),
+            Ok(()) => info!("Connection with {:?}, closed", peer),
             Err(err) => error!(cause = ?err, "connection error"),
         }
+
+        channels.clone().set_connection_lost(peer.ip.to_string()).await;
     });
 }
 
@@ -496,7 +482,7 @@ async fn get_connection(
         Duration::from_millis(2000),
         TcpStream::connect(user.get_address_with_port()),
     )
-    .await
+        .await
     {
         Ok(Ok(socket)) => {
             let rx = channels
@@ -519,9 +505,9 @@ async fn get_connection(
 }
 
 #[instrument(
-    name = "peer_message_dispatcher",
-    level = "debug",
-    skip(peer_message_dispatcher, channels, database)
+name = "peer_message_dispatcher",
+level = "debug",
+skip(peer_message_dispatcher, channels, database)
 )]
 async fn dispatch_peer_message(
     mut peer_message_dispatcher: Receiver<(String, PeerRequestPacket)>,

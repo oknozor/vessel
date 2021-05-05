@@ -89,9 +89,9 @@ impl GlobalConnectionHandler {
     }
 
     #[instrument(
-    name = "peer_connection_handler",
-    level = "debug",
-    skip(self, channels, db)
+        name = "peer_connection_handler",
+        level = "debug",
+        skip(self, channels, db)
     )]
     async fn accept_peer_connection(
         &mut self,
@@ -172,9 +172,9 @@ struct PeerListener {
 }
 
 #[instrument(
-name = "peers_listener",
-level = "debug",
-skip(listener, shutdown, senders, receivers, db, channels)
+    name = "peers_listener",
+    level = "debug",
+    skip(listener, shutdown, senders, receivers, db, channels)
 )]
 pub async fn run(
     listener: TcpListener,
@@ -293,11 +293,8 @@ async fn listen_for_indirect_connection(
             continue;
         };
 
-        let peer = Peer {
-            username: connection_request.username.clone(),
-            ip: connection_request.ip,
-            port: connection_request.port,
-        };
+        let connection_type = connection_request.connection_type.clone();
+        let peer = Peer::from(connection_request);
 
         let handler = get_connection(
             channels.clone(),
@@ -305,11 +302,18 @@ async fn listen_for_indirect_connection(
             shutdown_helper.clone(),
             peer.clone(),
         )
-            .await;
+        .await;
 
         match handler {
             Ok(handler) => {
-                spawn_peer_connection(channels.clone(), database.clone(), peer.clone(), connection_request.connection_type, handler).await;
+                spawn_peer_connection(
+                    channels.clone(),
+                    database.clone(),
+                    peer.clone(),
+                    connection_type,
+                    handler,
+                )
+                .await;
             }
             Err(e) => {
                 warn!("Error trying indirect connection to {:?} : {}", peer, e);
@@ -321,14 +325,14 @@ async fn listen_for_indirect_connection(
 }
 
 #[instrument(
-level = "debug",
-skip(
-request_peer_connection_tx,
-channels,
-shutdown_helper,
-possible_parent_rx,
-database
-)
+    level = "debug",
+    skip(
+        request_peer_connection_tx,
+        channels,
+        shutdown_helper,
+        possible_parent_rx,
+        database
+    )
 )]
 async fn connect_to_parents(
     request_peer_connection_tx: mpsc::Sender<ServerRequest>,
@@ -354,25 +358,48 @@ async fn connect_to_parents(
                     return Ok(());
                 };
 
-                connect_to_peer(request_peer_connection_tx.clone(), sse_tx.clone(), &mut channels, shutdown_helper.clone(), database.clone(), &parent, ConnectionType::DistributedNetwork).await?;
-            };
-        };
-    };
+                connect_to_peer(
+                    request_peer_connection_tx.clone(),
+                    sse_tx.clone(),
+                    &mut channels,
+                    shutdown_helper.clone(),
+                    database.clone(),
+                    &parent,
+                    ConnectionType::DistributedNetwork,
+                )
+                .await?;
+            }
+        }
+    }
 }
 
-async fn connect_to_peer(request_peer_connection_tx: Sender<ServerRequest>, sse_tx: Sender<PeerResponse>, mut channels: &mut SenderPool, shutdown_helper: ShutdownHelper, database: Database, peer: &Peer, connection_type: ConnectionType)
-                         -> Result<(), crate::Error> {
+async fn connect_to_peer(
+    request_peer_connection_tx: Sender<ServerRequest>,
+    sse_tx: Sender<PeerResponse>,
+    mut channels: &mut SenderPool,
+    shutdown_helper: ShutdownHelper,
+    database: Database,
+    peer: &Peer,
+    connection_type: ConnectionType,
+) -> Result<(), crate::Error> {
     let handler = get_connection(
         channels.clone(),
         sse_tx.clone(),
         shutdown_helper.clone(),
         peer.clone(),
     )
-        .await;
+    .await;
 
     match handler {
         Ok(handler) => {
-            spawn_peer_connection(channels.clone(), database.clone(), peer.clone(), connection_type, handler).await;
+            spawn_peer_connection(
+                channels.clone(),
+                database.clone(),
+                peer.clone(),
+                connection_type,
+                handler,
+            )
+            .await;
             Ok(())
         }
         Err(e) => {
@@ -380,11 +407,8 @@ async fn connect_to_peer(request_peer_connection_tx: Sender<ServerRequest>, sse_
                 "Unable to establish parent connection with {:?},  cause = {}",
                 peer, e
             );
-            request_indirect_connection(
-                request_peer_connection_tx.clone(),
-                &mut channels,
-                peer,
-            ).await
+            request_indirect_connection(request_peer_connection_tx.clone(), &mut channels, peer)
+                .await
                 .map_err(|err| err.into())
         }
     }
@@ -437,18 +461,17 @@ async fn spawn_peer_connection(
 
     tokio::spawn(async move {
         match handler
-            .connection_handshake(
-                database.clone(),
-                channels.clone(),
-                connection_type,
-            )
+            .connection_handshake(database.clone(), channels.clone(), connection_type)
             .await
         {
             Ok(()) => info!("Connection with {:?}, closed", peer),
             Err(err) => error!(cause = ?err, "connection error"),
         }
 
-        channels.clone().set_connection_lost(peer.ip.to_string()).await;
+        channels
+            .clone()
+            .set_connection_lost(peer.ip.to_string())
+            .await;
     });
 }
 
@@ -482,7 +505,7 @@ async fn get_connection(
         Duration::from_millis(2000),
         TcpStream::connect(user.get_address_with_port()),
     )
-        .await
+    .await
     {
         Ok(Ok(socket)) => {
             let rx = channels
@@ -505,9 +528,9 @@ async fn get_connection(
 }
 
 #[instrument(
-name = "peer_message_dispatcher",
-level = "debug",
-skip(peer_message_dispatcher, channels, database)
+    name = "peer_message_dispatcher",
+    level = "debug",
+    skip(peer_message_dispatcher, channels, database)
 )]
 async fn dispatch_peer_message(
     mut peer_message_dispatcher: Receiver<(String, PeerRequestPacket)>,
@@ -518,15 +541,15 @@ async fn dispatch_peer_message(
     while let Some((username, message)) = peer_message_dispatcher.recv().await {
         // Resolve peer name against local db
         let address = database.get_peer_by_name(&username);
-
         // If we have an adress, try to get the sender for this peer
+
         match address {
             Some(address) => {
                 info!("Incoming peer message from HTTP API for peer {:?}", address);
                 match channels.send_message(address, message).await {
                     Ok(()) => {}
                     Err(e) => {
-                        error!(cause = ?e, "Failed to send message to peer")
+                        warn!(cause = ?e, "Failed to send message to peer")
                     }
                 };
             }

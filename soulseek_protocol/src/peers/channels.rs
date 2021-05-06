@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use tokio::sync::{mpsc, Mutex};
 
+use crate::database::entities::PeerEntity;
 use crate::message_common::ConnectionType;
 use crate::peers::messages::PeerRequestPacket;
 use crate::SlskError;
@@ -18,7 +19,6 @@ pub struct SenderPool {
 #[derive(Debug, Clone)]
 pub struct PeerConnectionState {
     pub username: Option<String>,
-    pub is_parent: bool,
     pub token: Option<u32>,
     pub channel: Option<mpsc::Sender<PeerRequestPacket>>,
     pub conn_state: ConnectionState,
@@ -76,28 +76,25 @@ impl SenderPool {
             state.conn_state = ConnectionState::Lost
         }
     }
-    pub async fn new_incomming_indirect_parent_connection_pending(
+    pub async fn new_incomming_indirect_connection_pending(
         &mut self,
-        username: String,
-        address: String,
+        peer: &PeerEntity,
         token: u32,
+        conn_type: ConnectionType,
     ) {
         let mut channels = self.inner.lock().await;
         let state = PeerConnectionState {
-            username: Some(username),
-            is_parent: true,
+            username: Some(peer.username.clone()),
             token: Some(token),
             channel: None,
-            conn_state: ConnectionState::IndirectConnectionPending(
-                ConnectionType::DistributedNetwork,
-            ),
+            conn_state: ConnectionState::IndirectConnectionPending(conn_type),
         };
 
         info!(
             "Indirect connection pending for address {:?} with state : {:?}",
-            address, state
+            peer, state
         );
-        channels.insert(address, state);
+        channels.insert(peer.get_address(), state);
     }
 
     pub async fn new_named_peer_connection(
@@ -110,7 +107,6 @@ impl SenderPool {
 
         let state = PeerConnectionState {
             username: Some(username),
-            is_parent: false,
             token: None,
             channel: Some(tx),
             conn_state: ConnectionState::PeerInitPending,
@@ -130,7 +126,6 @@ impl SenderPool {
 
         let state = PeerConnectionState {
             username: None,
-            is_parent: true,
             token: None,
             channel: Some(tx),
             conn_state: ConnectionState::PeerInitPending,
@@ -175,7 +170,17 @@ impl SenderPool {
 
     pub async fn get_parent_count(&self) -> usize {
         let channels = self.inner.lock().await;
-        channels.values().filter(|state| state.is_parent).count()
+        channels
+            .values()
+            .filter(|state| match state.conn_state {
+                ConnectionState::Established(ConnectionType::DistributedNetwork)
+                | ConnectionState::IndirectConnectionPending(ConnectionType::DistributedNetwork)
+                | ConnectionState::ExpectingIndirectConnection(
+                    ConnectionType::DistributedNetwork,
+                ) => true,
+                _ => false,
+            })
+            .count()
     }
 
     pub async fn set_connection_state(

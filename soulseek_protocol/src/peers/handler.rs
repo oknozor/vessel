@@ -111,7 +111,7 @@ impl Handler {
         connection_type: ConnectionType,
     ) -> crate::Result<()> {
         self.send_peer_init().await?;
-        self.connection.connection_type = connection_type.clone();
+        self.connection.connection_type = connection_type;
         channels
             .set_connection_state(
                 self.connection.get_peer_address()?.to_string(),
@@ -156,7 +156,7 @@ impl Handler {
     ) -> Result<(), std::io::Error> {
         match message {
             PeerConnectionMessage::PierceFirewall(_pierce_firewall) => {
-                info!(
+                debug!(
                     "Upgrading connection with {:?} to {:?}",
                     self.connection.get_peer_address_with_port(),
                     self.connection_upgrade

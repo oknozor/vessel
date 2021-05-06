@@ -24,6 +24,7 @@ use crate::peers::shutdown::Shutdown;
 use crate::server::messages::peer::{Peer, PeerConnectionRequest, RequestConnectionToPeer};
 use crate::server::messages::request::ServerRequest;
 use crate::SlskError;
+use futures::TryFutureExt;
 
 /// TODO : Make this value configurable
 const MAX_CONNECTIONS: usize = 4096;
@@ -288,6 +289,8 @@ async fn listen_for_indirect_connection(
 ) -> Result<(), crate::Error> {
     while let Some(connection_request) = indirect_connection_rx.recv().await {
         let sse_tx = sse_tx.clone();
+
+        // Filter out our own connection requests
         if connection_request.username == "vessel" {
             continue;
         };
@@ -295,30 +298,29 @@ async fn listen_for_indirect_connection(
         let connection_type = connection_request.connection_type;
         let peer = PeerEntity::from(connection_request);
 
-        let handler = get_connection(
+        get_connection(
             channels.clone(),
             sse_tx.clone(),
             shutdown_helper.clone(),
             peer.clone(),
             connection_type,
         )
+        .and_then(|handler| {
+            spawn_peer_connection(
+                channels.clone(),
+                database.clone(),
+                peer.clone(),
+                connection_type,
+                handler,
+            )
+        })
+        .map_err(|e| {
+            warn!(
+                "Error trying server requested connection to {:?} : {}",
+                peer, e
+            )
+        })
         .await;
-
-        match handler {
-            Ok(handler) => {
-                spawn_peer_connection(
-                    channels.clone(),
-                    database.clone(),
-                    peer.clone(),
-                    connection_type,
-                    handler,
-                )
-                .await;
-            }
-            Err(e) => {
-                warn!("Error trying indirect connection to {:?} : {}", peer, e);
-            }
-        }
     }
 
     Ok(())
@@ -374,52 +376,55 @@ async fn connect_to_parents(
     }
 }
 
+// Try to connect directly to a peer and fallback to indirect connection
+// if direct connection fails
 async fn connect_to_peer(
     request_peer_connection_tx: Sender<ServerRequest>,
     sse_tx: Sender<PeerResponse>,
-    mut channels: &mut SenderPool,
+    channels: &mut SenderPool,
     shutdown_helper: ShutdownHelper,
     database: Database,
     peer: &PeerEntity,
     connection_type: ConnectionType,
 ) -> Result<(), crate::Error> {
-    let handler = get_connection(
+    get_connection(
         channels.clone(),
         sse_tx.clone(),
         shutdown_helper.clone(),
         peer.clone(),
         connection_type,
     )
-    .await;
-
-    match handler {
-        Ok(handler) => {
-            spawn_peer_connection(
-                channels.clone(),
-                database.clone(),
-                peer.clone(),
-                connection_type,
-                handler,
-            )
-            .await;
-            Ok(())
-        }
-        Err(e) => {
-            warn!(
-                "Unable to establish parent connection with {:?},  cause = {}",
-                peer, e
-            );
-            request_indirect_connection(request_peer_connection_tx.clone(), &mut channels, peer)
-                .await
-                .map_err(|err| err.into())
-        }
-    }
+    .and_then(|handler| {
+        spawn_peer_connection(
+            channels.clone(),
+            database.clone(),
+            peer.clone(),
+            connection_type,
+            handler,
+        )
+    })
+    .or_else(|e| {
+        warn!(
+            "Unable to establish peer connection with {:?},  cause = {}",
+            peer, e
+        );
+        request_indirect_connection(
+            request_peer_connection_tx.clone(),
+            channels.clone(),
+            peer,
+            connection_type,
+        )
+    })
+    .map_err(|err| err.into())
+    .await
 }
 
+// Send a peer connection request to the server and persist the
 async fn request_indirect_connection(
     request_peer_connection_tx: Sender<ServerRequest>,
-    channels: &mut SenderPool,
+    mut channels: SenderPool,
     peer: &PeerEntity,
+    conn_type: ConnectionType,
 ) -> Result<(), SendError<ServerRequest>> {
     let token = random();
 
@@ -427,11 +432,7 @@ async fn request_indirect_connection(
     // to dispatch a connection request and expect a PierceFirewall message
     // before upgrading the connection to DistributedNetwork
     channels
-        .new_incomming_indirect_parent_connection_pending(
-            peer.username.clone(),
-            peer.get_address(),
-            token,
-        )
+        .new_incomming_indirect_connection_pending(peer, token, conn_type)
         .await;
 
     info!("Falling back to indirect connection with token {}", token);
@@ -452,11 +453,10 @@ async fn spawn_peer_connection(
     peer: PeerEntity,
     connection_type: ConnectionType,
     mut handler: Handler,
-) {
+) -> Result<(), crate::SlskError> {
     info!(
-        "Connected to distributed parent: {}@{:?}",
-        &peer.username,
-        peer.get_address()
+        "Connected to peer {:?} with {:?} connection type",
+        peer, connection_type
     );
 
     database.insert_peer(&peer).unwrap();
@@ -475,6 +475,8 @@ async fn spawn_peer_connection(
             .set_connection_lost(peer.ip.to_string())
             .await;
     });
+
+    Ok(())
 }
 
 #[instrument(level = "debug", skip(channels, shutdown_helper))]

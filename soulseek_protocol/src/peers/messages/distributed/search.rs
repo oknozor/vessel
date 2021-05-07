@@ -11,9 +11,7 @@ pub struct SearchRequest {
 }
 
 impl ParseBytes for SearchRequest {
-    type Output = Self;
-
-    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self::Output> {
+    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self> {
         let unknown = src.get_u32_le();
         let username = read_string(src)?;
         let ticket = src.get_u32_le();

@@ -14,9 +14,7 @@ pub struct TransferRequest {
 }
 
 impl ParseBytes for TransferRequest {
-    type Output = Self;
-
-    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self::Output> {
+    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self> {
         let direction = src.get_u32_le();
         let ticket = src.get_u32_le();
         let filename = read_string(src)?;
@@ -67,6 +65,14 @@ pub struct UploadFailed {
     filename: String,
 }
 
+impl ParseBytes for UploadFailed {
+    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self> {
+        let filename = read_string(src)?;
+
+        Ok(Self { filename })
+    }
+}
+
 #[async_trait]
 impl ToBytes for UploadFailed {
     async fn write_to_buf(
@@ -107,9 +113,7 @@ impl ToBytes for QueueFailed {
 }
 
 impl ParseBytes for QueueFailed {
-    type Output = Self;
-
-    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self::Output> {
+    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self> {
         let filename = read_string(src)?;
         let reason = read_string(src)?;
 

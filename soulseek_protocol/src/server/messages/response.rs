@@ -1,16 +1,20 @@
+use std::io::Cursor;
+
+use bytes::Buf;
+
 use crate::frame::{read_bool, read_string, ParseBytes};
 use crate::server::messages::chat::*;
 use crate::server::messages::distributed::EmbeddedDistributedMessage;
 use crate::server::messages::interest::{Interests, ItemRecommendations, Recommendations};
 use crate::server::messages::login::*;
-use crate::server::messages::peer::{Peer, PeerConnectionRequest, PeerConnectionTicket};
+use crate::server::messages::peer::{
+    Peer, PeerAddress, PeerConnectionRequest, PeerConnectionTicket,
+};
 use crate::server::messages::room::*;
 use crate::server::messages::search::SearchQuery;
 use crate::server::messages::user::*;
 use crate::server::messages::{Header, MessageCode, HEADER_LEN};
 use crate::SlskError;
-use bytes::Buf;
-use std::io::Cursor;
 
 /// All incoming message from the Soulseek server.
 #[derive(Debug, Deserialize, Serialize)]
@@ -71,7 +75,7 @@ pub enum ServerResponse {
 
 impl ServerResponse {
     pub fn check(src: &mut Cursor<&[u8]>) -> Result<Header, SlskError> {
-        // Check if the buffer contains enough bytes to parse the message error
+        // Check if the buffer contains enough bytes to parse the message
         if src.remaining() < HEADER_LEN as usize {
             return Err(SlskError::Incomplete);
         }

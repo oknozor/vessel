@@ -9,9 +9,7 @@ pub struct Recommendations {
 }
 
 impl ParseBytes for Recommendations {
-    type Output = Self;
-
-    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self::Output> {
+    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self> {
         let recommendation_nth = src.get_u32_le();
         let mut recommendations = vec![];
 
@@ -40,9 +38,7 @@ pub struct ItemRecommendations {
 }
 
 impl ParseBytes for ItemRecommendations {
-    type Output = Self;
-
-    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self::Output> {
+    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self> {
         let item = read_string(src)?;
 
         let recommendations_nth = src.get_u32_le();
@@ -66,9 +62,7 @@ pub struct Recommendation {
 }
 
 impl ParseBytes for Recommendation {
-    type Output = Self;
-
-    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self::Output> {
+    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self> {
         let content = read_string(src)?;
         let note = src.get_u32_le();
 
@@ -84,9 +78,7 @@ pub struct Interests {
 }
 
 impl ParseBytes for Interests {
-    type Output = Self;
-
-    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self::Output> {
+    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self> {
         let username = read_string(src)?;
 
         let liked_nth = src.get_u32_le();

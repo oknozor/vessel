@@ -1,91 +1,72 @@
 use std::io::Cursor;
+use std::net::{Ipv4Addr, SocketAddr};
+use std::path::Path;
 
 use bytes::{Buf, BytesMut};
+use eyre::Result;
+use tokio::fs::OpenOptions;
 use tokio::io::{AsyncWriteExt, BufWriter};
+use tokio::sync::mpsc::Sender;
 use tokio::{io::AsyncReadExt, net::TcpStream};
 
-use crate::message_common::ConnectionType;
-use crate::peers::messages::connection::{PeerConnectionMessage, CONNECTION_MSG_HEADER_LEN};
-use crate::peers::messages::p2p::response::PeerResponse;
-use crate::peers::messages::{PeerRequestPacket, PeerResponsePacket};
-use crate::{frame::ToBytes, SlskError};
-use std::net::{Ipv4Addr, SocketAddr};
-
 use crate::database::Database;
-use crate::peers::messages::distributed::DistributedMessage;
-use crate::peers::messages::p2p::PEER_MSG_HEADER_LEN;
-use std::path::Path;
-use tokio::fs::OpenOptions;
+use crate::message_common::ConnectionType;
+use crate::peers::messages::PeerRequestPacket;
+use crate::SlskError::Incomplete;
+use crate::{frame::ToBytes, ProtocolHeader, ProtocolMessage, SlskError};
+
+#[derive(Debug, Serialize)]
+#[serde(untagged)]
+pub enum DownloadProgress {
+    Init {
+        file_name: String,
+        user_name: String,
+        ticket: u32,
+    },
+    Progress {
+        ticket: u32,
+        percent: usize,
+    },
+}
 
 #[derive(Debug)]
-pub struct Connection {
+pub struct PeerConnection {
     stream: BufWriter<TcpStream>,
     buffer: BytesMut,
     pub(crate) connection_type: ConnectionType,
 }
 
-impl Drop for Connection {
-    fn drop(&mut self) {
-        debug!("Dropping peer connection")
+impl PeerConnection {
+    pub(crate) fn new(socket: TcpStream) -> PeerConnection {
+        PeerConnection {
+            stream: BufWriter::new(socket),
+            buffer: BytesMut::with_capacity(4 * 1024),
+            connection_type: ConnectionType::HandShake,
+        }
     }
-}
 
-impl Connection {
-    /// Attempt to read a message from the peer connection.
-    /// First parse the message [`Header`], if there are at least as much bytes as the header content
-    /// length, try to parse it, otherwise, try to read more bytes from the soulseek TcpStream buffer.
-    /// **WARNING**  :
-    /// If this function is called when the buffer is empty it will block trying to read the buffer,
-    /// use [`read_response_with_timeout`] to avoid this
-    ///
-    /// [`Header`]: crate::peers::messages::Header
-    /// [`read_response_with_timeout`]: SlskConnection::read_response_with_timeout
-    #[instrument(level = "debug")]
-    pub async fn read_response(&mut self) -> crate::Result<Option<PeerResponsePacket>> {
-        // Read incoming messages according to the connection type
+    pub(crate) async fn read_message<T: ProtocolMessage>(&mut self) -> crate::Result<T> {
         loop {
-            match self.connection_type {
-                ConnectionType::PeerToPeer => match self.parse_peer_message() {
-                    Ok(Some(message)) => {
-                        return Ok(Some(PeerResponsePacket::Message(message)));
-                    }
-                    Ok(None) => {}
-                    Err(e) => return Err(e),
-                },
-                ConnectionType::DistributedNetwork => match self.parse_distributed_message() {
-                    Ok(Some(message)) => {
-                        return Ok(Some(PeerResponsePacket::DistributedMessage(message)));
-                    }
-                    Ok(None) => {}
-                    Err(e) => return Err(e),
-                },
-                ConnectionType::HandShake => match self.parse_connection_message() {
-                    Ok(Some(message)) => {
-                        return Ok(Some(PeerResponsePacket::ConnectionMessage(message)));
-                    }
-                    Ok(None) => {}
-                    Err(e) => return Err(e),
-                },
-                // Transfer connection are handled separately
-                ConnectionType::FileTransfer => unreachable!(),
-            };
+            match self.parse_message::<T>() {
+                Ok(Some(message)) => {
+                    return Ok(message);
+                }
+                Ok(None) => {}
+                Err(e) => return Err(e),
+            }
 
             if 0 == self.stream.read_buf(&mut self.buffer).await? {
-                // The remote closed the connection. For this to be a clean
-                // shutdown, there should be no data in the read buffer. If
-                // there is, this means that the peer closed the socket while
-                // sending a frame.
-                return if self.buffer.is_empty() {
-                    Ok(None)
+                if self.stream.buffer().is_empty() {
+                    // No message
                 } else {
-                    Err(SlskError::ConnectionResetByPeer)
-                };
+                    return Err(SlskError::ConnectionResetByPeer);
+                }
             }
         }
     }
 
     /// Send a [`PeerMessage`] the soulseek server, using `[ToBytes]` to write to the buffer.
-    #[instrument(level = "debug", skip(self))]
+    #[instrument(level = "trace", skip(self))]
     pub(crate) async fn write_request(
         &mut self,
         message: PeerRequestPacket,
@@ -110,64 +91,27 @@ impl Connection {
     /// otherwise consume the peer message plus the 8 bytes header prefix.
     fn consume(&mut self, message_len: usize) {
         match self.connection_type {
-            ConnectionType::HandShake => self
-                .buffer
-                .advance(message_len + CONNECTION_MSG_HEADER_LEN as usize),
-            _ => self
-                .buffer
-                .advance(message_len + PEER_MSG_HEADER_LEN as usize),
+            ConnectionType::HandShake | ConnectionType::DistributedNetwork => {
+                self.buffer.advance(message_len + 5)
+            }
+            ConnectionType::PeerToPeer => self.buffer.advance(message_len + 8),
+            ConnectionType::FileTransfer => {
+                unreachable!("Attempt to parse bytes from File Transfert connection ")
+            }
         }
     }
 
-    pub(crate) fn new(socket: TcpStream) -> Connection {
-        Connection {
-            stream: BufWriter::new(socket),
-            buffer: BytesMut::with_capacity(4 * 1024),
-            connection_type: ConnectionType::HandShake,
-        }
-    }
-
-    fn parse_connection_message(&mut self) -> crate::Result<Option<PeerConnectionMessage>> {
-        use crate::SlskError::Incomplete;
+    fn parse_message<T: ProtocolMessage>(&mut self) -> crate::Result<Option<T>> {
         let mut buf = Cursor::new(&self.buffer[..]);
 
-        match PeerConnectionMessage::check(&mut buf) {
+        match T::check(&mut buf) {
             Ok(header) => {
-                buf.set_position(CONNECTION_MSG_HEADER_LEN as u64);
-                let connection_message = PeerConnectionMessage::parse(&mut buf, &header)?;
+                buf.set_position(T::Header::LEN as u64);
+                let connection_message = T::parse(&mut buf, &header)?;
+
                 // consume the message bytes
-                self.consume(header.message_len);
+                self.consume(header.message_len());
                 Ok(Some(connection_message))
-            }
-            Err(Incomplete) => Ok(None),
-            Err(e) => Err(e),
-        }
-    }
-
-    fn parse_peer_message(&mut self) -> crate::Result<Option<PeerResponse>> {
-        use crate::SlskError::Incomplete;
-        let mut buf = Cursor::new(&self.buffer[..]);
-        match PeerResponse::check(&mut buf) {
-            Ok(header) => {
-                let peer_message = PeerResponse::parse(&mut buf, &header)?;
-                // consume the message bytes
-                self.consume(header.message_len);
-                Ok(Some(peer_message))
-            }
-            Err(Incomplete) => Ok(None),
-            Err(e) => Err(e),
-        }
-    }
-
-    fn parse_distributed_message(&mut self) -> crate::Result<Option<DistributedMessage>> {
-        use crate::SlskError::Incomplete;
-        let mut buf = Cursor::new(&self.buffer[..]);
-        match DistributedMessage::check(&mut buf) {
-            Ok(header) => {
-                let distributed_message = DistributedMessage::parse(&mut buf, &header)?;
-                // consume the message bytes
-                self.consume(header.message_len);
-                Ok(Some(distributed_message))
             }
             Err(Incomplete) => Ok(None),
             Err(e) => Err(e),
@@ -177,9 +121,7 @@ impl Connection {
     pub fn get_peer_address(&self) -> Result<Ipv4Addr, std::io::Error> {
         match &self.stream.get_ref().peer_addr() {
             Ok(SocketAddr::V4(address)) => Ok(address.ip().to_owned()),
-            Ok(SocketAddr::V6(_)) => {
-                unreachable!()
-            }
+            Ok(SocketAddr::V6(_)) => unreachable!("Ipv6 is not supported"),
             Err(err) => Err(std::io::Error::from(err.kind())),
         }
     }
@@ -191,19 +133,35 @@ impl Connection {
         }
     }
 
-    pub(crate) async fn download(&mut self, db: Database) -> crate::Result<()> {
+    pub(crate) async fn download(
+        &mut self,
+        db: &Database,
+        progress_sender: Sender<DownloadProgress>,
+        user_name: String,
+    ) -> Result<()> {
         let address = self.get_peer_address_with_port()?.to_string();
-        let mut cursor = Cursor::new(&mut self.buffer);
 
+        // We need to parse the ticket from the upload connection
+        if self.buffer.remaining() < 4 && self.try_read_buffer().await? == 0 {
+            return Err(eyre!("Empty buffer on download init"));
+        }
+
+        let mut cursor = Cursor::new(&mut self.buffer);
         info!("Got incoming upload connection from {}", address);
         let ticket = cursor.get_u32_le();
-        self.buffer.advance(4);
-
         let download_entry = db.get_download(ticket);
 
         if let Some(entry) = download_entry {
             let file_name = &entry.file_name;
             let path = Path::new(file_name).file_name().expect("File name error");
+
+            progress_sender
+                .send(DownloadProgress::Init {
+                    file_name: file_name.clone(),
+                    user_name,
+                    ticket,
+                })
+                .await?;
 
             let mut file = OpenOptions::new()
                 .create(true)
@@ -229,6 +187,9 @@ impl Connection {
                 // Avoid to reprint percent every time the task yield
                 if percent > percent_progress {
                     percent_progress = percent;
+                    progress_sender
+                        .send(DownloadProgress::Progress { ticket, percent })
+                        .await?;
                     info!("{}% of {}", percent, file_name);
                 }
 
@@ -241,18 +202,34 @@ impl Connection {
                     return Ok(());
                 }
 
-                if 0 == self.stream.read_buf(&mut self.buffer).await? {
-                    return if self.buffer.is_empty() {
-                        info!("Download finished");
-                        file.sync_data().await?;
-                        Ok(())
-                    } else {
-                        Err("connection reset by peer".into())
-                    };
+                if 0 == self.try_read_buffer().await? {
+                    info!("Download finished");
+                    file.sync_data().await?;
+                    return Ok(());
                 }
             }
         } else {
-            Err(crate::SlskError::ConnectionResetByPeer)
+            Err(eyre!(SlskError::ConnectionResetByPeer))
         }
+    }
+
+    async fn try_read_buffer(&mut self) -> Result<usize> {
+        let bytes_red = self.stream.read_buf(&mut self.buffer).await?;
+        if 0 == bytes_red {
+            if self.buffer.is_empty() {
+                info!("Download finished");
+                Ok(bytes_red)
+            } else {
+                Err(eyre!("connection reset by peer"))
+            }
+        } else {
+            Ok(bytes_red)
+        }
+    }
+}
+
+impl Drop for PeerConnection {
+    fn drop(&mut self) {
+        debug!("Dropping peer connection")
     }
 }

@@ -14,7 +14,7 @@ pub struct SearchReply {
     pub files: Vec<File>,
     pub slot_free: bool,
     pub average_speed: u32,
-    pub queue_length: u64,
+    pub queue_length: u32,
     pub locked_results: Vec<File>,
 }
 
@@ -29,16 +29,11 @@ impl ToBytes for SearchReply {
 }
 
 impl ParseBytes for SearchReply {
-    type Output = Self;
-
-    fn parse(src: &mut std::io::Cursor<&[u8]>) -> std::io::Result<Self::Output> {
+    fn parse(src: &mut std::io::Cursor<&[u8]>) -> std::io::Result<Self> {
         let data = decompress(src)?;
-
         let src = &mut Cursor::new(data.as_slice());
-
         let username = read_string(src)?;
         let ticket = src.get_u32_le();
-
         let result_nth = src.get_u32_le();
 
         let mut files = Vec::with_capacity(result_nth as usize);
@@ -50,14 +45,13 @@ impl ParseBytes for SearchReply {
 
         let slot_free = src.get_u8() == 1;
         let average_speed = src.get_u32_le();
-        let queue_length = src.get_u64_le();
+        let queue_length = src.get_u32_le();
 
         let mut locked_results = vec![];
         // Sometimes this is not present in the search reply.
         // We should investigate this further
         if src.has_remaining() {
             let lock_result_nth = src.get_u32_le();
-
             for _ in 0..lock_result_nth {
                 let file = File::parse(src)?;
                 locked_results.push(file);

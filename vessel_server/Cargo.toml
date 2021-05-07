@@ -16,3 +16,5 @@ tokio-stream = "0.1"
 tracing = { version = "0.1", default-features = false, features = ["log", "std"] }
 tracing-futures = { version = "0.2", default-features = false, features = ["std-future"] }
 tracing-subscriber = "0.2.7"
+eyre = "0.6.5"
+

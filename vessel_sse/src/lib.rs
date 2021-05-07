@@ -4,6 +4,7 @@ extern crate tokio;
 extern crate tracing;
 
 use futures::{Stream, StreamExt};
+use soulseek_protocol::peers::connection::DownloadProgress;
 use soulseek_protocol::peers::messages::p2p::response::PeerResponse;
 use soulseek_protocol::server::messages::response::ServerResponse;
 use std::collections::HashMap;
@@ -25,21 +26,25 @@ struct Broadcaster {
     clients: Arc<Mutex<Vec<UnboundedSender<Event>>>>,
 }
 
-// see : https://github.com/seanmonstar/warp/blob/master/examples/sse_chat.rs
-#[instrument(name = "sse_listener", level = "debug", skip(rx))]
-pub async fn start_sse_listener(rx: Receiver<ServerResponse>, peer_rx: Receiver<PeerResponse>) {
+#[instrument(name = "sse_listener", level = "trace", skip(rx))]
+pub async fn start_sse_listener(
+    rx: Receiver<ServerResponse>,
+    peer_rx: Receiver<PeerResponse>,
+    download_progress_rx: Receiver<DownloadProgress>,
+) {
     info!("Starting server sent event broadcast ...");
     let cors = warp::cors().allow_any_origin();
 
     let broadcaster = Broadcaster::default();
-    let broadcaster_copy = broadcaster.clone();
 
     // Dispatch soulseek messages to SSE clients
-    let event_dispatcher = dispatch_soulseek_message(rx, broadcaster_copy);
+    let event_dispatcher = dispatch_soulseek_message(rx, broadcaster.clone());
 
-    let broadcaster_copy = broadcaster.clone();
     // Dispatch peer messages to SSE clients
-    let peer_event_dispatcher = dispatch_peer_message(peer_rx, broadcaster_copy);
+    let peer_event_dispatcher = dispatch_peer_message(peer_rx, broadcaster.clone());
+
+    // Dispatch download progress to SSE
+    let download_progress = dispatch_download_progress(download_progress_rx, broadcaster.clone());
 
     let users = warp::any().map(move || broadcaster.clone());
 
@@ -47,7 +52,6 @@ pub async fn start_sse_listener(rx: Receiver<ServerResponse>, peer_rx: Receiver<
         .and(warp::get())
         .and(users)
         .map(|broadcaster: Broadcaster| {
-            info!("SSE EVENT");
             // Stream incoming server event to sse
             let stream = broadcaster.on_sse_event_received();
             warp::sse::reply(warp::sse::keep_alive().stream(stream))
@@ -59,12 +63,13 @@ pub async fn start_sse_listener(rx: Receiver<ServerResponse>, peer_rx: Receiver<
         warp::serve(sse_events).run(([127, 0, 0, 1], 3031)),
         event_dispatcher,
         peer_event_dispatcher,
+        download_progress,
     );
 }
 
 fn dispatch_peer_message(
     mut peer_rx: Receiver<PeerResponse>,
-    broadcaster_copy: Broadcaster,
+    broadcaster: Broadcaster,
 ) -> JoinHandle<()> {
     tokio::task::spawn(async move {
         info!("Starting to dispatch vessel message to SSE clients");
@@ -94,9 +99,7 @@ fn dispatch_peer_message(
             };
 
             if let Some(event) = sse_event {
-                broadcaster_copy
-                    .clone()
-                    .send_message_to_clients(event, &data)
+                broadcaster.clone().send_message_to_clients(event, &data)
             }
         }
     })
@@ -104,17 +107,34 @@ fn dispatch_peer_message(
 
 fn dispatch_soulseek_message(
     mut rx: Receiver<ServerResponse>,
-    broadcaster_copy: Broadcaster,
+    broadcaster: Broadcaster,
 ) -> JoinHandle<()> {
     tokio::task::spawn(async move {
         info!("Starting to dispatch vessel message to SSE clients");
         while let Some(message) = rx.recv().await {
-            info!("SSE event : {:?}", message);
+            debug!("SSE event : {:?}", message);
             let data = serde_json::to_string(&message).expect("Serialization error");
             let event = "server_message".to_string();
-            broadcaster_copy
-                .clone()
-                .send_message_to_clients(&event, &data);
+            broadcaster.clone().send_message_to_clients(&event, &data);
+        }
+    })
+}
+
+fn dispatch_download_progress(
+    mut rx: Receiver<DownloadProgress>,
+    broadcaster: Broadcaster,
+) -> JoinHandle<()> {
+    tokio::task::spawn(async move {
+        info!("Starting to dispatch vessel message to SSE clients");
+        while let Some(progress) = rx.recv().await {
+            let event = match &progress {
+                DownloadProgress::Init { .. } => "download_started".to_string(),
+                DownloadProgress::Progress { .. } => "download_progress".to_string(),
+            };
+
+            let data = serde_json::to_string(&progress).expect("Serialization error");
+
+            broadcaster.clone().send_message_to_clients(&event, &data);
         }
     })
 }

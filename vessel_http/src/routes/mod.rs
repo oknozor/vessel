@@ -49,7 +49,9 @@ pub(crate) fn users_routes(
     sender: VesselSender<ServerRequest>,
     db: Database,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-    users::get_all_connected_users(db).or(users::get_user_status(sender))
+    users::get_all_connected_users(db)
+        .or(users::get_user_status(sender.clone()))
+        .or(users::get_peer_address(sender))
 }
 
 pub(crate) fn search_routes(

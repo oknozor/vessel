@@ -1,9 +1,10 @@
 use crate::frame::{read_string, ParseBytes};
 use crate::message_common::ConnectionType::{DistributedNetwork, FileTransfer, PeerToPeer};
+use crate::peers::messages::PeerRequestPacket;
 use std::io::Cursor;
 use std::str::Bytes;
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, Eq, PartialEq)]
 pub enum ConnectionType {
     PeerToPeer,
     FileTransfer,
@@ -12,11 +13,19 @@ pub enum ConnectionType {
 }
 
 impl ParseBytes for ConnectionType {
-    type Output = Self;
-
-    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self::Output> {
+    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self> {
         let raw_c_type = read_string(src)?;
         Ok(ConnectionType::from(raw_c_type))
+    }
+}
+
+impl From<&PeerRequestPacket> for ConnectionType {
+    fn from(request: &PeerRequestPacket) -> Self {
+        match request {
+            PeerRequestPacket::Message(_) => ConnectionType::PeerToPeer,
+            PeerRequestPacket::DistributedMessage(_) => ConnectionType::DistributedNetwork,
+            PeerRequestPacket::ConnectionMessage(_) => unreachable!(),
+        }
     }
 }
 

@@ -1,11 +1,12 @@
-use self::search::SearchRequest;
-use crate::frame::{read_string, ParseBytes, ToBytes};
-use crate::SlskError;
-use bytes::Buf;
 use std::io::Cursor;
+
+use bytes::Buf;
 use tokio::io::{AsyncWrite, AsyncWriteExt, BufWriter};
 
-pub(crate) const DISTRIBUTED_MSG_HEADER_LEN: u32 = 5;
+use crate::frame::{read_string, ParseBytes, ToBytes};
+use crate::{MessageCode, ProtocolHeader, ProtocolMessage};
+
+use self::search::SearchRequest;
 
 mod branch;
 mod search;
@@ -16,22 +17,22 @@ pub struct DistributedMessageHeader {
     pub(crate) message_len: usize,
 }
 
-impl DistributedMessageHeader {
-    pub fn read(src: &mut Cursor<&[u8]>) -> std::io::Result<Self> {
-        let message_length = src.get_u32_le();
-        let code = src.get_u8();
-        let code = DistributedMessageCode::from(code);
+impl ProtocolHeader for DistributedMessageHeader {
+    const LEN: usize = 5;
+    type Code = DistributedMessageCode;
 
-        // We can subtract message code from the length since we already know it
-        let message_len = message_length as usize - 1;
+    fn message_len(&self) -> usize {
+        self.message_len
+    }
 
-        Ok(Self { message_len, code })
+    fn new(message_len: usize, code: Self::Code) -> Self {
+        Self { message_len, code }
     }
 }
 
 #[repr(u8)]
 #[derive(Debug)]
-pub(crate) enum DistributedMessageCode {
+pub enum DistributedMessageCode {
     Ping = 0,
     SearchRequest = 3,
     BranchLevel = 4,
@@ -39,6 +40,15 @@ pub(crate) enum DistributedMessageCode {
     ChildDepth = 7,
     ServerSearchRequest = 93,
     Unknown,
+}
+
+impl MessageCode for DistributedMessageCode {
+    const LEN: usize = 1;
+
+    fn read(src: &mut Cursor<&[u8]>) -> Self {
+        let code = src.get_u8();
+        Self::from(code)
+    }
 }
 
 impl From<u8> for DistributedMessageCode {
@@ -88,27 +98,10 @@ impl ToBytes for DistributedMessage {
     }
 }
 
-impl DistributedMessage {
-    pub fn check(src: &mut Cursor<&[u8]>) -> Result<DistributedMessageHeader, SlskError> {
-        // Check if the buffer contains enough bytes to parse the message error
-        if src.remaining() < DISTRIBUTED_MSG_HEADER_LEN as usize {
-            return Err(SlskError::Incomplete);
-        }
+impl ProtocolMessage for DistributedMessage {
+    type Header = DistributedMessageHeader;
 
-        // Check if the buffer contains the full message already
-        let header = DistributedMessageHeader::read(src)?;
-
-        if src.remaining() < header.message_len {
-            Err(SlskError::Incomplete)
-        } else {
-            Ok(header)
-        }
-    }
-
-    pub(crate) fn parse(
-        src: &mut Cursor<&[u8]>,
-        header: &DistributedMessageHeader,
-    ) -> std::io::Result<Self> {
+    fn parse(src: &mut Cursor<&[u8]>, header: &DistributedMessageHeader) -> std::io::Result<Self> {
         match header.code {
             DistributedMessageCode::Ping => Ok(DistributedMessage::Ping),
             DistributedMessageCode::SearchRequest => {

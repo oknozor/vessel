@@ -110,8 +110,6 @@ pub enum LoginResponse {
 }
 
 impl ParseBytes for LoginResponse {
-    type Output = Self;
-
     fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self> {
         match src.get_u8() {
             0 => {

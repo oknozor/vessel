@@ -13,9 +13,8 @@ use tokio::io::{AsyncWrite, AsyncWriteExt, BufWriter};
 ///
 /// [`ServerResponse`]: crate::server::messages::response::ServerResponse
 /// [`PeerMessage`]: crate::peers::messages::PeerMessage
-pub(crate) trait ParseBytes {
-    type Output;
-    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self::Output>;
+pub(crate) trait ParseBytes<Output = Self> {
+    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Output>;
 }
 
 /// A utility trait to write soulseek server messages, peer messages and distributed messages

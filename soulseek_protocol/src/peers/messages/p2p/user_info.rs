@@ -16,9 +16,7 @@ pub struct UserInfo {
 }
 
 impl ParseBytes for UserInfo {
-    type Output = Self;
-
-    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self::Output> {
+    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self> {
         let description = read_string(src)?;
         let has_picture = src.get_u8() != 0;
         let picture = if has_picture {

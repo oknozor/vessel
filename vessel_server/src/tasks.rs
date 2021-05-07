@@ -5,17 +5,15 @@ use tokio::task::JoinHandle;
 
 use soulseek_protocol::database::Database;
 use soulseek_protocol::peers::channels::SenderPool;
+use soulseek_protocol::peers::connection::DownloadProgress;
 use soulseek_protocol::peers::listener::{PeerListenerReceivers, PeerListenerSenders};
 use soulseek_protocol::peers::messages::p2p::response::PeerResponse;
 use soulseek_protocol::peers::messages::PeerRequestPacket;
-use soulseek_protocol::server::connection;
 use soulseek_protocol::server::connection::SlskConnection;
 use soulseek_protocol::server::messages::login::LoginRequest;
-use soulseek_protocol::server::messages::peer::{Peer, PeerConnectionRequest};
+use soulseek_protocol::server::messages::peer::{Peer, PeerAddress, PeerConnectionRequest};
 use soulseek_protocol::server::messages::request::ServerRequest;
 use soulseek_protocol::server::messages::response::ServerResponse;
-use soulseek_protocol::server::messages::user::Status;
-use soulseek_protocol::SlskError;
 use tokio::sync::mpsc::{Receiver, Sender};
 
 pub fn spawn_server_listener_task(
@@ -26,6 +24,7 @@ pub fn spawn_server_listener_task(
     possible_parent_tx: Sender<Vec<Peer>>,
     connection: SlskConnection,
     logged_in_tx: Sender<()>,
+    peer_address_tx: Sender<PeerAddress>,
 ) -> JoinHandle<()> {
     tokio::spawn(async move {
         server_listener(
@@ -36,6 +35,7 @@ pub fn spawn_server_listener_task(
             possible_parent_tx,
             connection,
             logged_in_tx,
+            peer_address_tx,
         )
         .await;
     })
@@ -43,7 +43,7 @@ pub fn spawn_server_listener_task(
 
 #[instrument(
     name = "slsk_server_listener",
-    level = "debug",
+    level = "trace",
     skip(
         http_rx,
         sse_tx,
@@ -62,6 +62,7 @@ async fn server_listener(
     possible_parent_tx: Sender<Vec<Peer>>,
     mut connection: SlskConnection,
     logged_in_tx: Sender<()>,
+    peer_address_tx: Sender<PeerAddress>,
 ) {
     info!("Starting Soulseek server TCP listener");
     loop {
@@ -70,16 +71,28 @@ async fn server_listener(
                  match server_message {
                      Ok(server_message) => {
                         if let Some(server_message) = server_message {
+
+                            info!("Got {:?}", server_message);
                             let err = match server_message {
+                                ServerResponse::PeerAddress(peer_address) => {
+                                    info!("Got PEER ADDRESS {:?}", peer_address);
+
+                                    peer_address_tx.send(peer_address)
+                                    .await
+                                    .map_err(|err| eyre!("Error sending peer address to message dispatcher: {}", err))
+                                }
                                 ServerResponse::PeerConnectionRequest(connection_request) => {
                                     info!(
                                         "connect to peer request from server : {:?} ",
                                         connection_request
                                     );
+
+                                    let token = connection_request.token;
+
                                     peer_listener_tx
                                         .send(connection_request)
                                         .await
-                                        .map_err(|err| SlskError::Other(Box::new(err)))
+                                        .map_err(|err| eyre!("Error dispatching connection request with token {} to peer listener: {}", token, err))
                                 }
 
                                 ServerResponse::PossibleParents(parents) => {
@@ -87,99 +100,43 @@ async fn server_listener(
                                     possible_parent_tx
                                         .send(parents)
                                         .await
-                                        .map_err(|err| SlskError::Other(Box::new(err)))
+                                        .map_err(|err| eyre!("Error dispatching possible parents to peer listener : {}", err))
                                 }
 
                                 ServerResponse::PrivilegedUsers(_) => {
                                     logged_in_tx
                                         .send(())
                                         .await
-                                        .map_err(|err| SlskError::Other(Box::new(err)))
+                                        .map_err(|err| eyre!("Error sending privileged user to login task: {}", err))
                                 }
-
                                 response => {
                                     info!("Got message from Soulseek server {:?}", response);
                                     sse_tx
                                         .send(response)
                                         .await
-                                        .map_err(|err| SlskError::Other(Box::new(err)))
+                                        .map_err(|err| eyre!("Error sending server response to SSE: {}", err))
                                 }
                             };
                                 if let Err(e) = err {
-                                error!(" Error reading Soulseek stream : {}", e);
-                                info!("Reconnecting");
-                                connection = connection::connect().await;
-                            };
-                         }
+                                    return error!(" Error reading Soulseek stream : {}", e);
+                            }
+                        }
                      }
                      Err(err) => error!("An error occured while reading soulseek server response : {:?}", err),
-                    };
+                }
              },
 
               http_command = http_rx.recv() => {
                   if let Some(request) = http_command {
-                    info!("Got HTTP command {:?}", request);
-                        if let Some(new_connection) =  try_write(&mut connection, request)
-                        .await
-                        .expect("Failed to write to Soulseek connection") {
-                        connection = new_connection;
-                    }
+                    connection.write_request(&request).await.expect("Error writing to soulseek connection")
                   }
               }
 
               peer_connection_request = request_peer_connection_rx.recv() => {
                 if let Some(request) = peer_connection_request {
-                    if let Some(new_connection) =  try_write(&mut connection, request)
-                        .await
-                        .expect("Failed to write to Soulseek connection") {
-                        connection = new_connection;
-                    }
+                    connection.write_request(&request).await.expect("Error writing to soulseek connection")
                 }
               }
-        }
-    }
-}
-
-// Write to the soulseek TCP stream or attempt to reconnect and retry once
-async fn try_write(
-    connection: &mut SlskConnection,
-    request: ServerRequest,
-) -> tokio::io::Result<Option<SlskConnection>> {
-    debug!("Sending request to server: {:?}", request);
-
-    match &mut connection.write_request(&request).await {
-        Ok(_) => Ok(None),
-        Err(e) => {
-            error!("Error writing request to soulseek connection : {}", e);
-            info!("Reconnecting");
-            let mut new_connection = connection::connect().await;
-            let login = ServerRequest::Login(LoginRequest::new("vessel", "lessev"));
-            let listen_port = ServerRequest::SetListenPort(2255);
-            let no_parent = ServerRequest::NoParents(true);
-            let join_room = ServerRequest::JoinRoom("nicotine".to_string());
-            new_connection.write_request(&login).await?;
-            new_connection.write_request(&listen_port).await?;
-            new_connection.write_request(&no_parent).await?;
-            new_connection.write_request(&join_room).await?;
-
-            // Wait for PrivilegedUser message, indicating the connection is ready to receive a message
-            while let Ok(response) = new_connection.read_response().await {
-                match response {
-                    Some(ServerResponse::PrivilegedUsers(_)) => {
-                        info!("Reconnected");
-                        break;
-                    }
-                    Some(other) => info!("Reconnecting, got {:?} from server", other),
-                    None => {}
-                };
-            }
-
-            info!("Setting online status");
-            new_connection
-                .write_request(&ServerRequest::SetOnlineStatus(Status::Online as u32))
-                .await?;
-
-            Ok(Some(new_connection))
         }
     }
 }
@@ -187,9 +144,10 @@ async fn try_write(
 pub fn spawn_sse_server(
     sse_rx: Receiver<ServerResponse>,
     sse_peer_rx: Receiver<PeerResponse>,
+    download_progress_rx: Receiver<DownloadProgress>,
 ) -> JoinHandle<()> {
     tokio::spawn(async {
-        vessel_sse::start_sse_listener(sse_rx, sse_peer_rx).await;
+        vessel_sse::start_sse_listener(sse_rx, sse_peer_rx, download_progress_rx).await;
     })
 }
 
@@ -199,9 +157,8 @@ pub fn spawn_peer_listener(
     mut logged_in_rx: Receiver<()>,
     listener: TcpListener,
     database: Database,
+    channels: SenderPool,
 ) -> JoinHandle<()> {
-    let channels: SenderPool = SenderPool::default();
-
     tokio::spawn(async move {
         while logged_in_rx.recv().await.is_none() {
             // Wait for soulseek login
@@ -221,7 +178,7 @@ pub fn spawn_peer_listener(
 }
 
 pub fn spawn_login_task(login_sender: Sender<ServerRequest>) -> JoinHandle<()> {
-    debug!("Spawing loggin task");
+    debug!("Spawning logging task");
     tokio::spawn(async move {
         let listen_port_sender = login_sender.clone();
         let parent_request_sender = login_sender.clone();

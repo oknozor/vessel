@@ -1,26 +1,43 @@
 <script>
     import ResultsTable from "../components/ResultsTable.svelte";
-    import {onDestroy, onMount} from "svelte";
-    import {createChannelStore} from "../searchstore";
+    import {onMount} from "svelte";
+    import {
+        createDownloadProgressStore,
+        createDownloadStore,
+        createSearchStore
+    } from "../createSearchStore";
+
+    let searchStore
+    let downloadStore
+    let downloadProgressStore
 
     let searchTerm = '';
     let searchResults = [];
 
-    let store;
     let searchTicket;
 
     onMount(() => {
-        store = createChannelStore();
+        searchStore = createSearchStore();
+        downloadStore = createDownloadStore();
+        downloadProgressStore = createDownloadProgressStore();
 
-        store.subscribe(incomingMessages => {
+        searchStore.subscribe(incomingMessages => {
             // Ensure we get only search response for the current ticket
             searchResults = incomingMessages.filter(message => message.ticket === searchTicket);
         });
 
+        downloadStore.subscribe(incomingMessages => {
+            console.log(incomingMessages)
+        });
+
+        downloadProgressStore.subscribe(incomingMessages => {
+            console.log(incomingMessages)
+        });
+
         return () => {
-            if(store.readyState === 1) {
+            if(searchStore.readyState === 1) {
                 console.log("Closing event source")
-                store.close();
+                createSearchStore.close();
             }
         };
     });

@@ -15,9 +15,7 @@ pub struct RoomList {
 }
 
 impl ParseBytes for RoomList {
-    type Output = Self;
-
-    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self::Output> {
+    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self> {
         let rooms = RoomList::extract_room(src)?;
         let owned_private_rooms = RoomList::extract_room(src)?;
         let private_rooms = RoomList::extract_room(src)?;
@@ -76,9 +74,7 @@ pub struct UserJoinedRoom {
 }
 
 impl ParseBytes for UserJoinedRoom {
-    type Output = Self;
-
-    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self::Output> {
+    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self> {
         let room = read_string(src)?;
         let username = read_string(src)?;
         let status = src.get_u32_le();
@@ -110,8 +106,6 @@ pub struct UserRoomEvent {
 }
 
 impl ParseBytes for UserRoomEvent {
-    type Output = Self;
-
     fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self> {
         let room_name = read_string(src)?;
         let username = read_string(src)?;
@@ -228,8 +222,6 @@ pub struct RoomUser {
 }
 
 impl ParseBytes for RoomUser {
-    type Output = Self;
-
     fn parse(_src: &mut Cursor<&[u8]>) -> std::io::Result<Self> {
         unimplemented!()
     }
@@ -249,9 +241,7 @@ pub struct RoomTicker {
 }
 
 impl ParseBytes for RoomTicker {
-    type Output = Self;
-
-    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self::Output> {
+    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self> {
         let room = read_string(src)?;
         let username = read_string(src)?;
         let ticker = read_string(src)?;
@@ -271,9 +261,7 @@ pub struct Ticker {
 }
 
 impl ParseBytes for RoomTickers {
-    type Output = Self;
-
-    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self::Output> {
+    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self> {
         let room = read_string(src)?;
         let number_of_users = src.get_u32_le();
 
@@ -297,9 +285,7 @@ pub struct RoomUsers {
 }
 
 impl ParseBytes for RoomUsers {
-    type Output = Self;
-
-    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self::Output> {
+    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self> {
         let room = read_string(src)?;
         let users_nth = src.get_u32_le();
         let mut users = Vec::with_capacity(users_nth as usize);

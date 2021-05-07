@@ -13,7 +13,6 @@ pub enum PeerRequestPacket {
     Message(PeerRequest),
     ConnectionMessage(PeerConnectionMessage),
     DistributedMessage(DistributedMessage),
-    None,
 }
 
 #[derive(Debug)]

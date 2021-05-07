@@ -9,9 +9,7 @@ pub struct EmbeddedDistributedMessage {
 }
 
 impl ParseBytes for EmbeddedDistributedMessage {
-    type Output = Self;
-
-    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self::Output> {
+    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self> {
         let code = src.get_u8();
         let message = src.chunk().to_vec();
 

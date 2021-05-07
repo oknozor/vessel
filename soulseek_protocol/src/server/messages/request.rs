@@ -312,7 +312,7 @@ pub enum ServerRequest {
 
 #[async_trait]
 impl ToBytes for ServerRequest {
-    #[instrument(level = "debug", skip(buffer, self))]
+    #[instrument(level = "trace", skip(buffer, self))]
     async fn write_to_buf(
         &self,
         buffer: &mut BufWriter<impl AsyncWrite + Unpin + Send>,
@@ -425,7 +425,7 @@ impl ToBytes for ServerRequest {
             ServerRequest::PrivateRoomAddOperator(_) => todo!(),
             ServerRequest::PrivateRoomRemoveOperator(_) => todo!(),
             ServerRequest::MessageUsers(_) => todo!(),
-            ServerRequest::CantConnectToPeer(_) => todo!(),
+            ServerRequest::CantConnectToPeer(ticket) => ticket.write_to_buf(buffer).await,
         }
     }
 }

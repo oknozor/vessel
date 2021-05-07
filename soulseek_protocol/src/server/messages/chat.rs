@@ -39,9 +39,7 @@ pub struct ChatMessage {
 }
 
 impl ParseBytes for ChatMessage {
-    type Output = Self;
-
-    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self::Output> {
+    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self> {
         let room = read_string(src)?;
         let username = read_string(src)?;
         let message = read_string(src)?;
@@ -64,9 +62,7 @@ pub struct PrivateMessage {
 }
 
 impl ParseBytes for PrivateMessage {
-    type Output = Self;
-
-    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self::Output> {
+    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self> {
         let id = src.get_u32_le();
         let timestamp = src.get_u32_le();
         let username = read_string(src)?;

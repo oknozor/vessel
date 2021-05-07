@@ -58,9 +58,7 @@ impl ToBytes for SearchQuery {
 }
 
 impl ParseBytes for SearchQuery {
-    type Output = Self;
-
-    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self::Output> {
+    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self> {
         let username = read_string(src)?;
         let ticket = src.get_u32_le();
         let query = read_string(src)?;

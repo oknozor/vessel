@@ -1,9 +1,9 @@
 use std::io;
-use std::net::Ipv4Addr;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::Path;
 
 use crate::peers::messages::p2p::shared_directories::{Directory, File, SharedDirectories};
-use crate::server::messages::peer::{Peer, PeerConnectionRequest};
+use crate::server::messages::peer::{Peer, PeerAddress, PeerConnectionRequest};
 use crate::settings::CONFIG;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -33,6 +33,16 @@ impl From<PeerConnectionRequest> for PeerEntity {
     }
 }
 
+impl From<PeerAddress> for PeerEntity {
+    fn from(peer: PeerAddress) -> Self {
+        PeerEntity {
+            username: peer.username,
+            ip: peer.ip,
+            port: peer.port,
+        }
+    }
+}
+
 impl From<Peer> for PeerEntity {
     fn from(peer: Peer) -> Self {
         PeerEntity {
@@ -44,11 +54,8 @@ impl From<Peer> for PeerEntity {
 }
 
 impl PeerEntity {
-    pub fn get_address_with_port(&self) -> String {
-        format!("{}:{}", self.ip, self.port)
-    }
-    pub fn get_address(&self) -> String {
-        self.ip.to_string()
+    pub fn get_address(&self) -> SocketAddr {
+        SocketAddr::new(IpAddr::from(self.ip), self.port as u16)
     }
 }
 

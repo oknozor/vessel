@@ -1,5 +1,6 @@
 use std::io::Cursor;
 
+use crate::{MessageCode, ProtocolHeader};
 use bytes::Buf;
 
 pub mod folder_content;
@@ -18,16 +19,16 @@ pub struct PeerMessageHeader {
     pub(crate) message_len: usize,
 }
 
-impl PeerMessageHeader {
-    pub fn read(src: &mut Cursor<&[u8]>) -> std::io::Result<Self> {
-        let message_length = src.get_u32_le();
-        let code = src.get_u32_le();
-        let code = PeerMessageCode::from(code);
+impl ProtocolHeader for PeerMessageHeader {
+    const LEN: usize = 8;
+    type Code = PeerMessageCode;
 
-        // We can subtract message code from the length since we already know it
-        let message_len = (message_length - 4) as usize;
+    fn message_len(&self) -> usize {
+        self.message_len
+    }
 
-        Ok(Self { message_len, code })
+    fn new(message_len: usize, code: Self::Code) -> Self {
+        Self { message_len, code }
     }
 }
 
@@ -54,6 +55,15 @@ pub enum PeerMessageCode {
     Unknown,
 }
 
+impl MessageCode for PeerMessageCode {
+    const LEN: usize = 4;
+
+    fn read(src: &mut Cursor<&[u8]>) -> Self {
+        let code = src.get_u32_le();
+        Self::from(code)
+    }
+}
+
 impl From<u32> for PeerMessageCode {
     fn from(code: u32) -> Self {
         match code {
@@ -78,5 +88,3 @@ impl From<u32> for PeerMessageCode {
         }
     }
 }
-
-pub(crate) const PEER_MSG_HEADER_LEN: u32 = 8;

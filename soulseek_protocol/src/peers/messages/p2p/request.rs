@@ -6,7 +6,7 @@ use crate::peers::messages::p2p::search::SearchReply;
 use crate::peers::messages::p2p::shared_directories::SharedDirectories;
 use crate::peers::messages::p2p::transfer::*;
 use crate::peers::messages::p2p::user_info::UserInfo;
-use crate::peers::messages::p2p::{PeerMessageCode, PEER_MSG_HEADER_LEN};
+use crate::peers::messages::p2p::PeerMessageCode;
 
 /// TODO
 #[derive(Debug)]
@@ -92,7 +92,7 @@ pub(crate) async fn write_str_msg(
     buffer: &mut BufWriter<impl AsyncWrite + Unpin + Send>,
 ) -> tokio::io::Result<()> {
     let bytes = src.as_bytes();
-    let message_len = bytes.len() as u32 + PEER_MSG_HEADER_LEN;
+    let message_len = bytes.len() as u32 + 8;
     buffer.write_u32_le(message_len).await?;
     buffer.write_u32_le(code as u32).await?;
     write_string(src, buffer).await?;

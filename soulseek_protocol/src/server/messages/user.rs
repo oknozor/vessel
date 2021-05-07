@@ -1,7 +1,8 @@
-use crate::frame::{read_ipv4, read_string, ParseBytes};
-use bytes::Buf;
 use std::io::Cursor;
-use std::net::Ipv4Addr;
+
+use bytes::Buf;
+
+use crate::frame::{read_string, ParseBytes};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UserStatus {
@@ -11,9 +12,7 @@ pub struct UserStatus {
 }
 
 impl ParseBytes for UserStatus {
-    type Output = Self;
-
-    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self::Output> {
+    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self> {
         let username = read_string(src)?;
         let status = Status::from(src.get_u32_le());
         let privileged = src.get_u8() == 1;
@@ -52,8 +51,6 @@ type Users = Vec<String>;
 pub struct UserList(Users);
 
 impl ParseBytes for UserList {
-    type Output = Self;
-
     fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self> {
         let number_of_users = src.get_u32_le();
         let mut users = Vec::with_capacity(number_of_users as usize);
@@ -64,25 +61,6 @@ impl ParseBytes for UserList {
         }
 
         Ok(Self(users))
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct PeerAddress {
-    username: String,
-    ip: Ipv4Addr,
-    port: u32,
-}
-
-impl ParseBytes for PeerAddress {
-    type Output = Self;
-
-    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self> {
-        let username = read_string(src)?;
-        let ip = read_ipv4(src);
-        let port = src.get_u32_le();
-
-        Ok(PeerAddress { username, ip, port })
     }
 }
 
@@ -103,8 +81,6 @@ pub enum UserAdded {
 }
 
 impl ParseBytes for UserAdded {
-    type Output = Self;
-
     fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self> {
         let code = src.get_u8();
         let username = read_string(src)?;
@@ -143,9 +119,7 @@ pub struct UserStats {
 }
 
 impl ParseBytes for UserStats {
-    type Output = Self;
-
-    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self::Output> {
+    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self> {
         let username = read_string(src)?;
         let average_speed = src.get_u32_le();
         let download_number = src.get_u64_le();
@@ -172,9 +146,7 @@ pub struct UserData {
 }
 
 impl ParseBytes for UserData {
-    type Output = Self;
-
-    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self::Output> {
+    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self> {
         let average_speed = src.get_u32_le();
         let download_number = src.get_u64_le();
         let files = src.get_u32_le();
@@ -195,9 +167,7 @@ pub struct UsersWithStatus {
 }
 
 impl ParseBytes for UsersWithStatus {
-    type Output = Self;
-
-    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self::Output> {
+    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self> {
         let users_nth = src.get_u32_le();
         let mut users = vec![];
         for _ in 0..users_nth {
@@ -215,9 +185,7 @@ pub struct UserWithStatus {
 }
 
 impl ParseBytes for UserWithStatus {
-    type Output = Self;
-
-    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self::Output> {
+    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self> {
         let username = read_string(src)?;
         let status = Status::from(src.get_u32_le());
 
@@ -232,9 +200,7 @@ pub struct ItemSimilarUsers {
 }
 
 impl ParseBytes for ItemSimilarUsers {
-    type Output = Self;
-
-    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self::Output> {
+    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self> {
         let item = read_string(src)?;
         let users_nth = src.get_u32_le();
         let mut users = Vec::with_capacity(users_nth as usize);

@@ -4,6 +4,9 @@ extern crate tokio;
 #[macro_use]
 extern crate tracing;
 
+#[macro_use]
+extern crate eyre;
+
 use tokio::net::TcpListener;
 use tokio::sync::mpsc;
 use tracing_subscriber::fmt::format::FmtSpan;
@@ -15,6 +18,8 @@ use soulseek_protocol::server::messages::request::ServerRequest;
 use soulseek_protocol::server::messages::response::ServerResponse;
 
 use crate::tasks::spawn_server_listener_task;
+use eyre::Result;
+use soulseek_protocol::peers::channels::SenderPool;
 use soulseek_protocol::peers::listener::{PeerListenerReceivers, PeerListenerSenders};
 use soulseek_protocol::peers::messages::p2p::response::PeerResponse;
 
@@ -22,9 +27,9 @@ const PEER_LISTENER_ADDRESS: &str = "0.0.0.0:2255";
 
 mod tasks;
 
-// #[tokio::main]
-#[tokio::main(flavor = "current_thread")]
-async fn main() -> std::io::Result<()> {
+#[tokio::main]
+// #[tokio::main(flavor = "current_thread")]
+async fn main() -> Result<()> {
     let filter = std::env::var("RUST_LOG").unwrap_or_else(|_| "tracing=info,warp=debug".to_owned());
 
     tracing_subscriber::fmt()
@@ -58,6 +63,10 @@ async fn main() -> std::io::Result<()> {
 
     let login_sender = http_tx.clone();
     let (logged_in_tx, logged_in_rx) = mpsc::channel::<()>(1);
+    let (peer_address_tx, peer_address_rx) = mpsc::channel(32);
+
+    // Keep the UI updated about ongoing downloads
+    let (download_progress_tx, download_progress_rx) = mpsc::channel(32);
 
     let database = Database::default();
 
@@ -70,11 +79,12 @@ async fn main() -> std::io::Result<()> {
         possible_parent_tx,
         connection,
         logged_in_tx,
+        peer_address_tx,
     );
 
     // Start the warp SSE server with a soulseek mpsc event receiver
     // this task will proxy soulseek events to the web clients
-    let sse_server = tasks::spawn_sse_server(sse_rx, sse_peer_rx);
+    let sse_server = tasks::spawn_sse_server(sse_rx, sse_peer_rx, download_progress_rx);
 
     // Start the HTTP api proxy with the soulseek mpsc event sender
     // Here we are only sending request via HTTP and expect no other response
@@ -88,6 +98,8 @@ async fn main() -> std::io::Result<()> {
 
     let listener = TcpListener::bind(PEER_LISTENER_ADDRESS).await?;
 
+    let channels = SenderPool::new(download_progress_tx);
+
     // Listen for peer connection
     let peer_listener = tasks::spawn_peer_listener(
         PeerListenerSenders {
@@ -98,10 +110,12 @@ async fn main() -> std::io::Result<()> {
             peer_connection_rx,
             possible_parent_rx,
             peer_request_rx: peer_message_dispatcher_rx,
+            peer_address_rx,
         },
         logged_in_rx,
         listener,
         database,
+        channels,
     );
 
     // Wraps everything with tokio::join so we don't block on servers startup

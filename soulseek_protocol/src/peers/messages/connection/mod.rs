@@ -1,44 +1,51 @@
-use std::io::Cursor;
+use std::io::{Cursor, ErrorKind};
 
 use bytes::Buf;
 use tokio::io::{AsyncWrite, AsyncWriteExt, BufWriter};
 
 use crate::frame::{read_string, write_string, ToBytes};
 use crate::message_common::ConnectionType;
-use crate::SlskError;
+use crate::{MessageCode, ProtocolHeader, ProtocolMessage};
 
-use self::InitMessageCode::*;
-
-pub(crate) const CONNECTION_MSG_HEADER_LEN: u32 = 5;
+use self::ConnectionMessageCode::*;
 
 #[derive(Debug)]
 pub struct ConnectionMessageHeader {
-    pub(crate) code: InitMessageCode,
+    pub(crate) code: ConnectionMessageCode,
     pub(crate) message_len: usize,
 }
 
-impl ConnectionMessageHeader {
-    pub fn read(src: &mut Cursor<&[u8]>) -> std::io::Result<Self> {
-        let message_length = src.get_u32_le();
-        let code = src.get_u8();
-        let code = InitMessageCode::from(code);
+impl ProtocolHeader for ConnectionMessageHeader {
+    const LEN: usize = 5;
+    type Code = ConnectionMessageCode;
 
-        // We can subtract message code from the length since we already know it
-        let message_len = message_length as usize - 1;
+    fn message_len(&self) -> usize {
+        self.message_len
+    }
 
-        Ok(Self { message_len, code })
+    fn new(message_len: usize, code: Self::Code) -> Self {
+        Self { message_len, code }
     }
 }
 
 #[repr(u8)]
 #[derive(Debug)]
-pub enum InitMessageCode {
+pub enum ConnectionMessageCode {
     PierceFireWall = 0,
     PeerInit = 1,
     Unknown,
 }
 
-impl From<u8> for InitMessageCode {
+impl MessageCode for ConnectionMessageCode {
+    const LEN: usize = 1;
+
+    fn read(src: &mut Cursor<&[u8]>) -> Self {
+        let code = src.get_u8();
+        Self::from(code)
+    }
+}
+
+impl From<u8> for ConnectionMessageCode {
     fn from(code: u8) -> Self {
         match code {
             0 => PierceFireWall,
@@ -66,9 +73,9 @@ impl ToBytes for PeerConnectionMessage {
     ) -> tokio::io::Result<()> {
         match self {
             PeerConnectionMessage::PierceFirewall(token) => {
-                buffer.write_u32_le(CONNECTION_MSG_HEADER_LEN).await?;
+                buffer.write_u32_le(8).await?;
                 buffer
-                    .write_u8(InitMessageCode::PierceFireWall as u8)
+                    .write_u8(ConnectionMessageCode::PierceFireWall as u8)
                     .await?;
                 buffer.write_u32_le(*token).await?;
             }
@@ -83,7 +90,9 @@ impl ToBytes for PeerConnectionMessage {
                 buffer
                     .write_u32_le(1 + username_len + connection_type_len + 4)
                     .await?;
-                buffer.write_u8(InitMessageCode::PeerInit as u8).await?;
+                buffer
+                    .write_u8(ConnectionMessageCode::PeerInit as u8)
+                    .await?;
                 write_string(&username, buffer).await?;
                 write_string(connection_type.as_ref(), buffer).await?;
 
@@ -95,32 +104,15 @@ impl ToBytes for PeerConnectionMessage {
     }
 }
 
-impl PeerConnectionMessage {
-    pub fn check(src: &mut Cursor<&[u8]>) -> Result<ConnectionMessageHeader, SlskError> {
-        // Check if the buffer contains enough bytes to parse the message error
-        if src.remaining() < CONNECTION_MSG_HEADER_LEN as usize {
-            return Err(SlskError::Incomplete);
-        }
+impl ProtocolMessage for PeerConnectionMessage {
+    type Header = ConnectionMessageHeader;
 
-        // Check if the buffer contains the full message already
-        let header = ConnectionMessageHeader::read(src)?;
-
-        if src.remaining() < header.message_len {
-            Err(SlskError::Incomplete)
-        } else {
-            Ok(header)
-        }
-    }
-
-    pub(crate) fn parse(
-        src: &mut Cursor<&[u8]>,
-        header: &ConnectionMessageHeader,
-    ) -> crate::Result<Self> {
+    fn parse(src: &mut Cursor<&[u8]>, header: &ConnectionMessageHeader) -> std::io::Result<Self> {
         match header.code {
-            InitMessageCode::PierceFireWall => {
+            ConnectionMessageCode::PierceFireWall => {
                 Ok(PeerConnectionMessage::PierceFirewall(src.get_u32_le()))
             }
-            InitMessageCode::PeerInit => {
+            ConnectionMessageCode::PeerInit => {
                 let username = read_string(src)?;
                 let connection_type = ConnectionType::from(read_string(src)?);
                 let token = src.get_u32_le();
@@ -131,17 +123,10 @@ impl PeerConnectionMessage {
                     token,
                 })
             }
-            InitMessageCode::Unknown => {
+            ConnectionMessageCode::Unknown => {
                 error!("Unkown message kind, code");
-                Err(SlskError::UnknownMessage)
+                Err(std::io::Error::from(ErrorKind::Other))
             }
-        }
-    }
-
-    pub fn kind(&self) -> &str {
-        match self {
-            PeerConnectionMessage::PierceFirewall(_) => "PierceFirewall",
-            PeerConnectionMessage::PeerInit { .. } => "PeerInit",
         }
     }
 }

@@ -11,9 +11,7 @@ pub struct FolderContentsRequest {
 }
 
 impl ParseBytes for FolderContentsRequest {
-    type Output = FolderContentsRequest;
-
-    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self::Output> {
+    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self> {
         let file_nth = src.get_u32_le();
         let mut folder_content_request = FolderContentsRequest { files: vec![] };
 

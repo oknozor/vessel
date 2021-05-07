@@ -46,9 +46,7 @@ impl ToBytes for SharedDirectories {
 }
 
 impl ParseBytes for SharedDirectories {
-    type Output = SharedDirectories;
-
-    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self::Output> {
+    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self> {
         let data = decompress(src)?;
         let mut cursor = Cursor::new(data.as_slice());
 
@@ -87,9 +85,7 @@ impl ToBytes for Directory {
 }
 
 impl ParseBytes for Directory {
-    type Output = Directory;
-
-    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self::Output> {
+    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self> {
         let name = read_string(src)?;
         let file_nth = src.get_u32_le();
         let mut files = Vec::with_capacity(file_nth as usize);
@@ -130,9 +126,7 @@ impl ToBytes for File {
 }
 
 impl ParseBytes for File {
-    type Output = File;
-
-    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self::Output> {
+    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self> {
         let _unused_char = src.get_u8();
         let name = read_string(src)?;
         let size = src.get_u64_le();
@@ -173,9 +167,7 @@ impl ToBytes for Attribute {
 }
 
 impl ParseBytes for Attribute {
-    type Output = Attribute;
-
-    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self::Output> {
+    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self> {
         let place = src.get_u32_le();
         let attribute = src.get_u32_le();
 

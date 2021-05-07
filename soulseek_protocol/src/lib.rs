@@ -6,18 +6,20 @@ extern crate async_trait;
 extern crate tracing;
 #[macro_use]
 extern crate lazy_static;
+#[macro_use]
+extern crate eyre;
 
 use std::fmt;
+use std::io::Cursor;
+use std::net::SocketAddr;
 use std::num::TryFromIntError;
 use std::string::FromUtf8Error;
 
+use bytes::Buf;
 use config::ConfigError;
 use tokio::time::error::Elapsed;
 
 pub mod peers;
-
-// pub mod listener;
-// pub mod peer_connection;
 
 pub mod frame;
 pub mod message_common;
@@ -49,7 +51,7 @@ pub enum SlskError {
     NoTicket,
     PeerConnectionLost,
     UnknownMessage,
-    InvalidSocketAddress(String),
+    InvalidSocketAddress(SocketAddr),
 
     /// Invalid message encoding
     Other(crate::Error),
@@ -121,4 +123,52 @@ impl fmt::Display for SlskError {
             }
         }
     }
+}
+
+pub trait ProtocolMessage<Output = Self> {
+    type Header: ProtocolHeader;
+
+    fn check(src: &mut Cursor<&[u8]>) -> crate::Result<Self::Header> {
+        // Check if the buffer contains enough bytes to parse the message header
+        if src.remaining() < Self::Header::LEN {
+            return Err(SlskError::Incomplete);
+        }
+        // Check if the buffer contains the full message already
+        let header = Self::Header::read::<Self::Header>(src)?;
+
+        if src.remaining() < header.message_len() as usize {
+            Err(SlskError::Incomplete)
+        } else {
+            Ok(header)
+        }
+    }
+
+    fn parse(src: &mut Cursor<&[u8]>, header: &Self::Header) -> std::io::Result<Output>;
+}
+
+pub trait ProtocolHeader {
+    const LEN: usize;
+    type Code: MessageCode;
+
+    fn message_len(&self) -> usize;
+
+    fn read<T>(src: &mut Cursor<&[u8]>) -> std::io::Result<T>
+    where
+        T: ProtocolHeader,
+    {
+        let message_length = src.get_u32_le() as usize;
+        let code = T::Code::read(src);
+
+        // We can subtract message code from the length since we already know it
+        let message_len = message_length - Self::Code::LEN;
+
+        Ok(T::new(message_len, code))
+    }
+
+    fn new(message_len: usize, code: Self::Code) -> Self;
+}
+
+pub trait MessageCode<Output = Self> {
+    const LEN: usize;
+    fn read(src: &mut Cursor<&[u8]>) -> Output;
 }

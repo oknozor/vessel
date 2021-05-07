@@ -5,88 +5,125 @@ use tokio::sync::{mpsc, Semaphore};
 
 use crate::database::Database;
 use crate::message_common::ConnectionType;
-use crate::peers::channels::{ConnectionState, SenderPool};
-use crate::peers::connection::Connection;
+use crate::peers::channels::SenderPool;
+use crate::peers::connection::PeerConnection;
 use crate::peers::messages::connection::PeerConnectionMessage;
+use crate::peers::messages::distributed::DistributedMessage;
 use crate::peers::messages::p2p::request::PeerRequest;
 use crate::peers::messages::p2p::response::PeerResponse;
 use crate::peers::messages::p2p::transfer::TransferReply::TransferReplyOk;
 use crate::peers::messages::p2p::transfer::TransferRequest;
 use crate::peers::messages::p2p::user_info::UserInfo;
 use crate::peers::messages::PeerRequestPacket;
-use crate::peers::messages::PeerResponsePacket;
 use crate::peers::shutdown::Shutdown;
-use crate::SlskError;
+use eyre::Result;
+use std::net::SocketAddr;
 use std::time::Duration;
+use tokio::sync::mpsc::{channel, Receiver};
+use tokio::time::timeout;
 
 #[derive(Debug)]
-pub struct Handler {
+pub struct PeerHandler {
     pub peer_username: Option<String>,
-    pub(crate) connection: Connection,
-    pub(crate) handler_rx: mpsc::Receiver<PeerRequestPacket>,
+    pub(crate) connection: PeerConnection,
     pub(crate) sse_tx: mpsc::Sender<PeerResponse>,
+    pub(crate) ready_tx: mpsc::Sender<u32>,
     pub(crate) shutdown: Shutdown,
     pub(crate) limit_connections: Arc<Semaphore>,
     pub(crate) _shutdown_complete: mpsc::Sender<()>,
-    // We need this when a peer send use pierce firewall to upgrade the connection to
-    // the correct protocol (distributed, download, or peer to peer)
-    pub(crate) connection_upgrade: ConnectionType,
+    pub(crate) connection_states: SenderPool,
+    pub(crate) db: Database,
+    // We store this to drop the channel state because calling get_address on a dropped connection
+    // Can produce Err NotConnected
+    pub(crate) address: SocketAddr,
+    pub(crate) token: Option<u32>,
 }
 
-impl Handler {
-    pub(crate) async fn listen(&mut self, db: Database) -> crate::Result<()> {
-        let mut backoff = 1;
+pub(crate) async fn connect_direct(
+    mut handler: PeerHandler,
+    conn_type: ConnectionType,
+) -> Result<()> {
+    tokio::spawn(async move {
+        match handler.init_connection_outgoing(conn_type).await {
+            Ok(_) => info!(
+                "Connection with {:?} ended successfully",
+                handler.peer_username
+            ),
+            Err(e) => error!("Error during direct peer connection, cause = {}", e),
+        }
+    });
+    Ok(())
+}
 
+pub(crate) async fn pierce_firewall(mut handler: PeerHandler, token: u32) -> Result<()> {
+    tokio::spawn(async move {
+        match handler.pierce_firewall(token).await {
+            Ok(_) => info!(
+                "Connection with {:?} ended successfully",
+                handler.peer_username
+            ),
+            Err(e) => error!("Error during direct peer connection, cause = {}", e),
+        }
+    });
+    Ok(())
+}
+
+impl PeerHandler {
+    pub(crate) async fn listen(&mut self, handler_rx: Receiver<PeerRequestPacket>) -> Result<()> {
+        match self.connection_type() {
+            ConnectionType::PeerToPeer => {
+                self.listen_p2p(handler_rx).await?;
+            }
+            ConnectionType::FileTransfer => {
+                let progress_sender = self.connection_states.get_progress_sender();
+                let user_name = self.peer_username.as_ref().unwrap().clone();
+                self.connection
+                    .download(&self.db, progress_sender, user_name)
+                    .await?;
+            }
+            ConnectionType::DistributedNetwork => {
+                self.listen_distributed().await?;
+            }
+            ConnectionType::HandShake => {
+                unreachable!("Connection type should be known at this point")
+            }
+        }
+
+        Ok(())
+    }
+
+    pub(crate) async fn listen_p2p(
+        &mut self,
+        mut handler_rx: Receiver<PeerRequestPacket>,
+    ) -> Result<()> {
         while !self.shutdown.is_shutdown() {
-            match &self.connection.connection_type {
-                ConnectionType::FileTransfer => {
-                    return self.connection.download(db.clone()).await;
-                }
-                _other => {
-                    // While reading a request frame, also listen for the shutdown
-                    // signal.
-                    tokio::select! {
-                        response = self.connection.read_response() =>  {
+            tokio::select! {
+                        response = self.connection.read_message::<PeerResponse>() =>  {
                             match response {
-                                Ok(message) => match message {
-                                    Some(PeerResponsePacket::ConnectionMessage(message)) => {
-                                        if let Err(e) = self.handle_connection_message(&message).await {
-                                            return Err(format!("Connection error : {}", e).into());
-                                        }
-                                    }
-                                    Some(PeerResponsePacket::Message(message)) => {
-                                        info!("Got message from peer {:?}", self.peer_username);
-
-                                        if let Err(e) = self.handle_peer_message(&message, db.clone()).await {
-                                            return Err(format!("Peer message error : {}", e).into());
-                                        }
-
-                                        return self.sse_tx.send(message)
+                                Ok(message) => {
+                                    if let PeerResponse::SearchReply(_) = message {
+                                            return self.sse_tx.send(message)
                                             .await
-                                            .map_err(|err| SlskError::Other(Box::new(err)));
-                                    },
-
-                                    Some(PeerResponsePacket::DistributedMessage(message)) => {
-                                        info!("Got Distributed message from parent {:?} : {:?}", self.peer_username, &message);
-                                    }
-
-                                    None => {
-                                        if backoff > 2048 {
-                                            return Err(format!("Timed out listening for peer {:?} after {}ms", self.peer_username, backoff).into());
+                                            .map_err(|err| eyre!(err));
                                         }
-                                        debug!("No message from peer, backing off for {}ms", backoff);
-                                        tokio::time::sleep(Duration::from_millis(backoff)).await;
-                                        backoff *= 2;
-                                    }
-                                },
+
+                                        // When receiving a SearchReply we want to close the connection asap
+                                        if let Err(e) = self.handle_peer_message(&message).await {
+                                            return Err(eyre!("Error handling peer message : {}", e));
+                                        }
+
+                                        self.sse_tx.send(message)
+                                            .await
+                                            .map_err(|err| eyre!(err))?;
+                                }
                                 Err(e) => {
-                                    return Err(format!("Error in connection handler with {:?} : {}", self.peer_username, e).into());
+                                    return Err(eyre!("Error in connection handler with {:?} : {}", self.peer_username, e));
                                 }
                             }
 
                         },
-                        request = self.handler_rx.recv() => if let Some(request) = request  {
-                            debug!("Sending request {:?} to {:?}", request, self.peer_username);
+                        request = handler_rx.recv() => if let Some(request) = request  {
+                            debug!("Sending request to {:?}", self.peer_username);
                             if let Err(err) = self.connection.write_request(request).await {
                                 error!("Handler write error, {:?}", err);
                             }
@@ -96,36 +133,90 @@ impl Handler {
                             // This will result in the task terminating.
                             break;
                         }
-                    }
-                }
-            };
+            }
         }
 
         Ok(())
     }
 
-    pub(crate) async fn connection_handshake(
-        &mut self,
-        database: Database,
-        mut channels: SenderPool,
-        connection_type: ConnectionType,
-    ) -> crate::Result<()> {
-        self.send_peer_init().await?;
-        self.connection.connection_type = connection_type;
-        channels
-            .set_connection_state(
-                self.connection.get_peer_address()?.to_string(),
-                ConnectionState::Established(connection_type),
-            )
-            .await?;
-        self.listen(database).await
+    pub(crate) async fn listen_distributed(&mut self) -> Result<()> {
+        while !self.shutdown.is_shutdown() {
+            tokio::select! {
+                        response = self.connection.read_message::<DistributedMessage>() =>  {
+                            match response {
+                                Ok(message) => debug!("Got distributed message {:?}", message),
+                                Err(e) => {
+                                    return Err(eyre!("Error in connection handler with {:?} : {}", self.peer_username, e));
+                                }
+                            }
+
+                        },
+                        _ = self.shutdown.recv() => {
+                            // If a shutdown signal is received, return from `run`.
+                            // This will result in the task terminating.
+                            break;
+                        }
+            }
+        }
+
+        Ok(())
     }
 
-    async fn handle_peer_message(
+    pub(crate) async fn init_connection_outgoing(
         &mut self,
-        message: &PeerResponse,
-        db: Database,
-    ) -> tokio::io::Result<()> {
+        conn_type: ConnectionType,
+    ) -> Result<()> {
+        let token = random();
+        debug!(
+            "Initiate direct connection with peer init, token = {}",
+            token
+        );
+
+        self.send_peer_init(token, conn_type).await?;
+
+        let (tx, rx) = channel(32);
+        self.connection_states.peer_init(
+            &self.peer_username.as_ref().unwrap(),
+            self.connection_type(),
+            token,
+            tx,
+        );
+        self.token = Some(token);
+        self.connection.connection_type = conn_type;
+
+        self.ready_tx.send(token).await?;
+
+        self.listen(rx).await
+    }
+
+    pub(crate) async fn pierce_firewall(&mut self, token: u32) -> Result<()> {
+        debug!(
+            "Initiate connection with pierce firewall, token = {}",
+            token
+        );
+        self.send_pierce_firewall(token).await?;
+        let (tx, rx) = channel(32);
+        let state = self.connection_states.set_ready(token, tx)?;
+        self.token = Some(token);
+        self.peer_username = Some(state.username);
+        self.connection.connection_type = state.conn_type;
+
+        self.ready_tx.send(token).await?;
+
+        self.listen(rx).await
+    }
+
+    pub(crate) async fn wait_for_connection_handshake(&mut self) -> Result<()> {
+        let message = timeout(
+            Duration::from_secs(2),
+            self.connection.read_message::<PeerConnectionMessage>(),
+        )
+        .await??;
+        let rx = self.handle_connection_message(&message).await?;
+        self.listen(rx).await
+    }
+
+    async fn handle_peer_message(&mut self, message: &PeerResponse) -> tokio::io::Result<()> {
         match message {
             PeerResponse::SharesReply(_)
             | PeerResponse::UserInfoReply(_)
@@ -134,7 +225,7 @@ impl Handler {
             PeerResponse::UserInfoRequest => self.send_user_info().await,
             PeerResponse::FolderContentsRequest(_) => todo!(),
             PeerResponse::FolderContentsReply(_) => todo!(),
-            PeerResponse::TransferRequest(request) => self.transfer(request, db.clone()).await,
+            PeerResponse::TransferRequest(request) => self.transfer(request).await,
             PeerResponse::TransferReply(_) => todo!(),
             PeerResponse::UploadPlaceholder => todo!(),
             PeerResponse::QueueDownload { .. } => todo!(),
@@ -153,16 +244,16 @@ impl Handler {
     async fn handle_connection_message(
         &mut self,
         message: &PeerConnectionMessage,
-    ) -> Result<(), std::io::Error> {
-        match message {
-            PeerConnectionMessage::PierceFirewall(_pierce_firewall) => {
-                debug!(
-                    "Upgrading connection with {:?} to {:?}",
-                    self.connection.get_peer_address_with_port(),
-                    self.connection_upgrade
-                );
-                self.connection.connection_type = self.connection_upgrade;
-                Ok(())
+    ) -> Result<Receiver<PeerRequestPacket>> {
+        debug!("Incoming connection handshake message : {:?}", message);
+        let (tx, rx) = channel(32);
+        let token = match message {
+            PeerConnectionMessage::PierceFirewall(token) => {
+                let state = self.connection_states.set_ready(*token, tx)?;
+                self.connection.connection_type = state.conn_type;
+                self.peer_username = Some(state.username);
+                self.token = Some(*token);
+                *token
             }
             PeerConnectionMessage::PeerInit {
                 username,
@@ -171,33 +262,58 @@ impl Handler {
             } => {
                 self.connection.connection_type = *connection_type;
                 self.peer_username = Some(username.clone());
-                match self.connection.get_peer_address() {
-                    Ok(peer_address) => {
-                        // Todo : update channel state
-                        Ok(())
-                    }
-                    Err(e) => Err(e),
-                }
+
+                // Token = 0 indicate an incoming search reply
+                if *token != 0 {
+                    self.connection_states
+                        .peer_init(&username, *connection_type, *token, tx);
+                };
+
+                self.token = Some(*token);
+                *token
             }
+        };
+
+        // Unless this is a search reply connection, notify this connection is ready to receive
+        // requests from the dispatcher
+        if token != 0 {
+            self.ready_tx.send(token).await.map_err(|e| {
+                eyre!(
+                    "Error sending ready state in connection with token {}, cause = {}",
+                    token,
+                    e
+                )
+            })?;
         }
+
+        Ok(rx)
     }
 
-    #[instrument(level = "debug", skip(self))]
-    async fn send_peer_init(&mut self) -> tokio::io::Result<()> {
-        let token = random();
-
+    async fn send_peer_init(
+        &mut self,
+        token: u32,
+        conn_type: ConnectionType,
+    ) -> tokio::io::Result<()> {
         self.connection
             .write_request(PeerRequestPacket::ConnectionMessage(
                 PeerConnectionMessage::PeerInit {
                     username: "vessel".to_string(),
-                    connection_type: ConnectionType::PeerToPeer,
+                    connection_type: conn_type,
                     token,
                 },
             ))
             .await
     }
 
-    #[instrument(level = "debug", skip(self))]
+    async fn send_pierce_firewall(&mut self, token: u32) -> tokio::io::Result<()> {
+        self.connection
+            .write_request(PeerRequestPacket::ConnectionMessage(
+                PeerConnectionMessage::PierceFirewall(token),
+            ))
+            .await
+    }
+
+    #[instrument(level = "trace", skip(self))]
     async fn send_user_info(&mut self) -> tokio::io::Result<()> {
         // TODO : calculate correct values for total_upload, queue size and free slots
         self.connection
@@ -213,7 +329,7 @@ impl Handler {
             .await
     }
 
-    #[instrument(level = "debug", skip(self))]
+    #[instrument(level = "trace", skip(self))]
     async fn send_shares_reply(&mut self) -> tokio::io::Result<()> {
         let shared_dirs_copy;
         {
@@ -234,11 +350,11 @@ impl Handler {
             .await
     }
 
-    async fn transfer(&mut self, request: &TransferRequest, db: Database) -> tokio::io::Result<()> {
+    async fn transfer(&mut self, request: &TransferRequest) -> tokio::io::Result<()> {
         let ticket = request.ticket;
         let file_size = request.file_size.expect("Ok file size");
 
-        db.insert_download(request)?;
+        self.db.insert_download(request)?;
 
         self.connection
             .write_request(PeerRequestPacket::Message(PeerRequest::TransferReply(
@@ -248,10 +364,28 @@ impl Handler {
 
         Ok(())
     }
+
+    fn connection_type(&self) -> ConnectionType {
+        self.connection.connection_type
+    }
 }
 
-impl Drop for Handler {
+impl Drop for PeerHandler {
     fn drop(&mut self) {
+        // Release a connection permit
         self.limit_connections.add_permits(1);
+
+        // If we have a token we need to clean up channel state
+        // Otherwise connection was never ready and does not have a ready channel
+        if let Some(token) = self.token {
+            if token != 0 {
+                if let Err(e) = self.connection_states.remove_channel(token) {
+                    panic!(
+                        "Error dropping channel with address {}, {}",
+                        self.address, e
+                    )
+                };
+            }
+        }
     }
 }

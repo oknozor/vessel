@@ -72,11 +72,11 @@ impl Database {
             .map(Result::unwrap)
     }
 
-    pub fn get_peer_by_name(&self, username: &str) -> Option<PeerEntity> {
+    pub fn get_peer(&self, username: &str) -> Option<PeerEntity> {
         self.inner
             .open_tree("users")
             .unwrap()
-            .get(username)
+            .get(&username)
             .ok()
             .flatten()
             .map(|data| data.to_vec())
@@ -135,7 +135,7 @@ mod test {
 
         assert_eq!(peer.username, "toto");
         assert_eq!(peer.get_address(), "127.0.0.1");
-        assert_eq!(peer.get_address_with_port(), "127.0.0.1:0");
+        assert_eq!(peer.get_address(), "127.0.0.1:0");
         assert_eq!(peer.port, 0);
     }
 }

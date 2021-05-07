@@ -48,7 +48,7 @@ impl SlskConnection {
     /// length, try to parse it, otherwise, try to read more bytes from the soulseek TcpStream buffer.
     /// **WARNING**  :
     /// [`Header`]: crate::server.messages::Header
-    #[instrument(level = "debug")]
+    #[instrument(level = "trace")]
     pub async fn read_response(&mut self) -> crate::Result<Option<ServerResponse>> {
         loop {
             if let Some(message) = self.parse_response()? {
@@ -66,7 +66,7 @@ impl SlskConnection {
     }
 
     /// Send a [`ServerRequest`] the soulseek server, using `[ToBytes]` to write to the buffer.
-    #[instrument(level = "debug", skip(self))]
+    #[instrument(level = "trace", skip(self))]
     pub async fn write_request(&mut self, request: &ServerRequest) -> tokio::io::Result<()> {
         request.write_to_buf(&mut self.stream).await?;
         info!("Request sent to Soulseek server : {:?}", request);
@@ -79,7 +79,7 @@ impl SlskConnection {
         self.buffer.advance(HEADER_LEN as usize + message_len)
     }
 
-    #[instrument(level = "debug")]
+    #[instrument(level = "trace")]
     fn parse_response(&mut self) -> crate::Result<Option<ServerResponse>> {
         use crate::SlskError::Incomplete;
         let mut buf = Cursor::new(&self.buffer[..]);

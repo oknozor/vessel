@@ -5,7 +5,7 @@ use crate::server::messages::chat::{GroupMessage, SayInChat};
 use crate::server::messages::login::LoginRequest;
 use crate::server::messages::peer::{PeerConnectionTicket, RequestConnectionToPeer};
 use crate::server::messages::privilege::PrivilegesGift;
-use crate::server::messages::room::{Ticker, UserRoomEvent};
+use crate::server::messages::room::{JoinRoom, Ticker, UserRoomEvent};
 use crate::server::messages::search::{RoomSearchQuery, SearchQuery, SearchRequest};
 use crate::server::messages::shares::SharedFolderAndFiles;
 use crate::server::messages::{MessageCode, HEADER_LEN};
@@ -49,7 +49,7 @@ pub enum ServerRequest {
     ///  **Description** : We want to join a room.
     ///
     /// **Response** : [`ServerResponse::RoomJoined`][`crate::server::messages::response::ServerResponse::RoomJoined`]
-    JoinRoom(String),
+    JoinRoom(JoinRoom),
     ///  **Description** : We send this to the server when we want to leave a room.
     ///
     /// **Response** : [`ServerResponse::RoomLeft`][`crate::server::messages::response::ServerResponse::RoomLeft`]
@@ -335,9 +335,7 @@ impl ToBytes for ServerRequest {
                 write_str_msg(&username, MessageCode::GetUserStatus, buffer).await
             }
             ServerRequest::SendChatMessage(message) => message.write_to_buf(buffer).await,
-            ServerRequest::JoinRoom(join_room) => {
-                write_str_msg(join_room, MessageCode::JoinRoom, buffer).await
-            }
+            ServerRequest::JoinRoom(join_room) => join_room.write_to_buf(buffer).await,
             ServerRequest::LeaveRoom(room) => {
                 write_str_msg(room, MessageCode::LeaveRoom, buffer).await
             }
@@ -406,7 +404,7 @@ impl ToBytes for ServerRequest {
             ServerRequest::GetItemSimilarUsers(item) => {
                 write_str_msg(item, MessageCode::GetItemSimilarUsers, buffer).await
             }
-            ServerRequest::SetRoomTicker(ticker) => todo!(),
+            ServerRequest::SetRoomTicker(_) => todo!(),
             ServerRequest::AddHatedInterest(_) => todo!(),
             ServerRequest::RemoveHatedInterest(_) => todo!(),
             ServerRequest::RoomSearch(_) => todo!(),
@@ -416,10 +414,16 @@ impl ToBytes for ServerRequest {
             ServerRequest::BranchRoot(_) => todo!(),
             ServerRequest::ChildDepth(_) => todo!(),
             ServerRequest::AddUserToPrivateRoom(_) => todo!(),
-            ServerRequest::RemoveUserFromPrivateRoom(_) => todo!(),
-            ServerRequest::PrivateRoomDropMemberShip(_) => todo!(),
-            ServerRequest::PrivateRoomDropOwnerShip(_) => todo!(),
-            ServerRequest::PrivateRoomUnknown(_) => todo!(),
+            ServerRequest::RemoveUserFromPrivateRoom(room_event) => room_event,
+            ServerRequest::PrivateRoomDropMemberShip(room) => {
+                write_str_msg(room, MessageCode::GetItemSimilarUsers, buffer).await
+            }
+            ServerRequest::PrivateRoomDropOwnerShip(room) => {
+                write_str_msg(room, MessageCode::GetItemSimilarUsers, buffer).await
+            }
+            ServerRequest::PrivateRoomUnknown(room) => {
+                write_str_msg(room, MessageCode::GetItemSimilarUsers, buffer).await
+            }
             ServerRequest::PrivateRoomToggle(_) => todo!(),
             ServerRequest::NewPassWord(_) => todo!(),
             ServerRequest::PrivateRoomAddOperator(_) => todo!(),
@@ -479,4 +483,176 @@ pub(crate) async fn write_u32_msg(
     buffer.write_u32_le(code as u32).await?;
     buffer.write_u32_le(src).await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::frame::ToBytes;
+    use crate::server::messages::chat::SayInChat;
+    use crate::server::messages::login::LoginRequest;
+    use crate::server::messages::request::ServerRequest;
+    use crate::server::messages::room::{JoinRoom, UserRoomEvent};
+    use tokio::io::{AsyncWriteExt, BufWriter};
+    use tokio_test::block_on;
+
+    fn write_to_buff_blocking(request: ServerRequest) -> Vec<u8> {
+        let mut data = Vec::new();
+        let mut buffer = BufWriter::new(&mut data);
+
+        let _result = block_on(async {
+            request.write_to_buf(&mut buffer).await.unwrap();
+            buffer.flush().await
+        });
+
+        data
+    }
+
+    #[test]
+    fn write_login() {
+        let login = ServerRequest::Login(LoginRequest::new("test", "s33cr3t"));
+
+        let data = write_to_buff_blocking(login);
+
+        assert_eq!(&data[8..], b"\x04\x00\x00\x00test\x07\x00\x00\x00s33cr3t\x9d\x00\x00\x00 \x00\x00\x00dbc93f24d8f3f109deed23c3e2f8b74c\x13\x00\x00\x00");
+    }
+
+    #[test]
+    fn set_listen_port() {
+        let listen_port = ServerRequest::SetListenPort(1337);
+
+        let data = write_to_buff_blocking(listen_port);
+
+        assert_eq!(&data[8..], b"9\x05\x00\x00");
+    }
+
+    #[test]
+    fn get_peer_address() {
+        let peer_address = ServerRequest::GetPeerAddress("test".to_string());
+
+        let data = write_to_buff_blocking(peer_address);
+
+        assert_eq!(&data[8..], b"\x04\x00\x00\x00test");
+    }
+
+    #[test]
+    fn get_add_user() {
+        let add_user = ServerRequest::AddUser("test".to_string());
+
+        let data = write_to_buff_blocking(add_user);
+
+        assert_eq!(&data[8..], b"\x04\x00\x00\x00test");
+    }
+
+    #[test]
+    fn remove_user() {
+        let remove_user = ServerRequest::RemoveUser("test".to_string());
+
+        let data = write_to_buff_blocking(remove_user);
+
+        assert_eq!(&data[8..], b"\x04\x00\x00\x00test");
+    }
+
+    #[test]
+    fn get_user_status() {
+        let get_user_status = ServerRequest::GetUserStatus("test".to_string());
+
+        let data = write_to_buff_blocking(get_user_status);
+
+        assert_eq!(&data[8..], b"\x04\x00\x00\x00test");
+    }
+
+    #[test]
+    fn sets_status() {
+        let sets_status = ServerRequest::SetOnlineStatus(1);
+
+        let data = write_to_buff_blocking(sets_status);
+
+        assert_eq!(&data[8..], b"\x01\x00\x00\x00");
+    }
+
+    #[test]
+    fn start_chat() {
+        let start_chat = ServerRequest::EnablePublicChat;
+
+        let data = write_to_buff_blocking(start_chat);
+
+        assert_eq!(&data[8..], b"");
+    }
+
+    #[test]
+    fn chat_message() {
+        let chat_message = ServerRequest::SendChatMessage(SayInChat {
+            room: "nicotine".to_string(),
+            message: "Wassup?".to_string(),
+        });
+
+        let data = write_to_buff_blocking(chat_message);
+
+        assert_eq!(
+            &data[8..],
+            b"\x08\x00\x00\x00nicotine\x07\x00\x00\x00Wassup?"
+        );
+    }
+
+    #[test]
+    fn join_room() {
+        let join_room = ServerRequest::JoinRoom(JoinRoom {
+            room: "nicotine".to_string(),
+            private: false,
+        });
+
+        let data = write_to_buff_blocking(join_room);
+
+        assert_eq!(&data[8..], b"\x08\x00\x00\x00nicotine\x00\x00\x00\x00");
+
+        let join_room_private = ServerRequest::JoinRoom(JoinRoom {
+            room: "nicotine".to_string(),
+            private: true,
+        });
+
+        let data = write_to_buff_blocking(join_room_private);
+
+        assert_eq!(&data[8..], b"\x08\x00\x00\x00nicotine\x01\x00\x00\x00");
+    }
+
+    #[test]
+    fn drop_private_room_membership() {
+        let drop_private_room_membership =
+            ServerRequest::PrivateRoomDropMemberShip("nicotine".to_string());
+
+        let data = write_to_buff_blocking(drop_private_room_membership);
+
+        assert_eq!(&data[8..], b"\x08\x00\x00\x00nicotine");
+    }
+
+    #[test]
+    fn drop_private_room_ownership() {
+        let drop_private_room_ownership =
+            ServerRequest::PrivateRoomDropOwnerShip("nicotine".to_string());
+
+        let data = write_to_buff_blocking(drop_private_room_ownership);
+
+        assert_eq!(&data[8..], b"\x08\x00\x00\x00nicotine");
+    }
+
+    #[test]
+    fn private_room_unknown() {
+        let private_room_unknown = ServerRequest::PrivateRoomUnknown("nicotine".to_string());
+
+        let data = write_to_buff_blocking(private_room_unknown);
+
+        assert_eq!(&data[8..], b"\x08\x00\x00\x00nicotine");
+    }
+
+    #[test]
+    fn private_room_remove_user() {
+        let private_room_remove_user = ServerRequest::RemoveUserFromPrivateRoom(UserRoomEvent {
+            room: "nicotine".to_string(),
+            username: "admin".to_string(),
+        });
+
+        let data = write_to_buff_blocking(private_room_remove_user);
+
+        assert_eq!(&data[8..], b"\x08\x00\x00\x00nicotine\x05\x00\x00\x00admin");
+    }
 }

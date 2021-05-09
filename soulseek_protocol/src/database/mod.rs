@@ -106,9 +106,8 @@ impl Database {
 mod test {
     use std::net::Ipv4Addr;
 
-    use crate::database::entities::{DownloadDbEntry, PeerEntity};
+    use crate::database::entities::PeerEntity;
     use crate::database::Database;
-    use crate::server::messages::peer::Peer;
 
     #[test]
     fn should_open_db() {
@@ -131,11 +130,10 @@ mod test {
             port: 0,
         })
         .unwrap();
-        let peer = db.get_peer_by_name("toto").unwrap();
+        let peer = db.get_peer("toto").unwrap();
 
         assert_eq!(peer.username, "toto");
-        assert_eq!(peer.get_address(), "127.0.0.1");
-        assert_eq!(peer.get_address(), "127.0.0.1:0");
+        assert_eq!(peer.get_address().to_string(), "127.0.0.1:0");
         assert_eq!(peer.port, 0);
     }
 }

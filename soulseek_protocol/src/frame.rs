@@ -51,18 +51,6 @@ pub(crate) async fn write_string(
     Ok(())
 }
 
-pub(crate) async fn write_bool(
-    value: bool,
-    buffer: &mut BufWriter<impl AsyncWrite + Unpin + Send>,
-) -> tokio::io::Result<()> {
-    if value {
-        buffer.write_u32_le(1).await?;
-    } else {
-        buffer.write_u32_le(0).await?;
-    }
-    Ok(())
-}
-
 pub(crate) fn read_string(src: &mut Cursor<&[u8]>) -> std::io::Result<String> {
     let string_len = src.get_u32_le();
     if string_len > 0 {

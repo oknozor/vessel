@@ -1,10 +1,9 @@
 use crate::frame::ParseBytes;
-use crate::frame::{read_string, write_bool, write_string, ToBytes, STR_LENGTH_PREFIX};
+use crate::frame::{read_string, ToBytes};
 use crate::server::messages::user::{Status, UserData};
-use crate::server::messages::MessageCode;
 use bytes::Buf;
 use std::io::Cursor;
-use tokio::io::{AsyncWrite, AsyncWriteExt, BufWriter};
+use tokio::io::{AsyncWrite, BufWriter};
 
 type Rooms = Vec<(String, u32)>;
 
@@ -307,28 +306,5 @@ impl ParseBytes for RoomUsers {
         }
 
         Ok(Self { room, users })
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct JoinRoom {
-    pub room: String,
-    pub private: bool,
-}
-
-#[async_trait]
-impl ToBytes for JoinRoom {
-    async fn write_to_buf(
-        &self,
-        buffer: &mut BufWriter<impl AsyncWrite + Unpin + Send>,
-    ) -> tokio::io::Result<()> {
-        let len = 4 + STR_LENGTH_PREFIX + self.room.bytes().len() as u32 + 1;
-
-        buffer.write_u32_le(len).await?;
-        buffer.write_u32_le(MessageCode::JoinRoom as u32).await?;
-        write_string(&self.room, buffer).await?;
-        write_bool(self.private, buffer).await?;
-
-        Ok(())
     }
 }

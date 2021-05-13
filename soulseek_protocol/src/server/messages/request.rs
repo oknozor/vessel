@@ -5,7 +5,7 @@ use crate::server::messages::chat::{GroupMessage, SayInChat};
 use crate::server::messages::login::LoginRequest;
 use crate::server::messages::peer::{PeerConnectionTicket, RequestConnectionToPeer};
 use crate::server::messages::privilege::PrivilegesGift;
-use crate::server::messages::room::{JoinRoom, Ticker, UserRoomEvent};
+use crate::server::messages::room::{Ticker, UserRoomEvent};
 use crate::server::messages::search::{RoomSearchQuery, SearchQuery, SearchRequest};
 use crate::server::messages::shares::SharedFolderAndFiles;
 use crate::server::messages::{MessageCode, HEADER_LEN};
@@ -49,7 +49,7 @@ pub enum ServerRequest {
     ///  **Description** : We want to join a room.
     ///
     /// **Response** : [`ServerResponse::RoomJoined`][`crate::server::messages::response::ServerResponse::RoomJoined`]
-    JoinRoom(JoinRoom),
+    JoinRoom(String),
     ///  **Description** : We send this to the server when we want to leave a room.
     ///
     /// **Response** : [`ServerResponse::RoomLeft`][`crate::server::messages::response::ServerResponse::RoomLeft`]
@@ -335,7 +335,9 @@ impl ToBytes for ServerRequest {
                 write_str_msg(&username, MessageCode::GetUserStatus, buffer).await
             }
             ServerRequest::SendChatMessage(message) => message.write_to_buf(buffer).await,
-            ServerRequest::JoinRoom(join_room) => join_room.write_to_buf(buffer).await,
+            ServerRequest::JoinRoom(join_room) => {
+                write_str_msg(join_room, MessageCode::JoinRoom, buffer).await
+            }
             ServerRequest::LeaveRoom(room) => {
                 write_str_msg(room, MessageCode::LeaveRoom, buffer).await
             }
@@ -414,7 +416,7 @@ impl ToBytes for ServerRequest {
             ServerRequest::BranchRoot(_) => todo!(),
             ServerRequest::ChildDepth(_) => todo!(),
             ServerRequest::AddUserToPrivateRoom(_) => todo!(),
-            ServerRequest::RemoveUserFromPrivateRoom(room_event) => room_event,
+            ServerRequest::RemoveUserFromPrivateRoom(_) => todo!(),
             ServerRequest::PrivateRoomDropMemberShip(room) => {
                 write_str_msg(room, MessageCode::GetItemSimilarUsers, buffer).await
             }

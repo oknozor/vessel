@@ -103,3 +103,11 @@ npm run dev
 ### Message flow diagram 
 
 ![Message flow diagram](docs/diagrams/architecture.png)
+
+### How to 
+
+### TCP trace in wireshark
+
+```
+(ip.src == 192.168.0.17 && ip.dst==208.76.170.59) && tcp.port == 2242 && tcp && tcp.analysis.push_bytes_sent
+```

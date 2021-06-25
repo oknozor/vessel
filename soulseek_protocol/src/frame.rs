@@ -25,13 +25,17 @@ pub trait ToBytes {
     ///
     /// ## Example :
     /// ```
-    /// use soulseek_protocol::server::messages::login::LoginRequest;
     /// use tokio::io::BufWriter;
-    ///
+    /// use soulseek_protocol::server::login::LoginRequest;
+    /// use soulseek_protocol::frame::ToBytes;
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// use futures::AsyncWrite;
     /// let request = LoginRequest::new("username", "password");
-    /// let mut buff = BufWriter::new(&mut &[0u8, 1024]);
-    ///
+    /// let mut vec = vec![];
+    /// let mut buff = BufWriter::new(vec);
     /// request.write_to_buf(&mut buff).await.expect("Failed to write to buffer");
+    /// # }
     /// ```
     ///
     /// [`BufWriter`]: tokio::io::BufWriter

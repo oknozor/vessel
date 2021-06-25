@@ -34,9 +34,9 @@ pub(crate) fn compress(data: &[u8]) -> std::io::Result<Vec<u8>> {
 #[cfg(test)]
 mod test {
     use crate::frame::ToBytes;
-    use crate::peers::messages::p2p::shared_directories::{Directory, File, SharedDirectories};
-    use crate::peers::messages::p2p::zlib::{compress, decompress};
-    use crate::peers::messages::p2p::PeerMessageCode;
+    use crate::peers::p2p::shared_directories::{Directory, File, SharedDirectories};
+    use crate::peers::p2p::zlib::{compress, decompress};
+    use crate::peers::p2p::PeerMessageCode;
     use bytes::Buf;
     use futures::executor::block_on;
     use std::io::Cursor;

@@ -77,10 +77,10 @@ pub enum ServerRequest {
 
     ///  **Description** : We send our new status to the server. Status is a way to define whether you're available or busy.
     ///
-    ///     -1 = Unknown
-    ///      0 = Offline
-    ///      1 = Away
-    ///      2 = Online
+    ///-1 = Unknown
+    /// 0 = Offline
+    /// 1 = Away
+    /// 2 = Online
     ///
     /// **Response** : no message
     SetOnlineStatus(u32),
@@ -598,19 +598,13 @@ mod tests {
 
     #[test]
     fn join_room() {
-        let join_room = ServerRequest::JoinRoom(JoinRoom {
-            room: "nicotine".to_string(),
-            private: false,
-        });
+        let join_room = ServerRequest::JoinRoom("nicotine".to_string());
 
         let data = write_to_buff_blocking(join_room);
 
         assert_eq!(&data[8..], b"\x08\x00\x00\x00nicotine\x00\x00\x00\x00");
 
-        let join_room_private = ServerRequest::JoinRoom(JoinRoom {
-            room: "nicotine".to_string(),
-            private: true,
-        });
+        let join_room_private = ServerRequest::JoinRoom("nicotine".to_string());
 
         let data = write_to_buff_blocking(join_room_private);
 

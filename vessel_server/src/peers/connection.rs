@@ -1,5 +1,5 @@
 use std::io::Cursor;
-use std::net::{Ipv4Addr, SocketAddr};
+use std::net::{SocketAddr};
 use std::path::Path;
 
 use bytes::{Buf, BytesMut};

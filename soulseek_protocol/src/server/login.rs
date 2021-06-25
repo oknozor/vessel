@@ -44,6 +44,7 @@ impl LoginRequest {
     ///
     /// ## Example :
     /// ```
+    /// # use soulseek_protocol::server::login::LoginRequest;
     /// let login_request = LoginRequest::new("bob", "hunter2");
     /// ```
     pub fn new(username: &str, password: &str) -> Self {

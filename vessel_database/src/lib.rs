@@ -114,8 +114,8 @@ impl Database {
 mod test {
     use std::net::Ipv4Addr;
 
-    use crate::database::entities::PeerEntity;
-    use crate::database::Database;
+    use crate::entities::PeerEntity;
+    use crate::Database;
 
     #[test]
     fn should_open_db() {

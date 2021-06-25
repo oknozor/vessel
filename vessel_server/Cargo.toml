@@ -9,12 +9,16 @@ edition = "2018"
 [dependencies]
 soulseek_protocol = { path = "../soulseek_protocol" }
 vessel_sse = { path = "../vessel_sse" }
+vessel_database = { path = "../vessel_database" }
 vessel_http = { path = "../vessel_http" }
 futures = "0.3.8"
 tokio = { version = "^1", features = ["io-util", "net", "macros", "sync", "signal", "rt-multi-thread"] }
+bytes = "1"
+rand = "0.7.3"
 tokio-stream = "0.1"
 tracing = { version = "0.1", default-features = false, features = ["log", "std"] }
 tracing-futures = { version = "0.2", default-features = false, features = ["std-future"] }
 tracing-subscriber = "0.2.7"
 eyre = "0.6.5"
+socket2 = "0.4.0"
 

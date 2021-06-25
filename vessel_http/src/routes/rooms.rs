@@ -1,8 +1,8 @@
 use percent_encoding::percent_decode;
 use warp::Filter;
 
-use soulseek_protocol::server::messages::chat::SayInChat;
-use soulseek_protocol::server::messages::request::ServerRequest;
+use soulseek_protocol::server::chat::SayInChat;
+use soulseek_protocol::server::request::ServerRequest;
 
 use crate::model::ChatMessage;
 use crate::sender::VesselSender;

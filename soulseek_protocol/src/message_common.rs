@@ -1,6 +1,6 @@
 use crate::frame::{read_string, ParseBytes};
 use crate::message_common::ConnectionType::{DistributedNetwork, FileTransfer, PeerToPeer};
-use crate::peers::messages::PeerRequestPacket;
+use crate::peers::PeerRequestPacket;
 use std::io::Cursor;
 use std::str::Bytes;
 

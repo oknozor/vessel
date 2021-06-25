@@ -11,24 +11,25 @@ use tokio::net::TcpListener;
 use tokio::sync::mpsc;
 use tracing_subscriber::fmt::format::FmtSpan;
 
-use soulseek_protocol::database::Database;
-use soulseek_protocol::peers::messages::PeerRequestPacket;
-use soulseek_protocol::server::messages::peer::{Peer, PeerConnectionRequest};
-use soulseek_protocol::server::messages::request::ServerRequest;
-use soulseek_protocol::server::messages::response::ServerResponse;
-
+use crate::peers::channels::SenderPool;
+use crate::peers::listener::{PeerListenerReceivers, PeerListenerSenders};
 use crate::tasks::spawn_server_listener_task;
 use eyre::Result;
-use soulseek_protocol::peers::channels::SenderPool;
-use soulseek_protocol::peers::listener::{PeerListenerReceivers, PeerListenerSenders};
-use soulseek_protocol::peers::messages::p2p::response::PeerResponse;
+use soulseek_protocol::peers::p2p::response::PeerResponse;
+use soulseek_protocol::peers::PeerRequestPacket;
+use soulseek_protocol::server::peer::{Peer, PeerConnectionRequest};
+use soulseek_protocol::server::request::ServerRequest;
+use soulseek_protocol::server::response::ServerResponse;
+use vessel_database::Database;
 
 const PEER_LISTENER_ADDRESS: &str = "0.0.0.0:2255";
 
+mod peers;
+mod slsk;
 mod tasks;
 
-#[tokio::main]
-// #[tokio::main(flavor = "current_thread")]
+// #[tokio::main]
+#[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
     let filter = std::env::var("RUST_LOG").unwrap_or_else(|_| "tracing=info,warp=debug".to_owned());
 
@@ -38,35 +39,35 @@ async fn main() -> Result<()> {
         .init();
 
     // Forward http request to the Soulseek server
-    let (http_tx, http_rx) = mpsc::channel::<ServerRequest>(32);
+    let (http_tx, http_rx) = mpsc::channel::<ServerRequest>(512);
 
     // Send http request directly to a peer connection
     let (peer_message_dispatcher_tx, peer_message_dispatcher_rx) =
-        mpsc::channel::<(String, PeerRequestPacket)>(32);
+        mpsc::channel::<(String, PeerRequestPacket)>(512);
 
     // Send Soulseek server response to the SSE client
-    let (sse_tx, sse_rx) = mpsc::channel::<ServerResponse>(32);
+    let (sse_tx, sse_rx) = mpsc::channel::<ServerResponse>(512);
     // Send Peer response to the SSE client
-    let (sse_peer_tx, sse_peer_rx) = mpsc::channel::<PeerResponse>(32);
+    let (sse_peer_tx, sse_peer_rx) = mpsc::channel::<PeerResponse>(512);
 
     // Dispatch incoming indirect connection request to the global peer handler
-    let (peer_listener_tx, peer_connection_rx) = mpsc::channel::<PeerConnectionRequest>(32);
+    let (peer_listener_tx, peer_connection_rx) = mpsc::channel::<PeerConnectionRequest>(512);
 
     // Request an indirect connection via http
     let (request_peer_connection_tx, request_peer_connection_rx) =
-        mpsc::channel::<ServerRequest>(32);
+        mpsc::channel::<ServerRequest>(512);
 
     // Dispatch possible parrent to the global peer handler
-    let (possible_parent_tx, possible_parent_rx) = mpsc::channel::<Vec<Peer>>(32);
+    let (possible_parent_tx, possible_parent_rx) = mpsc::channel::<Vec<Peer>>(512);
 
-    let connection = soulseek_protocol::server::connection::connect().await;
+    let connection = slsk::connection::connect().await;
 
     let login_sender = http_tx.clone();
     let (logged_in_tx, logged_in_rx) = mpsc::channel::<()>(1);
-    let (peer_address_tx, peer_address_rx) = mpsc::channel(32);
+    let (peer_address_tx, peer_address_rx) = mpsc::channel(512);
 
     // Keep the UI updated about ongoing downloads
-    let (download_progress_tx, download_progress_rx) = mpsc::channel(32);
+    let (download_progress_tx, download_progress_rx) = mpsc::channel(512);
 
     let database = Database::default();
 

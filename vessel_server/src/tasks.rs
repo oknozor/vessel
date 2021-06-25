@@ -3,18 +3,19 @@ use tokio::net::TcpListener;
 use tokio::signal;
 use tokio::task::JoinHandle;
 
-use soulseek_protocol::database::Database;
-use soulseek_protocol::peers::channels::SenderPool;
-use soulseek_protocol::peers::connection::DownloadProgress;
-use soulseek_protocol::peers::listener::{PeerListenerReceivers, PeerListenerSenders};
-use soulseek_protocol::peers::messages::p2p::response::PeerResponse;
-use soulseek_protocol::peers::messages::PeerRequestPacket;
-use soulseek_protocol::server::connection::SlskConnection;
-use soulseek_protocol::server::messages::login::LoginRequest;
-use soulseek_protocol::server::messages::peer::{Peer, PeerAddress, PeerConnectionRequest};
-use soulseek_protocol::server::messages::request::ServerRequest;
-use soulseek_protocol::server::messages::response::ServerResponse;
+use crate::peers;
+use crate::peers::channels::SenderPool;
+use crate::peers::listener::{PeerListenerReceivers, PeerListenerSenders};
+use crate::slsk::connection::SlskConnection;
+use soulseek_protocol::peers::p2p::download::DownloadProgress;
+use soulseek_protocol::peers::p2p::response::PeerResponse;
+use soulseek_protocol::peers::PeerRequestPacket;
+use soulseek_protocol::server::login::LoginRequest;
+use soulseek_protocol::server::peer::{Peer, PeerAddress, PeerConnectionRequest};
+use soulseek_protocol::server::request::ServerRequest;
+use soulseek_protocol::server::response::ServerResponse;
 use tokio::sync::mpsc::{Receiver, Sender};
+use vessel_database::Database;
 
 pub fn spawn_server_listener_task(
     http_rx: Receiver<ServerRequest>,
@@ -72,21 +73,14 @@ async fn server_listener(
                      Ok(server_message) => {
                         if let Some(server_message) = server_message {
 
-                            info!("Got {:?}", server_message);
+                            info!("Got SERVER_MESSAGE::{:?}", server_message);
                             let err = match server_message {
                                 ServerResponse::PeerAddress(peer_address) => {
-                                    info!("Got PEER ADDRESS {:?}", peer_address);
-
                                     peer_address_tx.send(peer_address)
                                     .await
                                     .map_err(|err| eyre!("Error sending peer address to message dispatcher: {}", err))
                                 }
-                                ServerResponse::PeerConnectionRequest(connection_request) => {
-                                    info!(
-                                        "connect to peer request from server : {:?} ",
-                                        connection_request
-                                    );
-
+                                ServerResponse:: PeerConnectionRequest(connection_request) => {
                                     let token = connection_request.token;
 
                                     peer_listener_tx
@@ -96,7 +90,6 @@ async fn server_listener(
                                 }
 
                                 ServerResponse::PossibleParents(parents) => {
-                                    info!("Got possible parents from server");
                                     possible_parent_tx
                                         .send(parents)
                                         .await
@@ -110,7 +103,6 @@ async fn server_listener(
                                         .map_err(|err| eyre!("Error sending privileged user to login task: {}", err))
                                 }
                                 response => {
-                                    info!("Got message from Soulseek server {:?}", response);
                                     sse_tx
                                         .send(response)
                                         .await
@@ -128,13 +120,14 @@ async fn server_listener(
 
               http_command = http_rx.recv() => {
                   if let Some(request) = http_command {
+                    info!("Got http request {:?}", request);
                     connection.write_request(&request).await.expect("Error writing to soulseek connection")
                   }
               }
 
               peer_connection_request = request_peer_connection_rx.recv() => {
                 if let Some(request) = peer_connection_request {
-                    connection.write_request(&request).await.expect("Error writing to soulseek connection")
+                    connection. write_request(&request).await.expect("Error writing to soulseek connection")
                 }
               }
         }
@@ -164,7 +157,7 @@ pub fn spawn_peer_listener(
             // Wait for soulseek login
         }
 
-        soulseek_protocol::peers::listener::run(
+        peers::listener::run(
             listener,
             signal::ctrl_c(),
             senders,

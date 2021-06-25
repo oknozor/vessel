@@ -8,6 +8,7 @@ edition = "2018"
 
 [dependencies]
 soulseek_protocol = { path = "../soulseek_protocol" }
+vessel_database = { path = "../vessel_database" }
 tokio = { version = "^1", features = ["io-util", "net", "macros", "sync"] }
 warp = "0.3.1"
 rand = "0.7.3"

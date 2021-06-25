@@ -4,10 +4,6 @@ extern crate serde_derive;
 extern crate async_trait;
 #[macro_use]
 extern crate tracing;
-#[macro_use]
-extern crate lazy_static;
-#[macro_use]
-extern crate eyre;
 
 use std::fmt;
 use std::io::Cursor;
@@ -16,22 +12,17 @@ use std::num::TryFromIntError;
 use std::string::FromUtf8Error;
 
 use bytes::Buf;
-use config::ConfigError;
 use tokio::time::error::Elapsed;
-
-pub mod peers;
 
 pub mod frame;
 pub mod message_common;
+pub mod peers;
 /// Contains all the soulseek protocol server message, see [`ServerRequest`] and [`ServerResponse`]
 /// for a detailed explanation of each one.
 ///
-///  [`ServerRequest`]: crate::server::messages::request::ServerRequest
-///  [`ServerResponse`]: crate::server::messages::request::ServerResponse
+///  [`ServerRequest`]: crate::server::request::ServerRequest
+///  [`ServerResponse`]: crate::server::request::ServerResponse
 pub mod server;
-
-pub mod database;
-pub mod settings;
 
 pub type Result<T> = std::result::Result<T, SlskError>;
 pub type Error = Box<dyn std::error::Error + Send + Sync>;
@@ -45,8 +36,6 @@ pub enum SlskError {
     BackoffReached(u64),
     /// Peer disconnected
     ConnectionResetByPeer,
-    /// Configuration error
-    ConfigError(ConfigError),
     NoPermitAvailable,
     NoTicket,
     PeerConnectionLost,
@@ -99,9 +88,6 @@ impl fmt::Display for SlskError {
             }
             SlskError::ConnectionResetByPeer => {
                 write!(fmt, "Connection reset by peer")
-            }
-            SlskError::ConfigError(err) => {
-                write!(fmt, "Configuration error : {}", err)
             }
             SlskError::BackoffReached(value) => {
                 write!(fmt, "Backoff period reached : {}", value)

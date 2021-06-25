@@ -1,10 +1,10 @@
 use warp::Filter;
 
-use soulseek_protocol::database::Database;
-use soulseek_protocol::peers::messages::PeerRequestPacket;
-use soulseek_protocol::server::messages::request::ServerRequest;
+use soulseek_protocol::server::request::ServerRequest;
 
 use crate::sender::VesselSender;
+use soulseek_protocol::peers::PeerRequestPacket;
+use vessel_database::Database;
 
 pub(crate) mod chat;
 pub(crate) mod peers;

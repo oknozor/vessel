@@ -11,7 +11,7 @@ use tokio::io::{AsyncWrite, AsyncWriteExt, BufWriter};
 /// length against the message length header.
 /// For instance [`ServerResponse`] header length is 8 bytes while [`PeerMessage`]'s header is 5.
 ///
-/// [`ServerResponse`]: crate::server::messages::response::ServerResponse
+/// [`ServerResponse`]: crate::server::response::ServerResponse
 /// [`PeerMessage`]: crate::peers::messages::PeerMessage
 pub(crate) trait ParseBytes<Output = Self> {
     fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Output>;
@@ -20,7 +20,7 @@ pub(crate) trait ParseBytes<Output = Self> {
 /// A utility trait to write soulseek server messages, peer messages and distributed messages
 /// to a TCP stream buffer.
 #[async_trait]
-pub(crate) trait ToBytes {
+pub trait ToBytes {
     /// Write the request to the underlying buffer via [`BufWriter`].
     ///
     /// ## Example :

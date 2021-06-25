@@ -1,7 +1,7 @@
 use warp::Filter;
 
-use soulseek_protocol::server::messages::request::ServerRequest;
-use soulseek_protocol::server::messages::search::SearchRequest;
+use soulseek_protocol::server::request::ServerRequest;
+use soulseek_protocol::server::search::SearchRequest;
 
 use crate::model;
 use crate::model::{SearchQuery, SearchTicket};

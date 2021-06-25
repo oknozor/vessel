@@ -4,9 +4,9 @@ extern crate tokio;
 extern crate tracing;
 
 use futures::{Stream, StreamExt};
-use soulseek_protocol::peers::connection::DownloadProgress;
-use soulseek_protocol::peers::messages::p2p::response::PeerResponse;
-use soulseek_protocol::server::messages::response::ServerResponse;
+use soulseek_protocol::peers::p2p::download::DownloadProgress;
+use soulseek_protocol::peers::p2p::response::PeerResponse;
+use soulseek_protocol::server::response::ServerResponse;
 use std::collections::HashMap;
 use std::convert::Infallible;
 use std::pin::Pin;

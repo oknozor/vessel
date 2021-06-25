@@ -1,6 +1,6 @@
 use warp::Filter;
 
-use soulseek_protocol::server::messages::request::ServerRequest;
+use soulseek_protocol::server::request::ServerRequest;
 
 use crate::sender::VesselSender;
 

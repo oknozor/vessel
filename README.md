@@ -2,30 +2,6 @@
 A self-hostable soulseek client. 
 
 This is still a **WORK IN PROGESS** and not usable yet.
-
-- [x] soulseek server connection
-   - [ ] server messages (incomplete)
-- [ ] peer connection
-  - [x] peer message (protocol)
-  - [ ] TCP listener
-- [ ] distributed connection
-  - [ ] distributed message (protocol)
-- [ ] server config
-  - [ ] soulseek credentials
-  - [ ] peer connection limit
-  - [ ] download/upload rate limit
-  - [ ] shared folder
-  - [ ] download folder
-- [x] SSE Event
-- [x] HTTP API
-  - [ ] secured 
-  - [ ] error handling
-  - [ ] openapi/swagger doc
-- [ ] UI
-  - [x] SSE connection
-  - [ ] vessel HTTP client
-  - [ ] login
-  - [ ] design
   
 ## Useful links
 
@@ -34,6 +10,8 @@ This is still a **WORK IN PROGESS** and not usable yet.
 - [museek+](https://github.com/eLvErDe/museek-plus)
 
 ## Running
+
+### Network config
 
 Make sure port 2255 is open and transfered to your machine ip, peer can attempt direct connection to your vessel instance. 
 

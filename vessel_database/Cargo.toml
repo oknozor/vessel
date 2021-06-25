@@ -1,0 +1,16 @@
+[package]
+name = "vessel_database"
+version = "0.1.0"
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+soulseek_protocol = { path = "../soulseek_protocol" }
+lazy_static = "1.4.0"
+serde = "1.0.126"
+serde_derive = "1.0.126"
+serde_json = "1.0.59"
+config = "0.11.0"
+tracing = { version = "0.1", default-features = false, features = ["log", "std"] }
+sled = "0.34.6"

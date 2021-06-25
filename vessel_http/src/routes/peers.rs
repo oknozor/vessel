@@ -1,10 +1,9 @@
 use warp::Filter;
 
-use soulseek_protocol::peers::messages::p2p::request::PeerRequest;
-use soulseek_protocol::peers::messages::PeerRequestPacket;
-
 use crate::model::QueueRequest;
 use crate::sender::VesselSender;
+use soulseek_protocol::peers::p2p::request::PeerRequest;
+use soulseek_protocol::peers::PeerRequestPacket;
 
 pub fn queue_upload(
     peer_sender: VesselSender<(String, PeerRequestPacket)>,

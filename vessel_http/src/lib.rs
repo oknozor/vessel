@@ -4,9 +4,9 @@ extern crate log;
 use tokio::sync::mpsc;
 
 use sender::VesselSender;
-use soulseek_protocol::database::Database;
-use soulseek_protocol::peers::messages::PeerRequestPacket;
-use soulseek_protocol::server::messages::request::ServerRequest;
+use soulseek_protocol::peers::PeerRequestPacket;
+use soulseek_protocol::server::request::ServerRequest;
+use vessel_database::Database;
 use warp::http::Method;
 use warp::Filter;
 

@@ -1,9 +1,9 @@
 use warp::Filter;
 
-use soulseek_protocol::database::Database;
-use soulseek_protocol::server::messages::request::ServerRequest;
+use soulseek_protocol::server::request::ServerRequest;
 
 use crate::sender::VesselSender;
+use vessel_database::Database;
 
 pub fn get_user_status(
     sender: VesselSender<ServerRequest>,

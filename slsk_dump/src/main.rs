@@ -4,7 +4,7 @@ extern crate serde_derive;
 use anyhow::Result;
 use bytes::Buf;
 use serde::Serialize;
-use soulseek_protocol::server::messages::MessageCode;
+use soulseek_protocol::server::MessageCode;
 use std::io::{BufRead, BufReader, Cursor};
 use std::process::{Command, Stdio};
 
@@ -26,7 +26,7 @@ fn main() -> Result<()> {
         .arg("server.slsknet.org")
         .arg("and")
         .arg("src")
-        .arg("192.168.0.14")
+        .arg("192.168.0.17")
         .arg("and")
         .arg("port")
         .arg("2242")

@@ -89,3 +89,15 @@ npm run dev
 ```
 (ip.src == 192.168.0.17 && ip.dst==208.76.170.59) && tcp.port == 2242 && tcp && tcp.analysis.push_bytes_sent
 ```
+
+
+### Get protocol message using slsk_dump
+
+1. Start slsk_dump
+
+```shell
+cargo build
+sudo ./target/debug/slsk_dump
+```
+
+2. Run nicotine or another soulseek client to produce the desired messages

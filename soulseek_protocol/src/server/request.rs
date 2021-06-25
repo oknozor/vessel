@@ -233,7 +233,7 @@ pub enum ServerRequest {
     /// distributed network.
     ///
     /// **Response** : no message
-    BranchRoot(u32),
+    BranchRoot(String),
 
     ///  **Description** : We tell the server the maximum number of generation of children we have on
     /// the distributed network.
@@ -494,6 +494,7 @@ mod tests {
     use crate::server::login::LoginRequest;
     use crate::server::request::ServerRequest;
     use crate::server::room::UserRoomEvent;
+    use crate::server::shares::SharedFolderAndFiles;
     use tokio::io::{AsyncWriteExt, BufWriter};
     use tokio_test::block_on;
 
@@ -543,6 +544,15 @@ mod tests {
         let data = write_to_buff_blocking(add_user);
 
         assert_eq!(&data[8..], b"\x04\x00\x00\x00test");
+    }
+
+    #[test]
+    fn interest_add() {
+        let add_interest = ServerRequest::AddUser("hip hop".to_string());
+
+        let data = write_to_buff_blocking(add_interest);
+
+        assert_eq!(&data[8..], [7, 0, 0, 0, 104, 105, 112, 32, 104, 111, 112]);
     }
 
     #[test]
@@ -598,17 +608,11 @@ mod tests {
 
     #[test]
     fn join_room() {
-        let join_room = ServerRequest::JoinRoom("nicotine".to_string());
+        let join_room = ServerRequest::JoinRoom("indie".to_string());
 
         let data = write_to_buff_blocking(join_room);
 
-        assert_eq!(&data[8..], b"\x08\x00\x00\x00nicotine\x00\x00\x00\x00");
-
-        let join_room_private = ServerRequest::JoinRoom("nicotine".to_string());
-
-        let data = write_to_buff_blocking(join_room_private);
-
-        assert_eq!(&data[8..], b"\x08\x00\x00\x00nicotine\x01\x00\x00\x00");
+        assert_eq!(&data[8..], [5, 0, 0, 0, 105, 110, 100, 105, 101]);
     }
 
     #[test]
@@ -650,5 +654,105 @@ mod tests {
         let data = write_to_buff_blocking(private_room_remove_user);
 
         assert_eq!(&data[8..], b"\x08\x00\x00\x00nicotine\x05\x00\x00\x00admin");
+    }
+
+    #[test]
+    fn check_privileges() {
+        let check_privileges = ServerRequest::CheckPrivileges;
+
+        let data = write_to_buff_blocking(check_privileges);
+
+        assert_eq!(&data[8..], []);
+    }
+
+    #[test]
+    fn have_no_parent() {
+        let no_parent = ServerRequest::NoParents(true);
+
+        let data = write_to_buff_blocking(no_parent);
+
+        assert_eq!(&data[8..], [1]);
+    }
+
+    #[test]
+    fn have_parent() {
+        let have_parent = ServerRequest::NoParents(false);
+
+        let data = write_to_buff_blocking(have_parent);
+
+        assert_eq!(&data[8..], [0]);
+    }
+
+    #[test]
+    fn room_list() {
+        let room_list = ServerRequest::RoomList;
+
+        let data = write_to_buff_blocking(room_list);
+
+        assert_eq!(&data[8..], []);
+    }
+
+    #[test]
+    fn accept_children() {
+        let accept_children = ServerRequest::AcceptChildren(true);
+
+        let data = write_to_buff_blocking(accept_children);
+
+        assert_eq!(&data[8..], [1]);
+    }
+
+    #[test]
+    fn deny_children() {
+        let deny_children = ServerRequest::AcceptChildren(false);
+
+        let data = write_to_buff_blocking(deny_children);
+
+        assert_eq!(&data[8..], [0]);
+    }
+
+    #[test]
+    fn shared_folders() {
+        let shared_folders =
+            ServerRequest::SharedFolderAndFiles(SharedFolderAndFiles { dirs: 2, files: 3 });
+
+        let data = write_to_buff_blocking(shared_folders);
+
+        assert_eq!(&data[8..], [4, 0, 0, 0, 47, 0, 0, 0]);
+    }
+
+    #[test]
+    fn branch_level() {
+        let branch_level = ServerRequest::BranchLevel(0);
+
+        let data = write_to_buff_blocking(branch_level);
+
+        assert_eq!(&data[8..], [0, 0, 0, 0]);
+    }
+
+    #[test]
+    fn branch_root() {
+        let branch_root = ServerRequest::BranchRoot("oknozor".to_string());
+
+        let data = write_to_buff_blocking(branch_root);
+
+        assert_eq!(&data[8..], [7, 0, 0, 0, 111, 107, 110, 111, 122, 111, 114]);
+    }
+
+    #[test]
+    fn toggle_private_rooms() {
+        let branch_root = ServerRequest::PrivateRoomToggle(true);
+
+        let data = write_to_buff_blocking(branch_root);
+
+        assert_eq!(&data[8..], [1]);
+    }
+
+    #[test]
+    fn disable_private_rooms() {
+        let branch_root = ServerRequest::PrivateRoomToggle(false);
+
+        let data = write_to_buff_blocking(branch_root);
+
+        assert_eq!(&data[8..], [0]);
     }
 }

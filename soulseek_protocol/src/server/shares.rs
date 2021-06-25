@@ -4,8 +4,8 @@ use tokio::io::{AsyncWrite, AsyncWriteExt, BufWriter};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SharedFolderAndFiles {
-    dirs: u32,
-    files: u32,
+    pub(crate) dirs: u32,
+    pub(crate) files: u32,
 }
 
 #[async_trait]

@@ -64,9 +64,7 @@ impl Dispatcher {
     async fn on_peer_address_received(&mut self, peer: PeerEntity) {
         self.db.insert_peer(&peer).unwrap();
         if let Some(queue) = self.message_queue.get(&peer.username) {
-            println!("GOT A QUEUE {:?}", queue);
             if let Some(msg) = queue.last() {
-                println!("LAST MESSAGE WAS {:?}", msg);
                 let conn_type = ConnectionType::from(msg);
                 self.initiate_connection(conn_type, peer).await;
             }
@@ -140,12 +138,10 @@ impl Dispatcher {
         let helpers = self.shutdown_helper.clone();
         let db = self.db.clone();
 
-        println!("CONNECTING TO PEER{:?}", peer);
         let connection_result = connect_to_peer_with_fallback(
             sender, sse_tx, ready_tx, channels, helpers, db, &peer, conn_type,
         )
         .await;
-        println!("CONNECTING {:?} TO OK", peer);
 
         if let Err(err) = connection_result {
             error!("An errored occurred during connection : {:?}", err);

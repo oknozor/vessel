@@ -541,8 +541,9 @@ async fn prepare_direct_connection_to_peer(
             })
         }
         Ok(Err(e)) => Err(eyre!(
-            "Error connecting to peer {:?}, cause = {}",
+            "Error connecting to peer {:?} via server requested connection {:?}, cause = {}",
             username,
+            connection_request,
             e
         )),
         Err(e) => Err(e.into()),

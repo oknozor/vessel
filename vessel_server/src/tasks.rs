@@ -38,22 +38,22 @@ pub fn spawn_server_listener_task(
             logged_in_tx,
             peer_address_tx,
         )
-        .await;
+            .await;
     })
 }
 
 #[instrument(
-    name = "slsk_server_listener",
-    level = "trace",
-    skip(
-        http_rx,
-        sse_tx,
-        peer_listener_tx,
-        request_peer_connection_rx,
-        possible_parent_tx,
-        connection,
-        logged_in_tx
-    )
+name = "slsk_server_listener",
+level = "trace",
+skip(
+http_rx,
+sse_tx,
+peer_listener_tx,
+request_peer_connection_rx,
+possible_parent_tx,
+connection,
+logged_in_tx
+)
 )]
 async fn server_listener(
     mut http_rx: Receiver<ServerRequest>,
@@ -72,14 +72,16 @@ async fn server_listener(
                  match server_message {
                      Ok(server_message) => {
                         if let Some(server_message) = server_message {
+                            info!("Got message from Server {:?}", server_message);
 
-                            info!("Got SERVER_MESSAGE::{:?}", server_message);
                             let err = match server_message {
                                 ServerResponse::PeerAddress(peer_address) => {
                                     peer_address_tx.send(peer_address)
                                     .await
                                     .map_err(|err| eyre!("Error sending peer address to message dispatcher: {}", err))
                                 }
+
+
                                 ServerResponse:: PeerConnectionRequest(connection_request) => {
                                     let token = connection_request.token;
 
@@ -127,7 +129,7 @@ async fn server_listener(
 
               peer_connection_request = request_peer_connection_rx.recv() => {
                 if let Some(request) = peer_connection_request {
-                    connection. write_request(&request).await.expect("Error writing to soulseek connection")
+                    connection.write_request(&request).await.expect("Error writing to soulseek connection")
                 }
               }
         }
@@ -165,8 +167,8 @@ pub fn spawn_peer_listener(
             database,
             channels.clone(),
         )
-        .await
-        .expect("Unable to run peer listener");
+            .await
+            .expect("Unable to run peer listener");
     })
 }
 

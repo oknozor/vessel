@@ -39,35 +39,36 @@ async fn main() -> Result<()> {
         .init();
 
     // Forward http request to the Soulseek server
-    let (http_tx, http_rx) = mpsc::channel::<ServerRequest>(512);
+    let channel_bound = 4096;
+    let (http_tx, http_rx) = mpsc::channel::<ServerRequest>(channel_bound);
 
     // Send http request directly to a peer connection
     let (peer_message_dispatcher_tx, peer_message_dispatcher_rx) =
-        mpsc::channel::<(String, PeerRequestPacket)>(512);
+        mpsc::channel::<(String, PeerRequestPacket)>(channel_bound);
 
     // Send Soulseek server response to the SSE client
-    let (sse_tx, sse_rx) = mpsc::channel::<ServerResponse>(512);
+    let (sse_tx, sse_rx) = mpsc::channel::<ServerResponse>(channel_bound);
     // Send Peer response to the SSE client
-    let (sse_peer_tx, sse_peer_rx) = mpsc::channel::<PeerResponse>(512);
+    let (sse_peer_tx, sse_peer_rx) = mpsc::channel::<PeerResponse>(channel_bound);
 
     // Dispatch incoming indirect connection request to the global peer handler
-    let (peer_listener_tx, peer_connection_rx) = mpsc::channel::<PeerConnectionRequest>(512);
+    let (peer_listener_tx, peer_connection_rx) = mpsc::channel::<PeerConnectionRequest>(channel_bound);
 
     // Request an indirect connection via http
     let (request_peer_connection_tx, request_peer_connection_rx) =
-        mpsc::channel::<ServerRequest>(512);
+        mpsc::channel::<ServerRequest>(channel_bound);
 
     // Dispatch possible parrent to the global peer handler
-    let (possible_parent_tx, possible_parent_rx) = mpsc::channel::<Vec<Peer>>(512);
+    let (possible_parent_tx, possible_parent_rx) = mpsc::channel::<Vec<Peer>>(channel_bound);
 
     let connection = slsk::connection::connect().await;
 
     let login_sender = http_tx.clone();
     let (logged_in_tx, logged_in_rx) = mpsc::channel::<()>(1);
-    let (peer_address_tx, peer_address_rx) = mpsc::channel(512);
+    let (peer_address_tx, peer_address_rx) = mpsc::channel(channel_bound);
 
     // Keep the UI updated about ongoing downloads
-    let (download_progress_tx, download_progress_rx) = mpsc::channel(512);
+    let (download_progress_tx, download_progress_rx) = mpsc::channel(channel_bound);
 
     let database = Database::default();
 

@@ -59,7 +59,7 @@ impl SlskConnection {
                 return if self.buffer.is_empty() {
                     Ok(None)
                 } else {
-                    Err("connection reset by peer".into())
+                    Err("Soulseek connection reset by peer".into())
                 };
             }
         }

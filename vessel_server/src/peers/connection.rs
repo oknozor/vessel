@@ -55,7 +55,6 @@ impl PeerConnection {
     }
 
     /// Send a [`PeerMessage`] the soulseek server, using `[ToBytes]` to write to the buffer.
-    #[instrument(level = "trace", skip(self))]
     pub(crate) async fn write_request(
         &mut self,
         message: PeerRequestPacket,

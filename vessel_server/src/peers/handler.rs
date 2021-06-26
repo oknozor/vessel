@@ -17,9 +17,7 @@ use soulseek_protocol::peers::p2p::transfer::TransferRequest;
 use soulseek_protocol::peers::p2p::user_info::UserInfo;
 use soulseek_protocol::peers::PeerRequestPacket;
 use std::net::SocketAddr;
-use std::time::Duration;
 use tokio::sync::mpsc::{channel, Receiver};
-use tokio::time::timeout;
 use vessel_database::Database;
 
 #[derive(Debug)]
@@ -101,20 +99,20 @@ impl PeerHandler {
                         response = self.connection.read_message::<PeerResponse>() =>  {
                             match response {
                                 Ok(message) => {
+                                    // When receiving a SearchReply we want to close the connection asap
                                     if let PeerResponse::SearchReply(_) = message {
                                             return self.sse_tx.send(message)
                                             .await
                                             .map_err(|err| eyre!(err));
-                                        }
+                                    }
 
-                                        // When receiving a SearchReply we want to close the connection asap
-                                        if let Err(e) = self.handle_peer_message(&message).await {
-                                            return Err(eyre!("Error handling peer message : {}", e));
-                                        }
+                                    if let Err(e) = self.handle_peer_message(&message).await {
+                                        return Err(eyre!("Error handling peer message : {}", e));
+                                    }
 
-                                        self.sse_tx.send(message)
-                                            .await
-                                            .map_err(|err| eyre!(err))?;
+                                    self.sse_tx.send(message)
+                                        .await
+                                        .map_err(|err| eyre!(err))?;
                                 }
                                 Err(e) => {
                                     return Err(eyre!("Error in connection handler with {:?} : {}", self.peer_username, e));
@@ -207,16 +205,13 @@ impl PeerHandler {
     }
 
     pub(crate) async fn wait_for_connection_handshake(&mut self) -> Result<()> {
-        let message = timeout(
-            Duration::from_secs(2),
-            self.connection.read_message::<PeerConnectionMessage>(),
-        )
-        .await??;
+        let message = self.connection.read_message::<PeerConnectionMessage>().await?;
         let rx = self.handle_connection_message(&message).await?;
         self.listen(rx).await
     }
 
     async fn handle_peer_message(&mut self, message: &PeerResponse) -> tokio::io::Result<()> {
+        info!("Got peer message {:?}", message);
         match message {
             PeerResponse::SharesReply(_)
             | PeerResponse::UserInfoReply(_)

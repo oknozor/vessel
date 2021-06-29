@@ -1,12 +1,11 @@
+use std::net::SocketAddr;
 use std::sync::Arc;
 
+use eyre::Result;
 use rand::random;
+use tokio::sync::mpsc::{channel, Receiver};
 use tokio::sync::{mpsc, Semaphore};
 
-use crate::peers::channels::SenderPool;
-use crate::peers::connection::PeerConnection;
-use crate::peers::shutdown::Shutdown;
-use eyre::Result;
 use soulseek_protocol::message_common::ConnectionType;
 use soulseek_protocol::peers::connection::PeerConnectionMessage;
 use soulseek_protocol::peers::distributed::DistributedMessage;
@@ -16,9 +15,11 @@ use soulseek_protocol::peers::p2p::transfer::TransferReply::TransferReplyOk;
 use soulseek_protocol::peers::p2p::transfer::TransferRequest;
 use soulseek_protocol::peers::p2p::user_info::UserInfo;
 use soulseek_protocol::peers::PeerRequestPacket;
-use std::net::SocketAddr;
-use tokio::sync::mpsc::{channel, Receiver};
 use vessel_database::Database;
+
+use crate::peers::channels::SenderPool;
+use crate::peers::connection::PeerConnection;
+use crate::peers::shutdown::Shutdown;
 
 #[derive(Debug)]
 pub struct PeerHandler {
@@ -34,7 +35,6 @@ pub struct PeerHandler {
     // We store this to drop the channel state because calling get_address on a dropped connection
     // Can produce Err NotConnected
     pub(crate) address: SocketAddr,
-    pub(crate) token: Option<u32>,
 }
 
 pub(crate) async fn connect_direct(
@@ -99,6 +99,8 @@ impl PeerHandler {
                         response = self.connection.read_message::<PeerResponse>() =>  {
                             match response {
                                 Ok(message) => {
+                                    info!("[token={:?}] - Got Peer message {:?}", self.connection.token, message);
+
                                     // When receiving a SearchReply we want to close the connection asap
                                     if let PeerResponse::SearchReply(_) = message {
                                             return self.sse_tx.send(message)
@@ -179,7 +181,7 @@ impl PeerHandler {
             token,
             tx,
         );
-        self.token = Some(token);
+        self.connection.token = Some(token);
         self.connection.connection_type = conn_type;
 
         self.ready_tx.send(token).await?;
@@ -195,7 +197,7 @@ impl PeerHandler {
         self.send_pierce_firewall(token).await?;
         let (tx, rx) = channel(32);
         let state = self.connection_states.set_ready(token, tx)?;
-        self.token = Some(token);
+        self.connection.token = Some(token);
         self.peer_username = Some(state.username);
         self.connection.connection_type = state.conn_type;
 
@@ -205,7 +207,10 @@ impl PeerHandler {
     }
 
     pub(crate) async fn wait_for_connection_handshake(&mut self) -> Result<()> {
-        let message = self.connection.read_message::<PeerConnectionMessage>().await?;
+        let message = self
+            .connection
+            .read_message::<PeerConnectionMessage>()
+            .await?;
         let rx = self.handle_connection_message(&message).await?;
         self.listen(rx).await
     }
@@ -247,7 +252,7 @@ impl PeerHandler {
                 let state = self.connection_states.set_ready(*token, tx)?;
                 self.connection.connection_type = state.conn_type;
                 self.peer_username = Some(state.username);
-                self.token = Some(*token);
+                self.connection.token = Some(*token);
                 *token
             }
             PeerConnectionMessage::PeerInit {
@@ -264,7 +269,7 @@ impl PeerHandler {
                         .peer_init(&username, *connection_type, *token, tx);
                 };
 
-                self.token = Some(*token);
+                self.connection.token = Some(*token);
                 *token
             }
         };
@@ -372,7 +377,7 @@ impl Drop for PeerHandler {
 
         // If we have a token we need to clean up channel state
         // Otherwise connection was never ready and does not have a ready channel
-        if let Some(token) = self.token {
+        if let Some(token) = self.connection.token {
             if token != 0 {
                 if let Err(e) = self.connection_states.remove_channel(token) {
                     panic!(

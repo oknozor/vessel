@@ -21,6 +21,7 @@ pub struct PeerConnection {
     stream: BufWriter<TcpStream>,
     buffer: BytesMut,
     pub(crate) connection_type: ConnectionType,
+    pub(crate) token: Option<u32>,
 }
 
 impl PeerConnection {
@@ -29,6 +30,7 @@ impl PeerConnection {
             stream: BufWriter::new(socket),
             buffer: BytesMut::with_capacity(4 * 1024),
             connection_type: ConnectionType::HandShake,
+            token: None,
         }
     }
 
@@ -62,11 +64,17 @@ impl PeerConnection {
         match message {
             PeerRequestPacket::Message(message) => {
                 message.write_to_buf(&mut self.stream).await?;
-                info!("Request sent to peer {:?}", message);
+                info!(
+                    "[token={:?}] - Request sent to peer {:?}",
+                    self.token, message
+                );
             }
             PeerRequestPacket::ConnectionMessage(message) => {
                 message.write_to_buf(&mut self.stream).await?;
-                info!("Connection request sent to peer {:?}", message);
+                info!(
+                    "[token={:?}] - Connection request sent to peer {:?}",
+                    self.token, message
+                );
             }
             _ => unreachable!(),
         }
@@ -128,7 +136,7 @@ impl PeerConnection {
         }
 
         let mut cursor = Cursor::new(&mut self.buffer);
-        info!("Got incoming upload connection from {}", address);
+        debug!("Got incoming upload connection from {}", address);
         let ticket = cursor.get_u32_le();
         let download_entry = db.get_download(ticket);
 
@@ -155,7 +163,10 @@ impl PeerConnection {
             self.stream.write_u32_le(0).await?;
             self.stream.flush().await?;
 
-            info!("Starting to download {}", file_name);
+            info!(
+                "[token={:?}] - Starting to download {}",
+                self.token, file_name
+            );
             let mut progress = 0;
             let mut percent_progress = 0;
             let file_size = entry.file_size as usize;
@@ -171,20 +182,20 @@ impl PeerConnection {
                     progress_sender
                         .send(DownloadProgress::Progress { ticket, percent })
                         .await?;
-                    info!("{}% of {}", percent, file_name);
+                    debug!("{}% of {}", percent, file_name);
                 }
 
                 self.buffer.advance(byte_red as usize);
                 progress += byte_red;
 
                 if progress >= file_size {
-                    info!("100% of {}", file_name);
+                    debug!("100% of {}", file_name);
                     file.sync_data().await?;
                     return Ok(());
                 }
 
                 if 0 == self.try_read_buffer().await? {
-                    info!("Download finished");
+                    info!("Download finished for {}", file_name);
                     file.sync_data().await?;
                     return Ok(());
                 }
@@ -198,7 +209,6 @@ impl PeerConnection {
         let bytes_red = self.stream.read_buf(&mut self.buffer).await?;
         if 0 == bytes_red {
             if self.buffer.is_empty() {
-                info!("Download finished");
                 Ok(bytes_red)
             } else {
                 Err(eyre!("connection reset by peer"))

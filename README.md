@@ -21,6 +21,10 @@ Make sure port 2255 is open and transfered to your machine ip, peer can attempt 
 RUST_LOG=debug cargo run
 ```
 
+#### Filtering logs
+
+If you want to log a specific module please refer to https://rust-lang-nursery.github.io/rust-cookbook/development_tools/debugging/config_log.html
+
 ### vessel web
 ```shell
 cd vessel_web

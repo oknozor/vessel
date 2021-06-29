@@ -38,7 +38,7 @@ pub async fn connect() -> SlskConnection {
 
     SlskConnection {
         stream: BufWriter::new(stream),
-        buffer: BytesMut::with_capacity(4 * 1024),
+        buffer: BytesMut::with_capacity(2 * 1024),
     }
 }
 

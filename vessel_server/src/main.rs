@@ -52,7 +52,8 @@ async fn main() -> Result<()> {
     let (sse_peer_tx, sse_peer_rx) = mpsc::channel::<PeerResponse>(channel_bound);
 
     // Dispatch incoming indirect connection request to the global peer handler
-    let (peer_listener_tx, peer_connection_rx) = mpsc::channel::<PeerConnectionRequest>(channel_bound);
+    let (peer_listener_tx, peer_connection_rx) =
+        mpsc::channel::<PeerConnectionRequest>(channel_bound);
 
     // Request an indirect connection via http
     let (request_peer_connection_tx, request_peer_connection_rx) =

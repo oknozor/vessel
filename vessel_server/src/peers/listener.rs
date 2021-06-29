@@ -165,7 +165,6 @@ impl GlobalConnectionHandler {
                             connection_states: channels.clone(),
                             db: db.clone(),
                             address,
-                            token: None,
                         };
 
                         tokio::spawn(async move {
@@ -537,7 +536,6 @@ async fn prepare_direct_connection_to_peer(
                 connection_states: channels,
                 db,
                 address,
-                token,
             })
         }
         Ok(Err(e)) => Err(eyre!(
@@ -574,7 +572,6 @@ async fn prepare_direct_connection_to_peer_with_fallback(
             connection_states: channels,
             db,
             address,
-            token: None,
         }),
         Ok(Err(e)) => Err(eyre!(
             "Error in direct connection to peer {:?}, cause = {}",

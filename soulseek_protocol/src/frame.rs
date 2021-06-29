@@ -1,6 +1,8 @@
 use bytes::Buf;
-use std::io::{Cursor, Read};
-use std::net::Ipv4Addr;
+use std::{
+    io::{Cursor, Read},
+    net::Ipv4Addr,
+};
 use tokio::io::{AsyncWrite, AsyncWriteExt, BufWriter};
 
 /// A utility trait to parse incoming message according to soulseek protocol message definition

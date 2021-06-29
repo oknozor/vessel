@@ -2,14 +2,16 @@ use std::collections::HashMap;
 
 use tokio::sync::mpsc::{Receiver, Sender};
 
-use crate::peers::channels::SenderPool;
-use crate::peers::listener::{connect_to_peer_with_fallback, ShutdownHelper};
+use crate::peers::{
+    channels::SenderPool,
+    listener::{connect_to_peer_with_fallback, ShutdownHelper},
+};
 use eyre::Result;
-use soulseek_protocol::message_common::ConnectionType;
-use soulseek_protocol::peers::p2p::response::PeerResponse;
-use soulseek_protocol::peers::PeerRequestPacket;
-use soulseek_protocol::server::peer::PeerAddress;
-use soulseek_protocol::server::request::ServerRequest;
+use soulseek_protocol::{
+    message_common::ConnectionType,
+    peers::{p2p::response::PeerResponse, PeerRequestPacket},
+    server::{peer::PeerAddress, request::ServerRequest},
+};
 use vessel_database::{entities::PeerEntity, Database};
 
 pub struct Dispatcher {

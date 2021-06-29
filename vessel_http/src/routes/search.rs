@@ -1,11 +1,12 @@
 use warp::Filter;
 
-use soulseek_protocol::server::request::ServerRequest;
-use soulseek_protocol::server::search::SearchRequest;
+use soulseek_protocol::server::{request::ServerRequest, search::SearchRequest};
 
-use crate::model;
-use crate::model::{SearchQuery, SearchTicket};
-use crate::sender::VesselSender;
+use crate::{
+    model,
+    model::{SearchQuery, SearchTicket},
+    sender::VesselSender,
+};
 
 pub fn search(
     sender: VesselSender<ServerRequest>,

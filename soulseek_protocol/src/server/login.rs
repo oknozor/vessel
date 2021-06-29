@@ -1,8 +1,6 @@
 use crate::server::MessageCode;
-use std::io::Cursor;
-use std::net::Ipv4Addr;
-use tokio::io::BufWriter;
-use tokio::io::{AsyncWrite, AsyncWriteExt};
+use std::{io::Cursor, net::Ipv4Addr};
+use tokio::io::{AsyncWrite, AsyncWriteExt, BufWriter};
 
 use crate::frame::{read_ipv4, read_string, write_string, ParseBytes, ToBytes, STR_LENGTH_PREFIX};
 use bytes::Buf;

@@ -1,8 +1,6 @@
-use p2p::request::PeerRequest;
-use p2p::response::PeerResponse;
+use p2p::{request::PeerRequest, response::PeerResponse};
 
-use crate::peers::connection::PeerConnectionMessage;
-use crate::peers::distributed::DistributedMessage;
+use crate::peers::{connection::PeerConnectionMessage, distributed::DistributedMessage};
 
 pub mod connection;
 pub mod distributed;

@@ -1,19 +1,26 @@
 use futures::TryFutureExt;
-use tokio::net::TcpListener;
-use tokio::signal;
-use tokio::task::JoinHandle;
+use tokio::{net::TcpListener, signal, task::JoinHandle};
 
-use crate::peers;
-use crate::peers::channels::SenderPool;
-use crate::peers::listener::{PeerListenerReceivers, PeerListenerSenders};
-use crate::slsk::connection::SlskConnection;
-use soulseek_protocol::peers::p2p::download::DownloadProgress;
-use soulseek_protocol::peers::p2p::response::PeerResponse;
-use soulseek_protocol::peers::PeerRequestPacket;
-use soulseek_protocol::server::login::LoginRequest;
-use soulseek_protocol::server::peer::{Peer, PeerAddress, PeerConnectionRequest};
-use soulseek_protocol::server::request::ServerRequest;
-use soulseek_protocol::server::response::ServerResponse;
+use crate::{
+    peers,
+    peers::{
+        channels::SenderPool,
+        listener::{PeerListenerReceivers, PeerListenerSenders},
+    },
+    slsk::connection::SlskConnection,
+};
+use soulseek_protocol::{
+    peers::{
+        p2p::{download::DownloadProgress, response::PeerResponse},
+        PeerRequestPacket,
+    },
+    server::{
+        login::LoginRequest,
+        peer::{Peer, PeerAddress, PeerConnectionRequest},
+        request::ServerRequest,
+        response::ServerResponse,
+    },
+};
 use tokio::sync::mpsc::{Receiver, Sender};
 use vessel_database::Database;
 
@@ -178,8 +185,10 @@ pub fn spawn_login_task(login_sender: Sender<ServerRequest>) -> JoinHandle<()> {
         let listen_port_sender = login_sender.clone();
         let parent_request_sender = login_sender.clone();
         let join_nicotine_room = login_sender.clone();
+        let username = &vessel_database::settings::CONFIG.username;
+        let password = &vessel_database::settings::CONFIG.password;
         login_sender
-            .send(ServerRequest::Login(LoginRequest::new("vessel", "lessev")))
+            .send(ServerRequest::Login(LoginRequest::new(username, password)))
             .and_then(|_| listen_port_sender.send(ServerRequest::SetListenPort(2255)))
             .and_then(|_| parent_request_sender.send(ServerRequest::NoParents(true)))
             .and_then(|_| join_nicotine_room.send(ServerRequest::JoinRoom("nicotine".to_string())))

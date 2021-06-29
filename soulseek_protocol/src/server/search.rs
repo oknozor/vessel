@@ -1,5 +1,7 @@
-use crate::frame::{read_string, write_string, ParseBytes, ToBytes, STR_LENGTH_PREFIX};
-use crate::server::MessageCode;
+use crate::{
+    frame::{read_string, write_string, ParseBytes, ToBytes, STR_LENGTH_PREFIX},
+    server::MessageCode,
+};
 use bytes::Buf;
 use std::io::Cursor;
 use tokio::io::{AsyncWrite, AsyncWriteExt, BufWriter};

@@ -5,8 +5,10 @@ use anyhow::Result;
 use bytes::Buf;
 use serde::Serialize;
 use soulseek_protocol::server::MessageCode;
-use std::io::{BufRead, BufReader, Cursor};
-use std::process::{Command, Stdio};
+use std::{
+    io::{BufRead, BufReader, Cursor},
+    process::{Command, Stdio},
+};
 
 #[derive(Serialize, Deserialize)]
 struct SoulseekMessageDump {

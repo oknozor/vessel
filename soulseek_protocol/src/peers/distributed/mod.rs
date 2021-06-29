@@ -3,8 +3,10 @@ use std::io::Cursor;
 use bytes::Buf;
 use tokio::io::{AsyncWrite, AsyncWriteExt, BufWriter};
 
-use crate::frame::{read_string, ParseBytes, ToBytes};
-use crate::{MessageCode, ProtocolHeader, ProtocolMessage};
+use crate::{
+    frame::{read_string, ParseBytes, ToBytes},
+    MessageCode, ProtocolHeader, ProtocolMessage,
+};
 
 use self::search::SearchRequest;
 
@@ -26,7 +28,7 @@ impl ProtocolHeader for DistributedMessageHeader {
     }
 
     fn new(message_len: usize, code: Self::Code) -> Self {
-        Self { message_len, code }
+        Self { code, message_len }
     }
 }
 

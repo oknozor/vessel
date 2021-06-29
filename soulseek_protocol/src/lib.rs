@@ -5,11 +5,7 @@ extern crate async_trait;
 #[macro_use]
 extern crate tracing;
 
-use std::fmt;
-use std::io::Cursor;
-use std::net::SocketAddr;
-use std::num::TryFromIntError;
-use std::string::FromUtf8Error;
+use std::{fmt, io::Cursor, net::SocketAddr, num::TryFromIntError, string::FromUtf8Error};
 
 use bytes::Buf;
 use tokio::time::error::Elapsed;

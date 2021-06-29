@@ -29,7 +29,7 @@ impl ProtocolHeader for PeerMessageHeader {
     }
 
     fn new(message_len: usize, code: Self::Code) -> Self {
-        Self { message_len, code }
+        Self { code, message_len }
     }
 }
 

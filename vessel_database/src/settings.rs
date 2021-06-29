@@ -9,6 +9,9 @@ lazy_static! {
 #[serde(deny_unknown_fields)]
 pub struct Settings {
     pub(crate) shared_directories: Vec<PathBuf>,
+    pub download_folder: PathBuf,
+    pub username: String,
+    pub password: String,
 }
 
 impl Settings {

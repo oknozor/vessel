@@ -1,19 +1,24 @@
-use std::io::Cursor;
-use std::net::SocketAddr;
-use std::path::Path;
+use std::{
+    io::Cursor,
+    net::SocketAddr,
+    path::{Path, PathBuf},
+};
 
 use bytes::{Buf, BytesMut};
 use eyre::Result;
-use tokio::fs::OpenOptions;
-use tokio::io::{AsyncWriteExt, BufWriter};
-use tokio::sync::mpsc::Sender;
-use tokio::{io::AsyncReadExt, net::TcpStream};
+use tokio::{
+    fs::OpenOptions,
+    io::{AsyncReadExt, AsyncWriteExt, BufWriter},
+    net::TcpStream,
+    sync::mpsc::Sender,
+};
 
-use soulseek_protocol::frame::ToBytes;
-use soulseek_protocol::message_common::ConnectionType;
-use soulseek_protocol::peers::p2p::download::DownloadProgress;
-use soulseek_protocol::peers::PeerRequestPacket;
-use soulseek_protocol::{ProtocolHeader, ProtocolMessage, SlskError};
+use soulseek_protocol::{
+    frame::ToBytes,
+    message_common::ConnectionType,
+    peers::{p2p::download::DownloadProgress, PeerRequestPacket},
+    ProtocolHeader, ProtocolMessage, SlskError,
+};
 use vessel_database::Database;
 
 #[derive(Debug)]
@@ -32,6 +37,12 @@ impl PeerConnection {
             connection_type: ConnectionType::HandShake,
             token: None,
         }
+    }
+
+    pub(crate) fn new_with_token(socket: TcpStream, token: u32) -> PeerConnection {
+        let mut connection = PeerConnection::new(socket);
+        connection.token = Some(token);
+        connection
     }
 
     pub(crate) async fn read_message<T: ProtocolMessage>(
@@ -142,7 +153,9 @@ impl PeerConnection {
 
         if let Some(entry) = download_entry {
             let file_name = &entry.file_name;
-            let path = Path::new(file_name).file_name().expect("File name error");
+            let file_path = Path::new(file_name).file_name().expect("File name error");
+            let mut path = PathBuf::from(&vessel_database::settings::CONFIG.download_folder);
+            path.push(file_path);
 
             progress_sender
                 .send(DownloadProgress::Init {

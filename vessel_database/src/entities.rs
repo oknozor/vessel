@@ -1,10 +1,14 @@
-use std::io;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use std::path::Path;
+use std::{
+    io,
+    net::{IpAddr, Ipv4Addr, SocketAddr},
+    path::Path,
+};
 
 use crate::settings::CONFIG;
-use soulseek_protocol::peers::p2p::shared_directories::{Directory, File, SharedDirectories};
-use soulseek_protocol::server::peer::{Peer, PeerAddress, PeerConnectionRequest};
+use soulseek_protocol::{
+    peers::p2p::shared_directories::{Directory, File, SharedDirectories},
+    server::peer::{Peer, PeerAddress, PeerConnectionRequest},
+};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PeerEntity {

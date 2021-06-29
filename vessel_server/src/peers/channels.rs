@@ -1,12 +1,15 @@
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
 
 use tokio::sync::mpsc;
 
 use eyre::Result;
-use soulseek_protocol::message_common::ConnectionType;
-use soulseek_protocol::peers::p2p::download::DownloadProgress;
-use soulseek_protocol::peers::PeerRequestPacket;
+use soulseek_protocol::{
+    message_common::ConnectionType,
+    peers::{p2p::download::DownloadProgress, PeerRequestPacket},
+};
 use tokio::sync::mpsc::Sender;
 
 #[derive(Debug, Clone)]

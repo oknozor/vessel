@@ -1,6 +1,7 @@
-use crate::frame::ParseBytes;
-use crate::frame::{read_string, ToBytes};
-use crate::server::user::{Status, UserData};
+use crate::{
+    frame::{read_string, ParseBytes, ToBytes},
+    server::user::{Status, UserData},
+};
 use bytes::Buf;
 use std::io::Cursor;
 use tokio::io::{AsyncWrite, BufWriter};

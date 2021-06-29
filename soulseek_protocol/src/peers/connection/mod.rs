@@ -3,9 +3,11 @@ use std::io::{Cursor, ErrorKind};
 use bytes::Buf;
 use tokio::io::{AsyncWrite, AsyncWriteExt, BufWriter};
 
-use crate::frame::{read_string, write_string, ToBytes};
-use crate::message_common::ConnectionType;
-use crate::{MessageCode, ProtocolHeader, ProtocolMessage};
+use crate::{
+    frame::{read_string, write_string, ToBytes},
+    message_common::ConnectionType,
+    MessageCode, ProtocolHeader, ProtocolMessage,
+};
 
 use self::ConnectionMessageCode::*;
 

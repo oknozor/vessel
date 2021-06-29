@@ -1,25 +1,30 @@
-use std::net::SocketAddr;
-use std::sync::Arc;
+use std::{net::SocketAddr, sync::Arc};
 
 use eyre::Result;
 use rand::random;
-use tokio::sync::mpsc::{channel, Receiver};
-use tokio::sync::{mpsc, Semaphore};
+use tokio::sync::{
+    mpsc,
+    mpsc::{channel, Receiver},
+    Semaphore,
+};
 
-use soulseek_protocol::message_common::ConnectionType;
-use soulseek_protocol::peers::connection::PeerConnectionMessage;
-use soulseek_protocol::peers::distributed::DistributedMessage;
-use soulseek_protocol::peers::p2p::request::PeerRequest;
-use soulseek_protocol::peers::p2p::response::PeerResponse;
-use soulseek_protocol::peers::p2p::transfer::TransferReply::TransferReplyOk;
-use soulseek_protocol::peers::p2p::transfer::TransferRequest;
-use soulseek_protocol::peers::p2p::user_info::UserInfo;
-use soulseek_protocol::peers::PeerRequestPacket;
+use soulseek_protocol::{
+    message_common::ConnectionType,
+    peers::{
+        connection::PeerConnectionMessage,
+        distributed::DistributedMessage,
+        p2p::{
+            request::PeerRequest,
+            response::PeerResponse,
+            transfer::{TransferReply::TransferReplyOk, TransferRequest},
+            user_info::UserInfo,
+        },
+        PeerRequestPacket,
+    },
+};
 use vessel_database::Database;
 
-use crate::peers::channels::SenderPool;
-use crate::peers::connection::PeerConnection;
-use crate::peers::shutdown::Shutdown;
+use crate::peers::{channels::SenderPool, connection::PeerConnection, shutdown::Shutdown};
 
 #[derive(Debug)]
 pub struct PeerHandler {

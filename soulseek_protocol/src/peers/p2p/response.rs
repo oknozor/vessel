@@ -1,16 +1,20 @@
 use std::io::Cursor;
 
-use crate::frame::ParseBytes;
-use crate::peers::p2p::folder_content::FolderContentsRequest;
-use crate::peers::p2p::search::SearchReply;
-use crate::peers::p2p::shared_directories::SharedDirectories;
-use crate::peers::p2p::transfer::{
-    PlaceInQueueReply, PlaceInQueueRequest, QueueFailed, TransferReply, TransferRequest,
-    UploadFailed,
+use crate::{
+    frame::ParseBytes,
+    peers::p2p::{
+        folder_content::FolderContentsRequest,
+        search::SearchReply,
+        shared_directories::SharedDirectories,
+        transfer::{
+            PlaceInQueueReply, PlaceInQueueRequest, QueueFailed, TransferReply, TransferRequest,
+            UploadFailed,
+        },
+        user_info::UserInfo,
+        PeerMessageCode, PeerMessageHeader,
+    },
+    ProtocolMessage,
 };
-use crate::peers::p2p::user_info::UserInfo;
-use crate::peers::p2p::{PeerMessageCode, PeerMessageHeader};
-use crate::ProtocolMessage;
 
 #[derive(Debug, Serialize)]
 #[serde(untagged)]

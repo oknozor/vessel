@@ -1,5 +1,7 @@
-use crate::frame::{write_string, ToBytes, STR_LENGTH_PREFIX};
-use crate::server::MessageCode;
+use crate::{
+    frame::{write_string, ToBytes, STR_LENGTH_PREFIX},
+    server::MessageCode,
+};
 use tokio::io::{AsyncWrite, AsyncWriteExt, BufWriter};
 
 // FIXME : what does this message mean ?

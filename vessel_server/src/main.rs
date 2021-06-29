@@ -7,19 +7,25 @@ extern crate tracing;
 #[macro_use]
 extern crate eyre;
 
-use tokio::net::TcpListener;
-use tokio::sync::mpsc;
+use tokio::{net::TcpListener, sync::mpsc};
 use tracing_subscriber::fmt::format::FmtSpan;
 
-use crate::peers::channels::SenderPool;
-use crate::peers::listener::{PeerListenerReceivers, PeerListenerSenders};
-use crate::tasks::spawn_server_listener_task;
+use crate::{
+    peers::{
+        channels::SenderPool,
+        listener::{PeerListenerReceivers, PeerListenerSenders},
+    },
+    tasks::spawn_server_listener_task,
+};
 use eyre::Result;
-use soulseek_protocol::peers::p2p::response::PeerResponse;
-use soulseek_protocol::peers::PeerRequestPacket;
-use soulseek_protocol::server::peer::{Peer, PeerConnectionRequest};
-use soulseek_protocol::server::request::ServerRequest;
-use soulseek_protocol::server::response::ServerResponse;
+use soulseek_protocol::{
+    peers::{p2p::response::PeerResponse, PeerRequestPacket},
+    server::{
+        peer::{Peer, PeerConnectionRequest},
+        request::ServerRequest,
+        response::ServerResponse,
+    },
+};
 use vessel_database::Database;
 
 const PEER_LISTENER_ADDRESS: &str = "0.0.0.0:2255";

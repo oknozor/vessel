@@ -1,8 +1,9 @@
-use crate::frame::{read_string, ParseBytes};
-use crate::message_common::ConnectionType::{DistributedNetwork, FileTransfer, PeerToPeer};
-use crate::peers::PeerRequestPacket;
-use std::io::Cursor;
-use std::str::Bytes;
+use crate::{
+    frame::{read_string, ParseBytes},
+    message_common::ConnectionType::{DistributedNetwork, FileTransfer, PeerToPeer},
+    peers::PeerRequestPacket,
+};
+use std::{io::Cursor, str::Bytes};
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, Eq, PartialEq)]
 pub enum ConnectionType {

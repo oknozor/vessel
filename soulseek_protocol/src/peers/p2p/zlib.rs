@@ -1,8 +1,7 @@
 use std::io::{Cursor, Write};
 
 use bytes::Buf;
-use flate2::write::ZlibEncoder;
-use flate2::{Compression, Decompress, FlushDecompress};
+use flate2::{write::ZlibEncoder, Compression, Decompress, FlushDecompress};
 
 pub(crate) fn decompress(src: &mut Cursor<&[u8]>) -> std::io::Result<Vec<u8>> {
     // FIXME : 1032 is zlib max ratio
@@ -33,10 +32,14 @@ pub(crate) fn compress(data: &[u8]) -> std::io::Result<Vec<u8>> {
 
 #[cfg(test)]
 mod test {
-    use crate::frame::ToBytes;
-    use crate::peers::p2p::shared_directories::{Directory, File, SharedDirectories};
-    use crate::peers::p2p::zlib::{compress, decompress};
-    use crate::peers::p2p::PeerMessageCode;
+    use crate::{
+        frame::ToBytes,
+        peers::p2p::{
+            shared_directories::{Directory, File, SharedDirectories},
+            zlib::{compress, decompress},
+            PeerMessageCode,
+        },
+    };
     use bytes::Buf;
     use futures::executor::block_on;
     use std::io::Cursor;

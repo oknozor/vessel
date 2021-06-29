@@ -3,9 +3,10 @@ use std::{io::Cursor, usize};
 use bytes::Buf;
 use tokio::io::{AsyncWrite, BufWriter};
 
-use crate::frame::{read_string, ParseBytes, ToBytes};
-use crate::peers::p2p::shared_directories::File;
-use crate::peers::p2p::zlib::decompress;
+use crate::{
+    frame::{read_string, ParseBytes, ToBytes},
+    peers::p2p::{shared_directories::File, zlib::decompress},
+};
 
 #[derive(Debug, Serialize)]
 pub struct SearchReply {

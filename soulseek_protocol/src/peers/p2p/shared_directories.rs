@@ -1,10 +1,10 @@
-use crate::frame::{read_string, write_string, ParseBytes, ToBytes};
-use crate::peers::p2p::zlib::decompress;
-use crate::peers::p2p::{zlib, PeerMessageCode};
+use crate::{
+    frame::{read_string, write_string, ParseBytes, ToBytes},
+    peers::p2p::{zlib, zlib::decompress, PeerMessageCode},
+};
 use bytes::Buf;
 use std::io::Cursor;
-use tokio::io::BufWriter;
-use tokio::io::{AsyncWrite, AsyncWriteExt};
+use tokio::io::{AsyncWrite, AsyncWriteExt, BufWriter};
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize)]
 pub struct SharedDirectories {
@@ -177,9 +177,13 @@ impl ParseBytes for Attribute {
 
 #[cfg(test)]
 mod test {
-    use crate::frame::{ParseBytes, ToBytes};
-    use crate::peers::p2p::shared_directories::{Directory, File, SharedDirectories};
-    use crate::peers::p2p::PeerMessageCode;
+    use crate::{
+        frame::{ParseBytes, ToBytes},
+        peers::p2p::{
+            shared_directories::{Directory, File, SharedDirectories},
+            PeerMessageCode,
+        },
+    };
     use bytes::Buf;
     use tokio::io::BufWriter;
     use tokio_test::block_on;

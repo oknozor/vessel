@@ -1,5 +1,4 @@
-use crate::frame::ToBytes;
-use crate::server::MessageCode;
+use crate::{frame::ToBytes, server::MessageCode};
 use tokio::io::{AsyncWrite, AsyncWriteExt, BufWriter};
 
 #[derive(Debug, Serialize, Deserialize)]

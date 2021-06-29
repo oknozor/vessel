@@ -1,32 +1,39 @@
-use std::future::Future;
-use std::sync::Arc;
+use std::{future::Future, sync::Arc};
 
 use rand::random;
-use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::mpsc::{Receiver, Sender};
-use tokio::sync::{broadcast, mpsc, Semaphore};
-use tokio::time::timeout;
-use tokio::time::{self, Duration};
+use tokio::{
+    net::{TcpListener, TcpStream},
+    sync::{
+        broadcast, mpsc,
+        mpsc::{Receiver, Sender},
+        Semaphore,
+    },
+    time::{self, timeout, Duration},
+};
 use tracing::{error, info};
 
-use crate::peers::channels::SenderPool;
-use crate::peers::connection::PeerConnection;
-use crate::peers::dispatcher::Dispatcher;
-use crate::peers::handler::{connect_direct, pierce_firewall, PeerHandler};
-use crate::peers::shutdown::Shutdown;
+use crate::peers::{
+    channels::SenderPool,
+    connection::PeerConnection,
+    dispatcher::Dispatcher,
+    handler::{connect_direct, pierce_firewall, PeerHandler},
+    shutdown::Shutdown,
+};
 use eyre::Result;
 use futures::TryFutureExt;
-use soulseek_protocol::message_common::ConnectionType;
-use soulseek_protocol::peers::p2p::response::PeerResponse;
-use soulseek_protocol::peers::PeerRequestPacket;
-use soulseek_protocol::server::peer::{
-    Peer, PeerAddress, PeerConnectionRequest, PeerConnectionTicket, RequestConnectionToPeer,
+use soulseek_protocol::{
+    message_common::ConnectionType,
+    peers::{p2p::response::PeerResponse, PeerRequestPacket},
+    server::{
+        peer::{
+            Peer, PeerAddress, PeerConnectionRequest, PeerConnectionTicket, RequestConnectionToPeer,
+        },
+        request::ServerRequest,
+    },
+    SlskError,
 };
-use soulseek_protocol::server::request::ServerRequest;
-use soulseek_protocol::SlskError;
 use std::net::{IpAddr, SocketAddr};
-use vessel_database::entities::PeerEntity;
-use vessel_database::Database;
+use vessel_database::{entities::PeerEntity, Database};
 
 /// TODO : Make this value configurable
 const MAX_CONNECTIONS: usize = 4096;
@@ -229,8 +236,8 @@ pub async fn run(
         senders,
         db,
         channels,
-        shutdown_helper,
         shutdown_complete_rx,
+        shutdown_helper,
     };
 
     tokio::select! {
@@ -523,21 +530,18 @@ async fn prepare_direct_connection_to_peer(
     let username = connection_request.username.clone();
 
     match timeout(Duration::from_secs(4), TcpStream::connect(address)).await {
-        Ok(Ok(socket)) => {
-            let token = Some(connection_request.token);
-            Ok(PeerHandler {
-                peer_username: Some(username),
-                connection: PeerConnection::new(socket),
-                sse_tx: sse_tx.clone(),
-                ready_tx,
-                shutdown: Shutdown::new(shutdown_helper.notify_shutdown.subscribe()),
-                limit_connections: shutdown_helper.limit_connections.clone(),
-                _shutdown_complete: shutdown_helper.shutdown_complete_tx.clone(),
-                connection_states: channels,
-                db,
-                address,
-            })
-        }
+        Ok(Ok(socket)) => Ok(PeerHandler {
+            peer_username: Some(username),
+            connection: PeerConnection::new_with_token(socket, connection_request.token),
+            sse_tx: sse_tx.clone(),
+            ready_tx,
+            shutdown: Shutdown::new(shutdown_helper.notify_shutdown.subscribe()),
+            limit_connections: shutdown_helper.limit_connections.clone(),
+            _shutdown_complete: shutdown_helper.shutdown_complete_tx.clone(),
+            connection_states: channels,
+            db,
+            address,
+        }),
         Ok(Err(e)) => Err(eyre!(
             "Error connecting to peer {:?} via server requested connection {:?}, cause = {}",
             username,

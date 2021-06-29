@@ -4,11 +4,9 @@ extern crate log;
 use tokio::sync::mpsc;
 
 use sender::VesselSender;
-use soulseek_protocol::peers::PeerRequestPacket;
-use soulseek_protocol::server::request::ServerRequest;
+use soulseek_protocol::{peers::PeerRequestPacket, server::request::ServerRequest};
 use vessel_database::Database;
-use warp::http::Method;
-use warp::Filter;
+use warp::{http::Method, Filter};
 
 mod model;
 mod routes;

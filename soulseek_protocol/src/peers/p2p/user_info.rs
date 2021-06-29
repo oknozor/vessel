@@ -3,8 +3,10 @@ use std::io::Cursor;
 use bytes::Buf;
 use tokio::io::{AsyncWrite, AsyncWriteExt, BufWriter};
 
-use crate::frame::{read_string, write_string, ParseBytes, ToBytes};
-use crate::peers::p2p::PeerMessageCode;
+use crate::{
+    frame::{read_string, write_string, ParseBytes, ToBytes},
+    peers::p2p::PeerMessageCode,
+};
 
 #[derive(Debug, Serialize)]
 pub struct UserInfo {

@@ -4,18 +4,22 @@ extern crate tokio;
 extern crate tracing;
 
 use futures::{Stream, StreamExt};
-use soulseek_protocol::peers::p2p::download::DownloadProgress;
-use soulseek_protocol::peers::p2p::response::PeerResponse;
-use soulseek_protocol::server::response::ServerResponse;
-use std::collections::HashMap;
-use std::convert::Infallible;
-use std::pin::Pin;
-use std::sync::{Arc, Mutex};
-use std::task::{Context, Poll};
-use tokio::sync::mpsc::{self, Receiver, UnboundedReceiver, UnboundedSender};
-use tokio::task::JoinHandle;
-use warp::sse::Event;
-use warp::Filter;
+use soulseek_protocol::{
+    peers::p2p::{download::DownloadProgress, response::PeerResponse},
+    server::response::ServerResponse,
+};
+use std::{
+    collections::HashMap,
+    convert::Infallible,
+    pin::Pin,
+    sync::{Arc, Mutex},
+    task::{Context, Poll},
+};
+use tokio::{
+    sync::mpsc::{self, Receiver, UnboundedReceiver, UnboundedSender},
+    task::JoinHandle,
+};
+use warp::{sse::Event, Filter};
 
 struct Client(UnboundedReceiver<Event>);
 

@@ -1,12 +1,13 @@
-use std::io::Cursor;
-use std::net::Ipv4Addr;
+use std::{io::Cursor, net::Ipv4Addr};
 
 use bytes::Buf;
 use tokio::io::{AsyncWrite, AsyncWriteExt, BufWriter};
 
-use crate::frame::{read_ipv4, read_string, write_string, ParseBytes, ToBytes, STR_LENGTH_PREFIX};
-use crate::message_common::ConnectionType;
-use crate::server::MessageCode;
+use crate::{
+    frame::{read_ipv4, read_string, write_string, ParseBytes, ToBytes, STR_LENGTH_PREFIX},
+    message_common::ConnectionType,
+    server::MessageCode,
+};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Peer {

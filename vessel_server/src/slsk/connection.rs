@@ -1,15 +1,19 @@
 use bytes::{Buf, BytesMut};
 use socket2::{Domain, Protocol, Type};
-use soulseek_protocol::frame::ToBytes;
-use soulseek_protocol::server::request::ServerRequest;
-use soulseek_protocol::server::response::ServerResponse;
-use soulseek_protocol::server::HEADER_LEN;
-use soulseek_protocol::SlskError;
-use std::io::Cursor;
-use std::net::ToSocketAddrs;
-use std::os::unix::io::{FromRawFd, IntoRawFd};
-use tokio::io::{AsyncReadExt, AsyncWriteExt, BufWriter};
-use tokio::net::{TcpSocket, TcpStream};
+use soulseek_protocol::{
+    frame::ToBytes,
+    server::{request::ServerRequest, response::ServerResponse, HEADER_LEN},
+    SlskError,
+};
+use std::{
+    io::Cursor,
+    net::ToSocketAddrs,
+    os::unix::io::{FromRawFd, IntoRawFd},
+};
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt, BufWriter},
+    net::{TcpSocket, TcpStream},
+};
 
 const DEFAULT_ADDRESS: &str = "server.slsknet.org:2242";
 

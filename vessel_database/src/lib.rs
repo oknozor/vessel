@@ -10,8 +10,9 @@ use std::sync::{Arc, Mutex};
 use entities::DownloadDbEntry;
 
 use crate::entities::{get_shared_directories, PeerEntity};
-use soulseek_protocol::peers::p2p::shared_directories::SharedDirectories;
-use soulseek_protocol::peers::p2p::transfer::TransferRequest;
+use soulseek_protocol::peers::p2p::{
+    shared_directories::SharedDirectories, transfer::TransferRequest,
+};
 
 pub mod entities;
 pub mod settings;
@@ -114,8 +115,7 @@ impl Database {
 mod test {
     use std::net::Ipv4Addr;
 
-    use crate::entities::PeerEntity;
-    use crate::Database;
+    use crate::{entities::PeerEntity, Database};
 
     #[test]
     fn should_open_db() {

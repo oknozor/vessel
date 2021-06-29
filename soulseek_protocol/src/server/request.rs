@@ -1,14 +1,17 @@
-use crate::frame::write_string;
-use crate::frame::ToBytes;
-use crate::server::admin::AdminCommand;
-use crate::server::chat::{GroupMessage, SayInChat};
-use crate::server::login::LoginRequest;
-use crate::server::peer::{PeerConnectionTicket, RequestConnectionToPeer};
-use crate::server::privilege::PrivilegesGift;
-use crate::server::room::{Ticker, UserRoomEvent};
-use crate::server::search::{RoomSearchQuery, SearchQuery, SearchRequest};
-use crate::server::shares::SharedFolderAndFiles;
-use crate::server::{MessageCode, HEADER_LEN};
+use crate::{
+    frame::{write_string, ToBytes},
+    server::{
+        admin::AdminCommand,
+        chat::{GroupMessage, SayInChat},
+        login::LoginRequest,
+        peer::{PeerConnectionTicket, RequestConnectionToPeer},
+        privilege::PrivilegesGift,
+        room::{Ticker, UserRoomEvent},
+        search::{RoomSearchQuery, SearchQuery, SearchRequest},
+        shares::SharedFolderAndFiles,
+        MessageCode, HEADER_LEN,
+    },
+};
 use tokio::io::{self, AsyncWrite, AsyncWriteExt, BufWriter};
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -489,12 +492,13 @@ pub(crate) async fn write_u32_msg(
 
 #[cfg(test)]
 mod tests {
-    use crate::frame::ToBytes;
-    use crate::server::chat::SayInChat;
-    use crate::server::login::LoginRequest;
-    use crate::server::request::ServerRequest;
-    use crate::server::room::UserRoomEvent;
-    use crate::server::shares::SharedFolderAndFiles;
+    use crate::{
+        frame::ToBytes,
+        server::{
+            chat::SayInChat, login::LoginRequest, request::ServerRequest, room::UserRoomEvent,
+            shares::SharedFolderAndFiles,
+        },
+    };
     use tokio::io::{AsyncWriteExt, BufWriter};
     use tokio_test::block_on;
 

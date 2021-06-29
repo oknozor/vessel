@@ -2,17 +2,21 @@ use std::io::Cursor;
 
 use bytes::Buf;
 
-use crate::frame::{read_bool, read_string, ParseBytes};
-use crate::server::chat::*;
-use crate::server::distributed::EmbeddedDistributedMessage;
-use crate::server::interest::{Interests, ItemRecommendations, Recommendations};
-use crate::server::login::*;
-use crate::server::peer::{Peer, PeerAddress, PeerConnectionRequest, PeerConnectionTicket};
-use crate::server::room::*;
-use crate::server::search::SearchQuery;
-use crate::server::user::*;
-use crate::server::{Header, MessageCode, HEADER_LEN};
-use crate::SlskError;
+use crate::{
+    frame::{read_bool, read_string, ParseBytes},
+    server::{
+        chat::*,
+        distributed::EmbeddedDistributedMessage,
+        interest::{Interests, ItemRecommendations, Recommendations},
+        login::*,
+        peer::{Peer, PeerAddress, PeerConnectionRequest, PeerConnectionTicket},
+        room::*,
+        search::SearchQuery,
+        user::*,
+        Header, MessageCode, HEADER_LEN,
+    },
+    SlskError,
+};
 
 /// All incoming message from the Soulseek server.
 #[derive(Debug, Deserialize, Serialize)]

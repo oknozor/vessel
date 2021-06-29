@@ -30,7 +30,6 @@ struct Broadcaster {
     clients: Arc<Mutex<Vec<UnboundedSender<Event>>>>,
 }
 
-#[instrument(name = "sse_listener", level = "trace", skip(rx))]
 pub async fn start_sse_listener(
     rx: Receiver<ServerResponse>,
     peer_rx: Receiver<PeerResponse>,

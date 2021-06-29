@@ -318,7 +318,6 @@ impl PeerHandler {
             .await
     }
 
-    #[instrument(level = "trace", skip(self))]
     async fn send_user_info(&mut self) -> tokio::io::Result<()> {
         // TODO : calculate correct values for total_upload, queue size and free slots
         self.connection
@@ -334,7 +333,6 @@ impl PeerHandler {
             .await
     }
 
-    #[instrument(level = "trace", skip(self))]
     async fn send_shares_reply(&mut self) -> tokio::io::Result<()> {
         let shared_dirs_copy;
         {

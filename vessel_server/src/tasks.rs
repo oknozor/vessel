@@ -49,19 +49,6 @@ pub fn spawn_server_listener_task(
     })
 }
 
-#[instrument(
-    name = "slsk_server_listener",
-    level = "trace",
-    skip(
-        http_rx,
-        sse_tx,
-        peer_listener_tx,
-        request_peer_connection_rx,
-        possible_parent_tx,
-        connection,
-        logged_in_tx
-    )
-)]
 async fn server_listener(
     mut http_rx: Receiver<ServerRequest>,
     sse_tx: Sender<ServerResponse>,

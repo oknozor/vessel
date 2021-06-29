@@ -234,6 +234,6 @@ impl PeerConnection {
 
 impl Drop for PeerConnection {
     fn drop(&mut self) {
-        debug!("Dropping peer connection")
+        debug!("[token={:?}] - Dropping peer connection", self.token)
     }
 }

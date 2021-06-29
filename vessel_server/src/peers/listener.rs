@@ -121,11 +121,6 @@ impl GlobalConnectionHandler {
         Ok(())
     }
 
-    #[instrument(
-        name = "peer_connection_handler",
-        level = "trace",
-        skip(self, channels, db, sse_tx, ready_tx)
-    )]
     async fn accept_peer_connection(
         &mut self,
         sse_tx: mpsc::Sender<PeerResponse>,
@@ -202,11 +197,6 @@ struct PeerListener {
     listener: TcpListener,
 }
 
-#[instrument(
-    name = "peers_listener",
-    level = "trace",
-    skip(listener, shutdown, senders, receivers, db, channels)
-)]
 pub async fn run(
     listener: TcpListener,
     shutdown: impl Future,
@@ -387,16 +377,6 @@ async fn listen_indirect_peer_connection_request(
     Ok(())
 }
 
-#[instrument(
-    level = "trace",
-    skip(
-        request_peer_connection_tx,
-        channels,
-        shutdown_helper,
-        possible_parent_rx,
-        database
-    )
-)]
 async fn connect_to_parents(
     request_peer_connection_tx: mpsc::Sender<ServerRequest>,
     sse_tx: mpsc::Sender<PeerResponse>,
@@ -490,7 +470,7 @@ pub(crate) async fn connect_to_peer_with_fallback(
     .await
 }
 
-// We were unable to connect to ths peer, we are now asking the server
+// We were unable to connect to the peer, we are now asking the server
 // to dispatch a connection request and expect a PierceFirewall message
 // before upgrading the connection
 async fn request_indirect_connection(
@@ -517,7 +497,6 @@ async fn request_indirect_connection(
         .map_err(|err| eyre!("Error sending connect to peer request {}", err))
 }
 
-#[instrument(level = "trace", skip(channels, shutdown_helper))]
 async fn prepare_direct_connection_to_peer(
     channels: SenderPool,
     sse_tx: mpsc::Sender<PeerResponse>,
@@ -552,7 +531,6 @@ async fn prepare_direct_connection_to_peer(
     }
 }
 
-#[instrument(level = "trace", skip(channels, shutdown_helper))]
 async fn prepare_direct_connection_to_peer_with_fallback(
     channels: SenderPool,
     sse_tx: mpsc::Sender<PeerResponse>,

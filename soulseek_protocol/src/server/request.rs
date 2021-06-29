@@ -315,7 +315,6 @@ pub enum ServerRequest {
 
 #[async_trait]
 impl ToBytes for ServerRequest {
-    #[instrument(level = "trace", skip(buffer, self))]
     async fn write_to_buf(
         &self,
         buffer: &mut BufWriter<impl AsyncWrite + Unpin + Send>,

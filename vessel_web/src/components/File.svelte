@@ -1,8 +1,13 @@
 <script>
+    import {afterUpdate} from "svelte";
+
     export let name;
     export let extension;
     export let size;
     export let username;
+    export let ticket;
+    export let progress;
+
 
     async function download() {
         await fetch(`http://localhost:3030/peers/${username}/queue`, {
@@ -17,7 +22,6 @@
         });
 
     }
-
 </script>
 
 <tr>
@@ -37,6 +41,10 @@
         {size}
     </td>
     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-        <button on:click|preventDefault={download}>Download</button>
+        {#if ticket}
+            <p>{progress}</p>
+        {:else}
+            <button on:click|preventDefault={download}>Download</button>
+        {/if}
     </td>
 </tr>

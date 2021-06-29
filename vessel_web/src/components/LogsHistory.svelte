@@ -2,8 +2,6 @@
     import {onMount} from 'svelte';
     import LogsHistoryElement from "./LogsHistoryElement.svelte";
     import {createChannelStore} from "../store";
-    // let eventsource = new EventSource("http://127.0.0.1:3031/events");
-
     let ul;
     let logEvents = [];
 

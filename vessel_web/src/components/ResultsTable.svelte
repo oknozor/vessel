@@ -22,7 +22,7 @@
     }
 
     afterUpdate(() => {
-        let unInit = results.length > offset && !loaded;
+        let unInit = results.length > offset;
         if (unInit) {
             loadResult();
             loaded = true

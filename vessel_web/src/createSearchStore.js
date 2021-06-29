@@ -1,8 +1,8 @@
 import { writable } from 'svelte/store';
 
 export const searchSub = writable([]);
-export const dlStartedSub = writable([]);
-export const dlProgressSub = writable(new Map);
+export const dlStartedSub = writable({});
+export const dlProgressSub = writable({});
 
 const eventSource = new EventSource(
     `http://127.0.0.1:3031/events`,
@@ -24,7 +24,7 @@ export const createSearchStore = () => {
 export const createDownloadStore = () => {
     eventSource.addEventListener("download_started", e => {
         let json = JSON.parse(e.data);
-        dlStartedSub.update(messages => messages.concat(json));
+        dlStartedSub.set(json);
     });
 
     return dlStartedSub
@@ -33,7 +33,7 @@ export const createDownloadStore = () => {
 export const createDownloadProgressStore = () => {
     eventSource.addEventListener("download_progress", e => {
         let json = JSON.parse(e.data);
-        dlProgressSub.update(messages => messages.set(json.ticket, json.percent));
+        dlProgressSub.set(json);
     });
 
     return dlProgressSub

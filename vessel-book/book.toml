@@ -1,0 +1,6 @@
+[book]
+authors = ["Paul Delafosse"]
+language = "en"
+multilingual = false
+src = "src"
+title = "Vessel"

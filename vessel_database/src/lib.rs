@@ -13,6 +13,7 @@ use crate::entities::{get_shared_directories, PeerEntity};
 use soulseek_protocol::peers::p2p::{
     shared_directories::SharedDirectories, transfer::TransferRequest,
 };
+use std::path::Path;
 
 pub mod entities;
 pub mod settings;
@@ -127,6 +128,7 @@ mod test {
     use std::net::Ipv4Addr;
 
     use crate::{entities::PeerEntity, Database};
+    use std::path::Path;
 
     #[test]
     fn should_open_db() {

@@ -47,11 +47,20 @@ impl Database {
             .map(|_res| ())
     }
 
-    pub fn insert_download(&self, request: &TransferRequest) -> sled::Result<()> {
+    pub fn insert_download(&self, request: &TransferRequest, user: String) -> sled::Result<()> {
         debug!("Writing download progress to db:");
+        let key = format!("{}@{}", user, request.filename);
+
+        let file_name = request.filename.replace("\\", "/");
+        let file_name = Path::new(&file_name)
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .to_string();
 
         let entry = DownloadDbEntry {
-            file_name: request.filename.clone(),
+            file_name,
+            user ,
             ticket: request.ticket,
             file_size: request
                 .file_size
@@ -63,22 +72,27 @@ impl Database {
 
         self.inner
             .open_tree("downloads")?
-            .insert(request.ticket.to_le_bytes(), json.as_bytes())
+            .insert(key.as_bytes(), json.as_bytes())
             .map(|_res| ())
     }
 
     pub fn get_download(&self, ticket: u32) -> Option<DownloadDbEntry> {
+        self.all_downloads().iter()
+            .find(|download| download.ticket == ticket)
+            .cloned()
+
+    }
+
+    pub fn all_downloads(&self) -> Vec<DownloadDbEntry> {
         self.inner
             .open_tree("downloads")
             .unwrap()
-            .get(ticket.to_le_bytes())
-            .ok()
-            .flatten()
-            .map(|data| data.to_vec())
-            .map(String::from_utf8)
-            .map(Result::unwrap)
-            .map(|raw| serde_json::from_str(&raw))
-            .map(Result::unwrap)
+            .iter()
+            .map(|res| res.expect("database error"))
+            .map(|(_k, v)| String::from_utf8(v.to_vec()).unwrap())
+            .map(|download_string| serde_json::from_str(&download_string))
+            .flat_map(Result::ok)
+            .collect()
     }
 
     pub fn get_peer(&self, username: &str) -> Option<PeerEntity> {
@@ -95,18 +109,15 @@ impl Database {
             .map(Result::unwrap)
     }
 
-    pub fn find_all(&self) -> Vec<(String, String)> {
+    pub fn all_users(&self) -> Vec<PeerEntity> {
         self.inner
             .open_tree("users")
             .unwrap()
             .iter()
             .map(|res| res.expect("database error"))
-            .map(|(k, v)| {
-                (
-                    String::from_utf8(k.to_vec()).unwrap(),
-                    String::from_utf8(v.to_vec()).unwrap(),
-                )
-            })
+            .map(|(_k, v)| String::from_utf8(v.to_vec()).unwrap())
+            .map(|user_string| serde_json::from_str(&user_string))
+            .flat_map(Result::ok)
             .collect()
     }
 }

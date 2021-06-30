@@ -104,13 +104,14 @@ impl PeerHandler {
                         response = self.connection.read_message::<PeerResponse>() =>  {
                             match response {
                                 Ok(message) => {
-                                    info!("[token={:?}] - Got Peer message {:?}", self.connection.token, message);
-
                                     // When receiving a SearchReply we want to close the connection asap
                                     if let PeerResponse::SearchReply(_) = message {
                                             return self.sse_tx.send(message)
                                             .await
                                             .map_err(|err| eyre!(err));
+                                    } else {
+                                       // Don't flood the log with search replies
+                                       info!("[token={:?}] - Got Peer message {:?}", self.connection.token, message);
                                     }
 
                                     if let Err(e) = self.handle_peer_message(&message).await {
@@ -357,7 +358,11 @@ impl PeerHandler {
         let ticket = request.ticket;
         let file_size = request.file_size.expect("Ok file size");
 
-        self.db.insert_download(request)?;
+        let username = self.peer_username
+            .clone()
+            .expect("Username should be known when initiating a transfer");
+
+        self.db.insert_download(request, username)?;
 
         self.connection
             .write_request(PeerRequestPacket::Message(PeerRequest::TransferReply(

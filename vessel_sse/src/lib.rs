@@ -116,8 +116,47 @@ fn dispatch_soulseek_message(
         info!("Starting to dispatch vessel message to SSE clients");
         while let Some(message) = rx.recv().await {
             debug!("SSE event : {:?}", message);
+            let event = match message {
+                ServerResponse::LoginResponse(_) => "login_response",
+                ServerResponse::ListenPort(_) => "listen_port",
+                ServerResponse::PeerAddress(_) => "peer_address",
+                ServerResponse::UserAdded(_) => "user_added",
+                ServerResponse::UserRemoved(_) => "user_removed",
+                ServerResponse::UserStatus(_) => "user_status",
+                ServerResponse::ChatMessage(_) => "chat_message",
+                ServerResponse::RoomJoined(_) => "room_joined",
+                ServerResponse::RoomLeft(_) => "room_left",
+                ServerResponse::PrivateMessage(_) => "private_message",
+                ServerResponse::UserJoinedRoom(_) => "user_joined_room",
+                ServerResponse::UserLeftRoom(_) => "user_left_room",
+                ServerResponse::UserStats(_) => "user_stats",
+                ServerResponse::KickedFromServer => "kicked",
+                ServerResponse::Recommendations(_) => "recommendations",
+                ServerResponse::GlobalRecommendations(_) => "global_recommendations",
+                ServerResponse::UserInterests(_) => "user_interests",
+                ServerResponse::RoomList(_) => "room_lists",
+                ServerResponse::AdminMessage(_) => "admin_message",
+                ServerResponse::PrivilegedUsers(_) => "privileged_users",
+                ServerResponse::EmbeddedMessage(_) => "embedded_message",
+                ServerResponse::SimilarUsers(_) => "similar_users",
+                ServerResponse::ItemRecommendations(_) => "item_recommendations",
+                ServerResponse::ItemSimilarUsers(_) => "item_similar_users",
+                ServerResponse::RoomTickers(_) => "room_tickers",
+                ServerResponse::RoomTickersAdded(_) => "room_tickers_added",
+                ServerResponse::RoomTickersRemoved(_) => "room_tickers_removed",
+                ServerResponse::PrivateRoomUsers(_) => "private_room_users",
+                ServerResponse::PrivateRoomUserAdded(_) => "private_room_users_added",
+                ServerResponse::PrivateRoomUserRemoved(_) => "private_room_users_removed",
+                ServerResponse::PrivateRoomAdded(_) => "private_room_added",
+                ServerResponse::PrivateRoomRemoved(_) => "private_room_removed",
+                ServerResponse::PrivateRoomInvitationEnabled(_) => "private_room_invitation_enabled",
+                ServerResponse::PublicChatMessage(_) => "public_chat_message",
+                ServerResponse::CantConnectToPeer(_) => "cant_connect_to_peer",
+                ServerResponse::CantCreateRoom(_) => "cant_create_room",
+                _ => { continue; }
+            };
+
             let data = serde_json::to_string(&message).expect("Serialization error");
-            let event = "server_message".to_string();
             broadcaster.clone().send_message_to_clients(&event, &data);
         }
     })

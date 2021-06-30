@@ -3,7 +3,7 @@ use warp::Filter;
 use crate::{model::QueueRequest, sender::VesselSender};
 use soulseek_protocol::peers::{p2p::request::PeerRequest, PeerRequestPacket};
 
-pub fn queue_upload(
+pub fn queue_upload_request(
     peer_sender: VesselSender<(String, PeerRequestPacket)>,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::post()
@@ -20,7 +20,7 @@ pub fn queue_upload(
         })
 }
 
-pub fn send_user_info(
+pub fn send_user_info_request(
     peer_sender_copy: VesselSender<(String, PeerRequestPacket)>,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::path!("users" / String / "info").map(move |peer_name| {

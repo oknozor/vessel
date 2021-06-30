@@ -4,11 +4,12 @@ use std::{
     path::Path,
 };
 
-use crate::settings::CONFIG;
 use soulseek_protocol::{
     peers::p2p::shared_directories::{Directory, File, SharedDirectories},
     server::peer::{Peer, PeerAddress, PeerConnectionRequest},
 };
+
+use crate::settings::CONFIG;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PeerEntity {
@@ -112,9 +113,10 @@ fn visit_dir(path: &Path, dirs: &mut Vec<Directory>) -> io::Result<()> {
     Ok(())
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct DownloadDbEntry {
     pub file_name: String,
+    pub user: String,
     pub ticket: u32,
     pub file_size: u64,
     pub progress: u64,

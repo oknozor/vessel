@@ -1,4 +1,4 @@
 shared_directories = [ "/home/okno/Downloads/Soulseek"]
-download_folder = "/home/okno/Download/vessel"
+download_folder = "/home/okno/Downloads/vessel"
 username = "vessel"
 password  = "lessev"

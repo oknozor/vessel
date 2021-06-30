@@ -153,9 +153,11 @@ impl PeerConnection {
 
         if let Some(entry) = download_entry {
             let file_name = &entry.file_name;
-            let file_path = Path::new(file_name).file_name().expect("File name error");
-            let mut path = PathBuf::from(&vessel_database::settings::CONFIG.download_folder);
-            path.push(file_path);
+            // Fix me : replace path before download
+            let file_name = file_name.replace("\\", "/");
+            let file_path = Path::new(&file_name).file_name().expect("File name error");
+            let mut download_path = PathBuf::from(&vessel_database::settings::CONFIG.download_folder);
+            download_path.push(file_path);
 
             progress_sender
                 .send(DownloadProgress::Init {
@@ -168,7 +170,7 @@ impl PeerConnection {
             let mut file = OpenOptions::new()
                 .create(true)
                 .write(true)
-                .open(path)
+                .open(download_path)
                 .await?;
 
             self.stream.write_u32_le(0).await?;

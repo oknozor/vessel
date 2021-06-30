@@ -27,11 +27,6 @@ pub fn get_all_connected_users(
     database: Database,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::path!("users").map(move || {
-        database
-            .find_all()
-            .iter()
-            .map(|(k, v)| format!("{}@{}", k, v))
-            .collect::<Vec<String>>()
-            .join(",")
+        warp::reply::json(&database.all_users())
     })
 }

@@ -62,7 +62,7 @@ impl ProtocolMessage for PeerResponse {
             PeerMessageCode::UploadPlacehold => todo!(),
             PeerMessageCode::QueueUpload => todo!(),
             PeerMessageCode::PlaceInQueueReply => todo!(),
-            PeerMessageCode::UploadFailed => todo!(),
+            PeerMessageCode::UploadFailed => UploadFailed::parse(src).map(PeerResponse::UploadFailed),
             PeerMessageCode::QueueFailed => QueueFailed::parse(src).map(PeerResponse::QueueFailed),
             PeerMessageCode::PlaceInQueueRequest => todo!(),
             PeerMessageCode::UploadQueueNotification => todo!(),

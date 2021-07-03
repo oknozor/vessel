@@ -1,5 +1,5 @@
-use std::{future::Future, sync::Arc};
 use std::net::{IpAddr, SocketAddr};
+use std::{future::Future, sync::Arc};
 
 use eyre::Result;
 use futures::TryFutureExt;
@@ -11,7 +11,7 @@ use tokio::{
         mpsc::{Receiver, Sender},
         Semaphore,
     },
-    time::{self, Duration, timeout},
+    time::{self, timeout, Duration},
 };
 use tracing::{error, info};
 
@@ -26,14 +26,14 @@ use soulseek_protocol::{
     },
     SlskError,
 };
-use vessel_database::Database;
 use vessel_database::entity::peer::PeerEntity;
+use vessel_database::Database;
 
 use crate::peers::{
     channels::SenderPool,
     connection::PeerConnection,
     dispatcher::Dispatcher,
-    handler::{connect_direct, PeerHandler, pierce_firewall},
+    handler::{connect_direct, pierce_firewall, PeerHandler},
     shutdown::Shutdown,
 };
 

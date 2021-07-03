@@ -8,16 +8,14 @@ use soulseek_protocol::{
     server::response::ServerResponse,
 };
 
-use tokio::{
-    sync::mpsc::{Receiver},
-};
-use warp::{Filter};
 use crate::broadcast::Broadcaster;
+use tokio::sync::mpsc::Receiver;
+use warp::Filter;
 
 const MAX_SEARCH_RESULT: u32 = 500;
 
-mod client;
 mod broadcast;
+mod client;
 
 pub async fn start_sse_listener(
     rx: Receiver<ServerResponse>,

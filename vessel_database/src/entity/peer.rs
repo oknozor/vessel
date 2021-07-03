@@ -1,7 +1,7 @@
-use std::net::{Ipv4Addr, SocketAddr};
 use crate::entity::Entity;
-use soulseek_protocol::server::peer::{PeerConnectionRequest, PeerAddress, Peer};
 use crate::entity::IpAddr;
+use soulseek_protocol::server::peer::{Peer, PeerAddress, PeerConnectionRequest};
+use std::net::{Ipv4Addr, SocketAddr};
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PeerEntity {
     pub username: String,

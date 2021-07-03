@@ -359,7 +359,8 @@ impl PeerHandler {
         let ticket = request.ticket;
         let file_size = request.file_size.expect("Ok file size");
 
-        let username = self.peer_username
+        let username = self
+            .peer_username
             .clone()
             .expect("Username should be known when initiating a transfer");
 

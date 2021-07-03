@@ -1,8 +1,7 @@
-use std::path::Path;
-use soulseek_protocol::peers::p2p::shared_directories::{Directory, SharedDirectories, File};
-use std::io;
 use crate::settings::CONFIG;
-
+use soulseek_protocol::peers::p2p::shared_directories::{Directory, File, SharedDirectories};
+use std::io;
+use std::path::Path;
 
 pub fn get_shared_directories() -> io::Result<SharedDirectories> {
     let paths = &CONFIG.shared_directories;

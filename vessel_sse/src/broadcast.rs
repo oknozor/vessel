@@ -1,20 +1,14 @@
+use crate::client::{Client, Clients};
+use crate::MAX_SEARCH_RESULT;
 use futures::{Stream, StreamExt};
 use soulseek_protocol::{
     peers::p2p::{download::DownloadProgress, response::PeerResponse},
     server::response::ServerResponse,
 };
-use std::{
-    collections::HashMap,
-    convert::Infallible,
-};
-use tokio::{
-    sync::mpsc::{Receiver},
-    task::JoinHandle,
-};
-use crate::client::{Clients, Client};
-use warp::sse::Event;
-use crate::MAX_SEARCH_RESULT;
+use std::{collections::HashMap, convert::Infallible};
 use tokio::sync::mpsc::UnboundedSender;
+use tokio::{sync::mpsc::Receiver, task::JoinHandle};
+use warp::sse::Event;
 
 #[derive(Default, Clone)]
 pub(crate) struct Broadcaster {
@@ -44,7 +38,8 @@ impl Broadcaster {
     }
 
     pub(crate) fn dispatch_soulseek_message(
-        &self, mut rx: Receiver<ServerResponse>,
+        &self,
+        mut rx: Receiver<ServerResponse>,
     ) -> JoinHandle<()> {
         let broadcaster = self.clone();
         tokio::task::spawn(async move {
@@ -84,11 +79,15 @@ impl Broadcaster {
                     ServerResponse::PrivateRoomUserRemoved(_) => "private_room_users_removed",
                     ServerResponse::PrivateRoomAdded(_) => "private_room_added",
                     ServerResponse::PrivateRoomRemoved(_) => "private_room_removed",
-                    ServerResponse::PrivateRoomInvitationEnabled(_) => "private_room_invitation_enabled",
+                    ServerResponse::PrivateRoomInvitationEnabled(_) => {
+                        "private_room_invitation_enabled"
+                    }
                     ServerResponse::PublicChatMessage(_) => "public_chat_message",
                     ServerResponse::CantConnectToPeer(_) => "cant_connect_to_peer",
                     ServerResponse::CantCreateRoom(_) => "cant_create_room",
-                    _ => { continue; }
+                    _ => {
+                        continue;
+                    }
                 };
 
                 let data = serde_json::to_string(&message).expect("Serialization error");
@@ -96,7 +95,6 @@ impl Broadcaster {
             }
         })
     }
-
 
     pub(crate) fn dispatch_peer_message(
         &self,

@@ -1,15 +1,13 @@
-use futures::{Stream};
+use crate::broadcast::Broadcaster;
+use futures::Stream;
 use std::{
     convert::Infallible,
     pin::Pin,
     sync::{Arc, Mutex},
     task::{Context, Poll},
 };
-use tokio::{
-    sync::mpsc::{self, UnboundedReceiver, UnboundedSender},
-};
-use warp::{sse::Event};
-use crate::broadcast::Broadcaster;
+use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
+use warp::sse::Event;
 
 pub type Clients = Arc<Mutex<Vec<UnboundedSender<Event>>>>;
 pub(crate) struct Client(UnboundedReceiver<Event>);
@@ -40,5 +38,3 @@ impl Stream for Client {
         }
     }
 }
-
-

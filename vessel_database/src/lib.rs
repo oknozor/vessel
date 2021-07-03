@@ -10,10 +10,8 @@ use std::sync::{Arc, Mutex};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
-use entity::{Entity, shared_dirs::get_shared_directories};
-use soulseek_protocol::peers::p2p::{
-    shared_directories::SharedDirectories,
-};
+use entity::{shared_dirs::get_shared_directories, Entity};
+use soulseek_protocol::peers::p2p::shared_directories::SharedDirectories;
 
 pub mod entity;
 pub mod settings;
@@ -38,7 +36,9 @@ impl Default for Database {
 
 impl Database {
     pub fn insert<T>(&self, entity: &T) -> sled::Result<()>
-        where T: Sized + Entity + Serialize {
+    where
+        T: Sized + Entity + Serialize,
+    {
         let json = serde_json::to_string(entity).expect("Serialization error");
 
         debug!("Inserting entity {}:", json);
@@ -50,7 +50,9 @@ impl Database {
     }
 
     pub fn get_all<T>(&self) -> Vec<T>
-        where T: Entity + DeserializeOwned {
+    where
+        T: Entity + DeserializeOwned,
+    {
         self.inner
             .open_tree(T::COLLECTION)
             .unwrap()
@@ -62,7 +64,10 @@ impl Database {
             .collect()
     }
 
-    pub fn get_by_key<T>(&self, key: &str) -> Option<T> where T: Entity + DeserializeOwned {
+    pub fn get_by_key<T>(&self, key: &str) -> Option<T>
+    where
+        T: Entity + DeserializeOwned,
+    {
         self.inner
             .open_tree(T::COLLECTION)
             .unwrap()
@@ -81,8 +86,8 @@ impl Database {
 mod test {
     use std::net::Ipv4Addr;
 
-    use crate::Database;
     use crate::entity::peer::PeerEntity;
+    use crate::Database;
 
     #[test]
     fn should_open_db() {
@@ -104,7 +109,7 @@ mod test {
             ip: Ipv4Addr::new(127, 0, 0, 1),
             port: 0,
         })
-            .unwrap();
+        .unwrap();
         let peer = db.get_by_key::<PeerEntity>("toto").unwrap();
 
         assert_eq!(peer.username, "toto");
@@ -120,7 +125,7 @@ mod test {
             ip: Ipv4Addr::new(127, 0, 0, 1),
             port: 2222,
         })
-            .unwrap();
+        .unwrap();
         let all_peers = db.get_all::<PeerEntity>();
 
         assert!(!all_peers.is_empty());

@@ -1,5 +1,5 @@
-use soulseek_protocol::peers::p2p::transfer::TransferRequest;
 use crate::entity::Entity;
+use soulseek_protocol::peers::p2p::transfer::TransferRequest;
 use std::path::Path;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]

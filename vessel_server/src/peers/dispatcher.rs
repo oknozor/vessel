@@ -8,8 +8,8 @@ use soulseek_protocol::{
     peers::{p2p::response::PeerResponse, PeerRequestPacket},
     server::{peer::PeerAddress, request::ServerRequest},
 };
-use vessel_database::Database;
 use vessel_database::entity::peer::PeerEntity;
+use vessel_database::Database;
 
 use crate::peers::{
     channels::SenderPool,
@@ -153,7 +153,10 @@ impl Dispatcher {
     }
 
     async fn push_to_queue(&mut self, username: String, request: PeerRequestPacket) {
-        info!("Pushing peer request from {} to queue to message queue queue : {:?}", username, request);
+        info!(
+            "Pushing peer request from {} to queue to message queue queue : {:?}",
+            username, request
+        );
         match self.message_queue.get_mut(&username) {
             Some(queue) => queue.push(request),
             None => {

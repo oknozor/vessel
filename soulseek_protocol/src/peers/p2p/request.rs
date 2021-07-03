@@ -20,7 +20,7 @@ pub enum PeerRequest {
     TransferRequest(TransferRequest),
     TransferReply(TransferReply),
     UploadPlaceholder,
-    QueueUpload { filename: String },
+    QueueUpload(QueueUpload),
     PlaceInQueueReply(PlaceInQueueReply),
     UploadFailed(UploadFailed),
     QueueFailed(QueueFailed),
@@ -66,9 +66,7 @@ impl ToBytes for PeerRequest {
                 transfer_reply.write_to_buf(buffer).await?
             }
             PeerRequest::UploadPlaceholder => {}
-            PeerRequest::QueueUpload { filename } => {
-                write_str_msg(filename, PeerMessageCode::QueueUpload, buffer).await?
-            }
+            PeerRequest::QueueUpload(queue_upload) => queue_upload.write_to_buf(buffer).await?,
             PeerRequest::PlaceInQueueReply(place_in_queue_reply) => {
                 place_in_queue_reply.write_to_buf(buffer).await?
             }

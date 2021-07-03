@@ -16,13 +16,13 @@ pub fn get_shared_directories() -> io::Result<SharedDirectories> {
 
 fn visit_dir(path: &Path, dirs: &mut Vec<Directory>) -> io::Result<()> {
     if path.is_dir() {
+        let mut dir = Directory {
+            name: path.to_str().unwrap().to_string(),
+            files: vec![],
+        };
+
         for entry in std::fs::read_dir(path)? {
             let entry = entry?;
-            let mut dir = Directory {
-                name: path.to_str().unwrap().to_string(),
-                files: vec![],
-            };
-
             if entry.path().is_dir() {
                 visit_dir(&entry.path(), dirs)?;
             } else {
@@ -42,9 +42,9 @@ fn visit_dir(path: &Path, dirs: &mut Vec<Directory>) -> io::Result<()> {
                     attributes: vec![],
                 })
             }
-
-            dirs.push(dir);
         }
+
+        dirs.push(dir);
     } else {
         error!("{:?} is not a directory", path)
     }

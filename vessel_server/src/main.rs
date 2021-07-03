@@ -34,8 +34,8 @@ mod peers;
 mod slsk;
 mod tasks;
 
-// #[tokio::main]
-#[tokio::main(flavor = "current_thread")]
+#[tokio::main]
+// #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
     let filter = std::env::var("RUST_LOG").unwrap_or_else(|_| "tracing=info,warp=debug".to_owned());
 

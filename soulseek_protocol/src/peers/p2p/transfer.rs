@@ -8,6 +8,36 @@ use bytes::Buf;
 use std::io::Cursor;
 
 #[derive(Debug, Serialize)]
+pub struct QueueUpload {
+    pub file_name: String,
+}
+
+impl ParseBytes for QueueUpload {
+    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self> {
+        let file_name = read_string(src)?;
+        Ok(QueueUpload { file_name })
+    }
+}
+
+#[async_trait]
+impl ToBytes for QueueUpload {
+    async fn write_to_buf(
+        &self,
+        buffer: &mut BufWriter<impl AsyncWrite + Unpin + Send>,
+    ) -> tokio::io::Result<()> {
+        let len = STR_LENGTH_PREFIX + self.file_name.as_bytes().len() as u32 + 4;
+
+        buffer.write_u32_le(len).await?;
+        buffer
+            .write_u32_le(PeerMessageCode::QueueUpload as u32)
+            .await?;
+        write_string(&self.file_name, buffer).await?;
+
+        Ok(())
+    }
+}
+
+#[derive(Debug, Serialize)]
 pub struct TransferRequest {
     direction: u32,
     pub ticket: u32,

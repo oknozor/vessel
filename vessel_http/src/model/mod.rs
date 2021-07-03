@@ -17,7 +17,7 @@ pub struct Error {
 
 #[derive(Deserialize, Serialize)]
 pub struct QueueRequest {
-    pub(crate) filename: String,
+    pub(crate) file_name: String,
 }
 
 #[derive(Deserialize, Serialize)]

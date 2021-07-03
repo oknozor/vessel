@@ -25,6 +25,7 @@ use soulseek_protocol::{
 use vessel_database::Database;
 
 use crate::peers::{channels::SenderPool, connection::PeerConnection, shutdown::Shutdown};
+use soulseek_protocol::peers::p2p::transfer::{QueueUpload, TransferReply};
 use vessel_database::entity::download::DownloadEntity;
 
 #[derive(Debug)]
@@ -233,9 +234,11 @@ impl PeerHandler {
             PeerResponse::FolderContentsRequest(_) => todo!(),
             PeerResponse::FolderContentsReply(_) => todo!(),
             PeerResponse::TransferRequest(request) => self.transfer(request).await,
-            PeerResponse::TransferReply(_) => todo!(),
+            PeerResponse::TransferReply(transfer_reply) => {
+                self.transfer_reply(transfer_reply).await
+            }
             PeerResponse::UploadPlaceholder => todo!(),
-            PeerResponse::QueueDownload { .. } => todo!(),
+            PeerResponse::QueueUpload(queue_upload) => self.queue_upload(queue_upload).await,
             PeerResponse::PlaceInQueueReply(_) => todo!(),
             PeerResponse::UploadFailed(_) => todo!(),
             PeerResponse::QueueFailed(_) => todo!(),
@@ -373,6 +376,16 @@ impl PeerHandler {
             )))
             .await?;
 
+        Ok(())
+    }
+
+    async fn transfer_reply(&mut self, transfer_reply: &TransferReply) -> tokio::io::Result<()> {
+        info!("Transfer reply : {:?}", transfer_reply);
+        Ok(())
+    }
+
+    async fn queue_upload(&mut self, queue_upload: &QueueUpload) -> tokio::io::Result<()> {
+        info!("{:?}", queue_upload);
         Ok(())
     }
 

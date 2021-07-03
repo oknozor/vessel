@@ -1,5 +1,6 @@
 use std::io::Cursor;
 
+use crate::peers::p2p::transfer::QueueUpload;
 use crate::{
     frame::ParseBytes,
     peers::p2p::{
@@ -29,7 +30,7 @@ pub enum PeerResponse {
     TransferRequest(TransferRequest),
     TransferReply(TransferReply),
     UploadPlaceholder,
-    QueueDownload { filename: String },
+    QueueUpload(QueueUpload),
     PlaceInQueueReply(PlaceInQueueReply),
     UploadFailed(UploadFailed),
     QueueFailed(QueueFailed),
@@ -60,7 +61,7 @@ impl ProtocolMessage for PeerResponse {
             }
             PeerMessageCode::TransferReply => todo!(),
             PeerMessageCode::UploadPlacehold => todo!(),
-            PeerMessageCode::QueueUpload => todo!(),
+            PeerMessageCode::QueueUpload => QueueUpload::parse(src).map(PeerResponse::QueueUpload),
             PeerMessageCode::PlaceInQueueReply => todo!(),
             PeerMessageCode::UploadFailed => {
                 UploadFailed::parse(src).map(PeerResponse::UploadFailed)

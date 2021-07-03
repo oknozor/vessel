@@ -1,6 +1,7 @@
 use warp::Filter;
 
 use crate::{model::QueueRequest, sender::VesselSender};
+use soulseek_protocol::peers::p2p::transfer::QueueUpload;
 use soulseek_protocol::peers::{p2p::request::PeerRequest, PeerRequestPacket};
 
 pub fn queue_upload_request(
@@ -12,9 +13,9 @@ pub fn queue_upload_request(
         .map(move |peer_name, request: QueueRequest| {
             peer_sender.send((
                 peer_name,
-                PeerRequestPacket::Message(PeerRequest::QueueUpload {
-                    filename: request.filename,
-                }),
+                PeerRequestPacket::Message(PeerRequest::QueueUpload(QueueUpload {
+                    file_name: request.file_name,
+                })),
             ));
             "ok"
         })

@@ -1,5 +1,8 @@
 use std::{future::Future, sync::Arc};
+use std::net::{IpAddr, SocketAddr};
 
+use eyre::Result;
+use futures::TryFutureExt;
 use rand::random;
 use tokio::{
     net::{TcpListener, TcpStream},
@@ -8,19 +11,10 @@ use tokio::{
         mpsc::{Receiver, Sender},
         Semaphore,
     },
-    time::{self, timeout, Duration},
+    time::{self, Duration, timeout},
 };
 use tracing::{error, info};
 
-use crate::peers::{
-    channels::SenderPool,
-    connection::PeerConnection,
-    dispatcher::Dispatcher,
-    handler::{connect_direct, pierce_firewall, PeerHandler},
-    shutdown::Shutdown,
-};
-use eyre::Result;
-use futures::TryFutureExt;
 use soulseek_protocol::{
     message_common::ConnectionType,
     peers::{p2p::response::PeerResponse, PeerRequestPacket},
@@ -32,8 +26,16 @@ use soulseek_protocol::{
     },
     SlskError,
 };
-use std::net::{IpAddr, SocketAddr};
-use vessel_database::{entities::PeerEntity, Database};
+use vessel_database::Database;
+use vessel_database::entity::peer::PeerEntity;
+
+use crate::peers::{
+    channels::SenderPool,
+    connection::PeerConnection,
+    dispatcher::Dispatcher,
+    handler::{connect_direct, PeerHandler, pierce_firewall},
+    shutdown::Shutdown,
+};
 
 /// TODO : Make this value configurable
 const MAX_CONNECTIONS: usize = 4096;

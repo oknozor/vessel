@@ -25,6 +25,7 @@ use soulseek_protocol::{
 use vessel_database::Database;
 
 use crate::peers::{channels::SenderPool, connection::PeerConnection, shutdown::Shutdown};
+use vessel_database::entity::download::DownloadEntity;
 
 #[derive(Debug)]
 pub struct PeerHandler {
@@ -362,7 +363,8 @@ impl PeerHandler {
             .clone()
             .expect("Username should be known when initiating a transfer");
 
-        self.db.insert_download(request, username)?;
+        let download_entity = DownloadEntity::from((username, request));
+        self.db.insert(&download_entity)?;
 
         self.connection
             .write_request(PeerRequestPacket::Message(PeerRequest::TransferReply(

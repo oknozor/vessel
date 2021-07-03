@@ -4,6 +4,7 @@ use soulseek_protocol::server::request::ServerRequest;
 
 use crate::sender::VesselSender;
 use vessel_database::Database;
+use vessel_database::entity::peer::PeerEntity;
 
 pub fn get_user_status(
     sender: VesselSender<ServerRequest>,
@@ -27,6 +28,6 @@ pub fn get_all_connected_users(
     database: Database,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::path!("users").map(move || {
-        warp::reply::json(&database.all_users())
+        warp::reply::json(&database.get_all::<PeerEntity>())
     })
 }

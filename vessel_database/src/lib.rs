@@ -7,15 +7,15 @@ extern crate tracing;
 
 use std::sync::{Arc, Mutex};
 
-use entities::DownloadDbEntry;
+use serde::de::DeserializeOwned;
+use serde::Serialize;
 
-use crate::entities::{get_shared_directories, PeerEntity};
+use entity::{Entity, shared_dirs::get_shared_directories};
 use soulseek_protocol::peers::p2p::{
-    shared_directories::SharedDirectories, transfer::TransferRequest,
+    shared_directories::SharedDirectories,
 };
-use std::path::Path;
 
-pub mod entities;
+pub mod entity;
 pub mod settings;
 
 #[derive(Clone, Debug)]
@@ -37,89 +37,43 @@ impl Default for Database {
 }
 
 impl Database {
-    pub fn insert_peer(&self, peer: &PeerEntity) -> sled::Result<()> {
-        debug!("Writing peer {:?} to db:", peer);
+    pub fn insert<T>(&self, entity: &T) -> sled::Result<()>
+        where T: Sized + Entity + Serialize {
+        let json = serde_json::to_string(entity).expect("Serialization error");
 
-        let json = serde_json::to_string(&peer).expect("Serialization error");
+        debug!("Inserting entity {}:", json);
 
         self.inner
-            .open_tree("users")?
-            .insert(peer.username.as_bytes(), json.as_bytes())
+            .open_tree(T::COLLECTION)?
+            .insert(entity.get_key(), json.as_bytes())
             .map(|_res| ())
     }
 
-    pub fn insert_download(&self, request: &TransferRequest, user: String) -> sled::Result<()> {
-        debug!("Writing download progress to db:");
-        let key = format!("{}@{}", user, request.filename);
-
-        let file_name = request.filename.replace("\\", "/");
-        let file_name = Path::new(&file_name)
-            .file_name()
-            .unwrap()
-            .to_string_lossy()
-            .to_string();
-
-        let entry = DownloadDbEntry {
-            file_name,
-            user ,
-            ticket: request.ticket,
-            file_size: request
-                .file_size
-                .expect("Accepted transfer request should have a file size"),
-            progress: 0,
-        };
-
-        let json = serde_json::to_string(&entry).expect("Serialization error");
-
+    pub fn get_all<T>(&self) -> Vec<T>
+        where T: Entity + DeserializeOwned {
         self.inner
-            .open_tree("downloads")?
-            .insert(key.as_bytes(), json.as_bytes())
-            .map(|_res| ())
-    }
-
-    pub fn get_download(&self, ticket: u32) -> Option<DownloadDbEntry> {
-        self.all_downloads().iter()
-            .find(|download| download.ticket == ticket)
-            .cloned()
-
-    }
-
-    pub fn all_downloads(&self) -> Vec<DownloadDbEntry> {
-        self.inner
-            .open_tree("downloads")
+            .open_tree(T::COLLECTION)
             .unwrap()
             .iter()
             .map(|res| res.expect("database error"))
             .map(|(_k, v)| String::from_utf8(v.to_vec()).unwrap())
-            .map(|download_string| serde_json::from_str(&download_string))
+            .map(|entity_string| serde_json::from_str(entity_string.as_str()))
             .flat_map(Result::ok)
             .collect()
     }
 
-    pub fn get_peer(&self, username: &str) -> Option<PeerEntity> {
+    pub fn get_by_key<T>(&self, key: &str) -> Option<T> where T: Entity + DeserializeOwned {
         self.inner
-            .open_tree("users")
+            .open_tree(T::COLLECTION)
             .unwrap()
-            .get(&username)
+            .get(key)
             .ok()
             .flatten()
             .map(|data| data.to_vec())
             .map(String::from_utf8)
             .map(Result::unwrap)
-            .map(|raw| serde_json::from_str(&raw))
+            .map(|raw_data| serde_json::from_str(&raw_data))
             .map(Result::unwrap)
-    }
-
-    pub fn all_users(&self) -> Vec<PeerEntity> {
-        self.inner
-            .open_tree("users")
-            .unwrap()
-            .iter()
-            .map(|res| res.expect("database error"))
-            .map(|(_k, v)| String::from_utf8(v.to_vec()).unwrap())
-            .map(|user_string| serde_json::from_str(&user_string))
-            .flat_map(Result::ok)
-            .collect()
     }
 }
 
@@ -127,14 +81,14 @@ impl Database {
 mod test {
     use std::net::Ipv4Addr;
 
-    use crate::{entities::PeerEntity, Database};
-    use std::path::Path;
+    use crate::Database;
+    use crate::entity::peer::PeerEntity;
 
     #[test]
     fn should_open_db() {
         let db = Database::default();
         assert!(db
-            .insert_peer(&PeerEntity {
+            .insert(&PeerEntity {
                 username: "toto".to_string(),
                 ip: Ipv4Addr::new(127, 0, 0, 1),
                 port: 0,
@@ -145,16 +99,30 @@ mod test {
     #[test]
     fn should_get_peer() {
         let db = Database::default();
-        db.insert_peer(&PeerEntity {
+        db.insert(&PeerEntity {
             username: "toto".to_string(),
             ip: Ipv4Addr::new(127, 0, 0, 1),
             port: 0,
         })
-        .unwrap();
-        let peer = db.get_peer("toto").unwrap();
+            .unwrap();
+        let peer = db.get_by_key::<PeerEntity>("toto").unwrap();
 
         assert_eq!(peer.username, "toto");
         assert_eq!(peer.get_address().to_string(), "127.0.0.1:0");
         assert_eq!(peer.port, 0);
+    }
+
+    #[test]
+    fn should_get_all_peers() {
+        let db = Database::default();
+        db.insert(&PeerEntity {
+            username: "alfred".to_string(),
+            ip: Ipv4Addr::new(127, 0, 0, 1),
+            port: 2222,
+        })
+            .unwrap();
+        let all_peers = db.get_all::<PeerEntity>();
+
+        assert!(!all_peers.is_empty());
     }
 }

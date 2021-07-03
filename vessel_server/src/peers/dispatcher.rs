@@ -1,18 +1,20 @@
 use std::collections::HashMap;
 
+use eyre::Result;
 use tokio::sync::mpsc::{Receiver, Sender};
 
-use crate::peers::{
-    channels::SenderPool,
-    listener::{connect_to_peer_with_fallback, ShutdownHelper},
-};
-use eyre::Result;
 use soulseek_protocol::{
     message_common::ConnectionType,
     peers::{p2p::response::PeerResponse, PeerRequestPacket},
     server::{peer::PeerAddress, request::ServerRequest},
 };
-use vessel_database::{entities::PeerEntity, Database};
+use vessel_database::Database;
+use vessel_database::entity::peer::PeerEntity;
+
+use crate::peers::{
+    channels::SenderPool,
+    listener::{connect_to_peer_with_fallback, ShutdownHelper},
+};
 
 pub struct Dispatcher {
     // Receive connection state updates from peer handler
@@ -64,7 +66,7 @@ impl Dispatcher {
     }
 
     async fn on_peer_address_received(&mut self, peer: PeerEntity) {
-        self.db.insert_peer(&peer).unwrap();
+        self.db.insert(&peer).unwrap();
         if let Some(queue) = self.message_queue.get(&peer.username) {
             if let Some(msg) = queue.last() {
                 let conn_type = ConnectionType::from(msg);
@@ -118,7 +120,7 @@ impl Dispatcher {
                         .expect("Send error");
                 }
             }
-            None => match self.db.get_peer(username) {
+            None => match self.db.get_by_key::<PeerEntity>(username) {
                 Some(peer) => {
                     self.initiate_connection(ConnectionType::PeerToPeer, peer)
                         .await

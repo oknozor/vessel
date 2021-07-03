@@ -8,7 +8,6 @@ use crate::{
     },
 };
 
-/// TODO
 #[derive(Debug)]
 pub enum PeerRequest {
     SharesRequest,

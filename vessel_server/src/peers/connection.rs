@@ -20,6 +20,7 @@ use soulseek_protocol::{
     ProtocolHeader, ProtocolMessage, SlskError,
 };
 use vessel_database::Database;
+use vessel_database::entity::download::DownloadEntity;
 
 #[derive(Debug)]
 pub struct PeerConnection {
@@ -149,11 +150,11 @@ impl PeerConnection {
         let mut cursor = Cursor::new(&mut self.buffer);
         debug!("Got incoming upload connection from {}", address);
         let ticket = cursor.get_u32_le();
-        let download_entry = db.get_download(ticket);
+        let download_entry = db.get_by_key::<DownloadEntity>(&DownloadEntity::key_from(&user_name, ticket));
 
         if let Some(entry) = download_entry {
             let file_name = &entry.file_name;
-            // Fix me : replace path before download
+            // Fixme : replace path before download
             let file_name = file_name.replace("\\", "/");
             let file_path = Path::new(&file_name).file_name().expect("File name error");
             let mut download_path = PathBuf::from(&vessel_database::settings::CONFIG.download_folder);

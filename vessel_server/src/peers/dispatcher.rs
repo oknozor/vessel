@@ -154,7 +154,7 @@ impl Dispatcher {
 
     async fn push_to_queue(&mut self, username: String, request: PeerRequestPacket) {
         info!(
-            "Pushing peer request from {} to queue to message queue queue : {:?}",
+            "Pushing peer request from {} to queue to message queue : {:?}",
             username, request
         );
         match self.message_queue.get_mut(&username) {

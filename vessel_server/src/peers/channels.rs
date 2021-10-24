@@ -106,7 +106,7 @@ impl SenderPool {
         channels.get(&token).cloned()
     }
 
-    pub fn set_ready(
+    pub fn ready(
         &self,
         token: u32,
         tx: Sender<PeerRequestPacket>,

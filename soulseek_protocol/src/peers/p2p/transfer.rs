@@ -155,7 +155,14 @@ impl ParseBytes for QueueFailed {
 
 #[derive(Debug, Serialize)]
 pub struct PlaceInQueueRequest {
-    filename: String,
+    file_name: String,
+}
+
+impl ParseBytes for PlaceInQueueRequest {
+    fn parse(src: &mut Cursor<&[u8]>) -> std::io::Result<Self> {
+        let file_name = read_string(src)?;
+        Ok(PlaceInQueueRequest { file_name })
+    }
 }
 
 #[async_trait]

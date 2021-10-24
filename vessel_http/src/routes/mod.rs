@@ -65,5 +65,5 @@ pub(crate) fn search_routes(
 pub(crate) fn transfer_routes(
     db: Database,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-    transfer::get_download(db)
+    transfer::get_downloads(db.clone()).or(transfer::get_uploads(db))
 }

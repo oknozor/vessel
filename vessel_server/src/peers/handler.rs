@@ -8,6 +8,7 @@ use tokio::sync::{
     Semaphore,
 };
 
+use soulseek_protocol::peers::p2p::transfer::{QueueUpload, TransferReply};
 use soulseek_protocol::{
     message_common::ConnectionType,
     peers::{
@@ -22,11 +23,11 @@ use soulseek_protocol::{
         PeerRequestPacket,
     },
 };
+use vessel_database::entity::download::DownloadEntity;
+use vessel_database::entity::upload::UploadEntity;
 use vessel_database::Database;
 
 use crate::peers::{channels::SenderPool, connection::PeerConnection, shutdown::Shutdown};
-use soulseek_protocol::peers::p2p::transfer::{QueueUpload, TransferReply};
-use vessel_database::entity::download::DownloadEntity;
 
 #[derive(Debug)]
 pub struct PeerHandler {
@@ -75,6 +76,7 @@ pub(crate) async fn pierce_firewall(mut handler: PeerHandler, token: u32) -> Res
 
 impl PeerHandler {
     pub(crate) async fn listen(&mut self, handler_rx: Receiver<PeerRequestPacket>) -> Result<()> {
+        debug!("{:?}", self.connection_type());
         match self.connection_type() {
             ConnectionType::PeerToPeer => {
                 self.listen_p2p(handler_rx).await?;
@@ -152,7 +154,7 @@ impl PeerHandler {
             tokio::select! {
                         response = self.connection.read_message::<DistributedMessage>() =>  {
                             match response {
-                                Ok(message) => debug!("Got distributed message {:?}", message),
+                                Ok(message) => trace!("Got distributed message {:?}", message),
                                 Err(e) => {
                                     return Err(eyre!("Error in connection handler with {:?} : {}", self.peer_username, e));
                                 }
@@ -204,7 +206,7 @@ impl PeerHandler {
         );
         self.send_pierce_firewall(token).await?;
         let (tx, rx) = channel(32);
-        let state = self.connection_states.set_ready(token, tx)?;
+        let state = self.connection_states.ready(token, tx)?;
         self.connection.token = Some(token);
         self.peer_username = Some(state.username);
         self.connection.connection_type = state.conn_type;
@@ -259,7 +261,7 @@ impl PeerHandler {
         let (tx, rx) = channel(32);
         let token = match message {
             PeerConnectionMessage::PierceFirewall(token) => {
-                let state = self.connection_states.set_ready(*token, tx)?;
+                let state = self.connection_states.ready(*token, tx)?;
                 self.connection.connection_type = state.conn_type;
                 self.peer_username = Some(state.username);
                 self.connection.token = Some(*token);
@@ -385,7 +387,13 @@ impl PeerHandler {
     }
 
     async fn queue_upload(&mut self, queue_upload: &QueueUpload) -> tokio::io::Result<()> {
-        info!("{:?}", queue_upload);
+        debug!("{:?}", queue_upload);
+        let file_name = queue_upload.file_name.clone();
+        let user_name = self.peer_username.as_ref().unwrap().clone();
+        // FIXME: NO MORE RANDOM TICKET
+        let ticket = random();
+        let upload = UploadEntity::new(file_name, user_name, ticket);
+        self.db.insert(&upload)?;
         Ok(())
     }
 

@@ -67,7 +67,9 @@ impl ProtocolMessage for PeerResponse {
                 UploadFailed::parse(src).map(PeerResponse::UploadFailed)
             }
             PeerMessageCode::QueueFailed => QueueFailed::parse(src).map(PeerResponse::QueueFailed),
-            PeerMessageCode::PlaceInQueueRequest => todo!(),
+            PeerMessageCode::PlaceInQueueRequest => {
+                PlaceInQueueRequest::parse(src).map(PeerResponse::PlaceInQueueRequest)
+            }
             PeerMessageCode::UploadQueueNotification => todo!(),
             PeerMessageCode::Unknown => {
                 warn!("Unknown message from peer : \n{:?}", src);

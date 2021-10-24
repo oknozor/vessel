@@ -10,8 +10,10 @@ use std::sync::{Arc, Mutex};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
+use crate::entity::upload::UploadEntity;
 use entity::{shared_dirs::get_shared_directories, Entity};
 use soulseek_protocol::peers::p2p::shared_directories::SharedDirectories;
+use std::sync::atomic::AtomicU32;
 
 pub mod entity;
 pub mod settings;
@@ -24,13 +26,18 @@ pub struct Database {
 lazy_static! {
     pub static ref SHARED_DIRS: Arc<Mutex<SharedDirectories>> =
         Arc::new(Mutex::new(get_shared_directories().unwrap()));
+    pub static ref UPLOAD_QUEUE: Arc<Mutex<u32>> = Arc::new(Mutex::new(0));
 }
 
 impl Default for Database {
     fn default() -> Self {
-        Database {
+        let db = Database {
             inner: sled::open("vessel_db").unwrap(),
-        }
+        };
+
+        *UPLOAD_QUEUE.lock().unwrap() = db.get_all::<UploadEntity>().iter().count() as u32;
+
+        db
     }
 }
 

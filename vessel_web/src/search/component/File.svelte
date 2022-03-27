@@ -1,5 +1,4 @@
 <script>
-    import {afterUpdate} from "svelte";
 
     export let name;
     export let extension;
@@ -10,15 +9,11 @@
 
 
     async function download() {
-        await fetch(`http://localhost:3030/peers/${username}/queue`, {
+        await fetch(`http://localhost:3030/rooms/${username}/queue`, {
             method: 'POST',
             body: JSON.stringify({
                 filename: name
             }),
-            headers: {
-                'Content-Type': 'application/json',
-                'Accept': '*/*'
-            }
         });
 
     }

@@ -16,8 +16,16 @@ pub fn get_shared_directories() -> io::Result<SharedDirectories> {
 
 fn visit_dir(path: &Path, dirs: &mut Vec<Directory>) -> io::Result<()> {
     if path.is_dir() {
+        let home = std::env::home_dir().unwrap();
+        let home = home.to_string_lossy();
+        let home = home.as_ref();
+        let username = &CONFIG.username;
+        let virtual_path = format!("@@{}", username);
+        let name = path.to_str().unwrap().to_string();
+        let name = name.replace(home, &virtual_path);
+
         let mut dir = Directory {
-            name: path.to_str().unwrap().to_string(),
+            name,
             files: vec![],
         };
 
@@ -27,20 +35,20 @@ fn visit_dir(path: &Path, dirs: &mut Vec<Directory>) -> io::Result<()> {
                 visit_dir(&entry.path(), dirs)?;
             } else {
                 let metadata = entry.metadata()?;
+                let name = entry.file_name().to_str().unwrap().to_string();
+
                 dir.files.push(File {
-                    name: entry.file_name().to_str().unwrap().to_string(),
+                    name,
                     size: metadata.len(),
                     extension: entry
-                        .file_name()
-                        .to_str()
+                        .path()
+                        .extension()
                         .unwrap()
-                        .split('.')
-                        .last()
-                        .unwrap()
+                        .to_string_lossy()
                         .to_string(),
                     // TODO
                     attributes: vec![],
-                })
+                });
             }
         }
 

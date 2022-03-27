@@ -5,6 +5,16 @@ use soulseek_protocol::server::{chat::SayInChat, request::ServerRequest};
 
 use crate::{model::ChatMessage, sender::VesselSender};
 
+
+pub fn list(sender_copy: VesselSender<ServerRequest>) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+    warp::get()
+        .and(warp::path!("rooms"))
+        .map(move || {
+            sender_copy.send(ServerRequest::RoomList);
+            "ok"
+        })
+}
+
 pub fn send_chat_message(
     sender_copy: VesselSender<ServerRequest>,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {

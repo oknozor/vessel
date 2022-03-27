@@ -21,14 +21,8 @@ pub async fn start(
     let peer_sender = VesselSender::new(peer_message_sender);
 
     info!("Starting vessel http ...");
-    warp::serve(
-        routes::routes(db, sender, peer_sender).with(
-            warp::cors()
-                .allow_any_origin()
-                .allow_methods(&[Method::POST, Method::GET])
-                .allow_header("Content-Type"),
-        ),
-    )
-    .run(([127, 0, 0, 1], 3030))
-    .await;
+    warp::serve(routes::routes(db, sender, peer_sender)
+        .with(warp::cors::cors().allow_any_origin()))
+        .run(([127, 0, 0, 1], 3030))
+        .await;
 }

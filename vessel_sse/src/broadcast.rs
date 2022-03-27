@@ -45,7 +45,7 @@ impl Broadcaster {
         tokio::task::spawn(async move {
             info!("Starting to dispatch vessel message to SSE clients");
             while let Some(message) = rx.recv().await {
-                debug!("SSE event : {:?}", message);
+                info!("SSE event : {:?}", message);
                 let event = match message {
                     ServerResponse::LoginResponse(_) => "login_response",
                     ServerResponse::ListenPort(_) => "listen_port",
@@ -79,9 +79,7 @@ impl Broadcaster {
                     ServerResponse::PrivateRoomUserRemoved(_) => "private_room_users_removed",
                     ServerResponse::PrivateRoomAdded(_) => "private_room_added",
                     ServerResponse::PrivateRoomRemoved(_) => "private_room_removed",
-                    ServerResponse::PrivateRoomInvitationEnabled(_) => {
-                        "private_room_invitation_enabled"
-                    }
+                    ServerResponse::PrivateRoomInvitationEnabled(_) => "private_room_invitation_enabled",
                     ServerResponse::PublicChatMessage(_) => "public_chat_message",
                     ServerResponse::CantConnectToPeer(_) => "cant_connect_to_peer",
                     ServerResponse::CantCreateRoom(_) => "cant_create_room",

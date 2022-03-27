@@ -392,8 +392,19 @@ impl PeerHandler {
         let user_name = self.peer_username.as_ref().unwrap().clone();
         // FIXME: NO MORE RANDOM TICKET
         let ticket = random();
-        let upload = UploadEntity::new(file_name, user_name, ticket);
+        let upload = UploadEntity::new(file_name.clone(), user_name, ticket);
         self.db.insert(&upload)?;
+        // TODO BLBALBALBLALBLA
+       // self.connection
+       //     .write_request(PeerRequestPacket::Message(PeerRequest::TransferRequest(
+       //         TransferRequest {
+       //             direction: 1,
+       //             ticket,
+       //             file_name,
+       //             file_size: None
+       //         }
+       //     )))
+       //     .await?;
         Ok(())
     }
 

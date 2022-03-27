@@ -30,7 +30,9 @@ pub fn routes(
 pub(crate) fn rooms_routes(
     sender: VesselSender<ServerRequest>,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-    rooms::join_room(sender.clone()).or(rooms::send_chat_message(sender))
+    rooms::list(sender.clone())
+        .or(rooms::send_chat_message(sender.clone()))
+        .or(rooms::join_room(sender))
 }
 
 pub(crate) fn chat_routes(

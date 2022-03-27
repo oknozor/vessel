@@ -1,9 +1,5 @@
 import { writable } from 'svelte/store';
 
-export const searchSub = writable([]);
-export const dlStartedSub = writable({});
-export const dlProgressSub = writable({});
-
 const eventSource = new EventSource(
     `http://127.0.0.1:3031/events`,
 );
@@ -13,28 +9,86 @@ eventSource.onerror = e => {
 }
 
 export const createSearchStore = () => {
-    eventSource.addEventListener("search_reply", e => {
-        let json = JSON.parse(e.data);
-        searchSub.update(messages => messages.concat(json));
-    });
+    const {subscribe, set, update} = writable([])
 
-    return searchSub
+    const handler = e => {
+        update(messages => messages.concat(JSON.parse(e.data)));
+    };
+
+    const reset = () => set([]);
+
+    const close = () => eventSource.removeEventListener("search_reply", handler)
+
+    eventSource.addEventListener("search_reply", handler);
+
+    return {
+        subscribe,
+        reset,
+        close,
+    }
 };
 
 export const createDownloadStore = () => {
-    eventSource.addEventListener("download_started", e => {
-        let json = JSON.parse(e.data);
-        dlStartedSub.set(json);
+    const {subscribe, set, update} = writable({})
+
+    const handler = e => {
+        update(_ => JSON.parse(e.data));
+    };
+
+    const reset = () => set({});
+
+    const close = () => eventSource.removeEventListener("download_started", handler)
+
+    eventSource.addEventListener("download_started", handler);
+
+    return {
+        subscribe,
+        reset,
+        close,
+    }
+}
+
+export const createRoomListStore = () => {
+    const {subscribe, set, update} = writable({})
+
+    const handler = e => {
+        update(_ => JSON.parse(e.data));
+    };
+
+    const reset = () => set({
+        rooms: [],
+        owned_private_rooms: [],
+        private_rooms: [],
+        operated_private_rooms: [],
     });
 
-    return dlStartedSub
+    const close = () => eventSource.removeEventListener("room_lists", handler)
+
+    eventSource.addEventListener("room_lists", handler);
+
+    return {
+        subscribe,
+        reset,
+        close,
+    }
 };
 
 export const createDownloadProgressStore = () => {
-    eventSource.addEventListener("download_progress", e => {
-        let json = JSON.parse(e.data);
-        dlProgressSub.set(json);
-    });
+    const {subscribe, set, update} = writable({})
 
-    return dlProgressSub
+    const handler = e => {
+        update(_ => JSON.parse(e.data));
+    };
+
+    const reset = () => set({});
+
+    const close = () => eventSource.removeEventListener("download_progress", handler)
+
+    eventSource.addEventListener("download_progress", handler);
+
+    return {
+        subscribe,
+        reset,
+        close,
+    }
 };

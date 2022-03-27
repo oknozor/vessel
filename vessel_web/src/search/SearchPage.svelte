@@ -1,7 +1,7 @@
 <script>
-    import ResultsTable from "../components/ResultsTable.svelte";
-    import {afterUpdate, onMount} from "svelte";
+    import {onMount} from "svelte";
     import {createDownloadProgressStore, createDownloadStore, createSearchStore} from "../createSearchStore";
+    import SearchResultTable from "./component/SearchResultTable.svelte";
 
     let searchStore
     let downloadStore
@@ -9,7 +9,6 @@
 
     let searchTerm = '';
     let searchResults = [];
-
     let searchTicket;
 
     onMount(() => {
@@ -87,7 +86,7 @@
     <button class="wishlist-btn">Wishlist</button>
 </div>
 
-<ResultsTable results={searchResults} searchTicket={searchTicket}/>
+<SearchResultTable results={searchResults} searchTicket={searchTicket}/>
 
 <style>
     .search-input {

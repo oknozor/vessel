@@ -114,16 +114,14 @@ impl PeerHandler {
                     match response {
                         Ok(message) => {
                             // When receiving a SearchReply we want to close the connection asap
-                            if let PeerResponse::SearchReply(_) = message {
-                                // TODO
-                               //  if self.limit_search.get() > 0 {
-                                   //  self.limit_search.decrement();
-                                    // info!("Search limit : {}", self.limit_search.get());
+                            if let PeerResponse::SearchReply(ref search_reply) = message {
+                               if self.limit_search.get() > 0 && search_reply.ticket == self.limit_search.ticket()  {
+                                    self.limit_search.decrement();
 
                                     return self.sse_tx.send(message)
                                         .await
                                         .map_err(|err| eyre!(err));
-                               //  }
+                                }
 
                             } else {
                                // Don't flood the log with search replies

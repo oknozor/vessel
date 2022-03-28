@@ -9,13 +9,22 @@ eventSource.onerror = e => {
 }
 
 export const createSearchStore = () => {
-    const {subscribe, set, update} = writable([])
+    const {subscribe, set, update} = writable({ticket: 0, items: []})
 
     const handler = e => {
-        update(messages => messages.concat(JSON.parse(e.data)));
+        update(messages => {
+            let search_result = JSON.parse(e.data);
+
+            if (search_result.ticket === messages.ticket || messages.ticket === 0) {
+                messages.items.push(search_result)
+            }
+            console.log(messages.items);
+            return messages;
+        });
+
     };
 
-    const reset = () => set([]);
+    const reset = (ticket) => set({ticket, items: []});
 
     const close = () => eventSource.removeEventListener("search_reply", handler)
 

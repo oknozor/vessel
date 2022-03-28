@@ -27,6 +27,7 @@ use soulseek_protocol::{
     },
 };
 use vessel_database::Database;
+use crate::peers::SearchLimit;
 
 const PEER_LISTENER_ADDRESS: &str = "0.0.0.0:2255";
 
@@ -34,7 +35,7 @@ mod peers;
 mod slsk;
 mod tasks;
 
-#[tokio::main]
+#[tokio::main(flavor = "multi_thread", worker_threads = 10)]
 // #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
     let filter = std::env::var("RUST_LOG").unwrap_or_else(|_| "tracing=info,warp=debug".to_owned());
@@ -78,7 +79,7 @@ async fn main() -> Result<()> {
     let (download_progress_tx, download_progress_rx) = mpsc::channel(channel_bound);
 
     let database = Database::default();
-
+    let search_limit = SearchLimit::new();
     // listen for incoming client commands and forward soulseek message to the sse service
     let soulseek_server_listener = spawn_server_listener_task(
         http_rx,
@@ -89,6 +90,7 @@ async fn main() -> Result<()> {
         connection,
         logged_in_tx,
         peer_address_tx,
+        search_limit.clone()
     );
 
     // Start the warp SSE server with a soulseek mpsc event receiver
@@ -125,6 +127,7 @@ async fn main() -> Result<()> {
         listener,
         database,
         channels,
+        search_limit
     );
 
     // Wraps everything with tokio::join so we don't block on servers startup

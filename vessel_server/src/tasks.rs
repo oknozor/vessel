@@ -34,6 +34,7 @@ pub fn spawn_server_listener_task(
     connection: SlskConnection,
     logged_in_tx: Sender<()>,
     peer_address_tx: Sender<PeerAddress>,
+    search_limit: SearchLimit
 ) -> JoinHandle<()> {
     tokio::spawn(async move {
         server_listener(
@@ -45,6 +46,7 @@ pub fn spawn_server_listener_task(
             connection,
             logged_in_tx,
             peer_address_tx,
+            search_limit
         )
         .await;
     })
@@ -59,6 +61,7 @@ async fn server_listener(
     mut connection: SlskConnection,
     logged_in_tx: Sender<()>,
     peer_address_tx: Sender<PeerAddress>,
+    search_limit: SearchLimit
 ) {
     info!("Starting Soulseek server TCP listener");
     loop {
@@ -77,14 +80,14 @@ async fn server_listener(
                                 }
 
 
-                               ServerResponse:: PeerConnectionRequest(connection_request) => {
-                                   let token = connection_request.token;
+                              // ServerResponse:: PeerConnectionRequest(connection_request) => {
+                              //     let token = connection_request.token;
 
-                                   peer_listener_tx
-                                       .send(connection_request)
-                                       .await
-                                       .map_err(|err| eyre!("Error dispatching connection request with token {} to peer listener: {}", token, err))
-                               }
+                              //     peer_listener_tx
+                              //         .send(connection_request)
+                              //         .await
+                              //         .map_err(|err| eyre!("Error dispatching connection request with token {} to peer listener: {}", token, err))
+                              // }
 
                                 ServerResponse::PossibleParents(parents) => {
                                     possible_parent_tx
@@ -99,6 +102,7 @@ async fn server_listener(
                                         .await
                                         .map_err(|err| eyre!("Error sending privileged user to login task: {}", err))
                                 }
+
                                 response => {
                                     sse_tx
                                         .send(response)
@@ -118,6 +122,11 @@ async fn server_listener(
               http_command = http_rx.recv() => {
                   if let Some(request) = http_command {
                     info!("Got http request {:?}", request);
+
+                    if let ServerRequest::FileSearch(ref search) = request {
+                        search_limit.reset(search.ticket);
+                    }
+
                     connection.write_request(&request).await.expect("Error writing to soulseek connection");
                   }
               }
@@ -148,6 +157,7 @@ pub fn spawn_peer_listener(
     listener: TcpListener,
     database: Database,
     channels: SenderPool,
+    search_limit: SearchLimit
 ) -> JoinHandle<()> {
     tokio::spawn(async move {
         while logged_in_rx.recv().await.is_none() {
@@ -161,7 +171,7 @@ pub fn spawn_peer_listener(
             receivers,
             database,
             channels.clone(),
-            SearchLimit::new(10),
+            search_limit,
         )
             .await
             .expect("Unable to run peer listener");

@@ -7,6 +7,7 @@ use sender::VesselSender;
 use soulseek_protocol::{peers::PeerRequestPacket, server::request::ServerRequest};
 use vessel_database::Database;
 use warp::Filter;
+use warp::http::Method;
 
 mod model;
 mod routes;
@@ -21,7 +22,12 @@ pub async fn start(
     let peer_sender = VesselSender::new(peer_message_sender);
 
     info!("Starting vessel http ...");
-    warp::serve(routes::routes(db, sender, peer_sender).with(warp::cors().allow_any_origin()))
+    warp::serve(routes::routes(db, sender, peer_sender).with(
+        warp::cors()
+            .allow_any_origin()
+            .allow_headers(["*"])
+            .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
+    ))
         .run(([127, 0, 0, 1], 3030))
         .await;
 }

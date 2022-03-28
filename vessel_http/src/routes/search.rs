@@ -1,14 +1,13 @@
-use warp::{Filter, Rejection, Reply};
 use warp::reply::json;
+use warp::{Filter, Rejection, Reply};
 
 use soulseek_protocol::server::{request::ServerRequest, search::SearchRequest};
 
+use crate::routes::with_sender;
 use crate::{
     model::{SearchQuery, SearchTicket},
     sender::VesselSender,
 };
-use crate::routes::with_sender;
-
 
 pub fn routes(
     sender: VesselSender<ServerRequest>,
@@ -20,17 +19,18 @@ pub fn routes(
         .and_then(search_handler)
 }
 
-
 async fn search_handler(
     query: SearchQuery,
     sender: VesselSender<ServerRequest>,
 ) -> Result<impl Reply, Rejection> {
     let ticket = rand::random();
 
-    sender.send(ServerRequest::FileSearch(SearchRequest {
-        ticket,
-        query: query.term,
-    })).await;
+    sender
+        .send(ServerRequest::FileSearch(SearchRequest {
+            ticket,
+            query: query.term,
+        }))
+        .await;
 
     Ok(json(&SearchTicket { ticket }))
 }

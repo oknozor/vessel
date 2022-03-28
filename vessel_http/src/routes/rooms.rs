@@ -1,12 +1,11 @@
 use percent_encoding::percent_decode;
-use warp::{Filter, Rejection, Reply};
 use warp::http::StatusCode;
+use warp::{Filter, Rejection, Reply};
 
 use soulseek_protocol::server::{chat::SayInChat, request::ServerRequest};
 
-use crate::{model::ChatMessage, sender::VesselSender};
 use crate::routes::with_sender;
-
+use crate::{model::ChatMessage, sender::VesselSender};
 
 pub fn routes(
     sender: VesselSender<ServerRequest>,
@@ -27,11 +26,8 @@ pub fn routes(
         .and(with_sender(sender))
         .and_then(join_room_handler);
 
-    send_chat_message
-        .or(all_rooms)
-        .or(join_room)
+    send_chat_message.or(all_rooms).or(join_room)
 }
-
 
 async fn send_chat_message_handler(
     room: String,
@@ -43,10 +39,12 @@ async fn send_chat_message_handler(
         .unwrap()
         .to_string();
 
-    sender.send(ServerRequest::SendChatMessage(SayInChat {
-        room,
-        message: message.message,
-    })).await;
+    sender
+        .send(ServerRequest::SendChatMessage(SayInChat {
+            room,
+            message: message.message,
+        }))
+        .await;
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -61,7 +59,6 @@ async fn join_room_handler(
     room: String,
     sender: VesselSender<ServerRequest>,
 ) -> Result<impl Reply, Rejection> {
-
     let room = percent_decode(room.as_bytes())
         .decode_utf8()
         .unwrap()

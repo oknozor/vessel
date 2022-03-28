@@ -27,9 +27,8 @@ use vessel_database::entity::download::DownloadEntity;
 use vessel_database::entity::upload::UploadEntity;
 use vessel_database::Database;
 
-use crate::peers::{channels::SenderPool, connection::PeerConnection, shutdown::Shutdown};
+use crate::peers::{channels::SenderPool, connection::PeerConnection, SearchLimit, shutdown::Shutdown};
 
-#[derive(Debug)]
 pub struct PeerHandler {
     pub peer_username: Option<String>,
     pub(crate) connection: PeerConnection,
@@ -37,6 +36,7 @@ pub struct PeerHandler {
     pub(crate) ready_tx: mpsc::Sender<u32>,
     pub(crate) shutdown: Shutdown,
     pub(crate) limit_connections: Arc<Semaphore>,
+    pub(crate) limit_search: SearchLimit,
     pub(crate) _shutdown_complete: mpsc::Sender<()>,
     pub(crate) connection_states: SenderPool,
     pub(crate) db: Database,
@@ -64,7 +64,10 @@ pub(crate) async fn connect_direct(
 pub(crate) async fn pierce_firewall(mut handler: PeerHandler, token: u32) -> Result<()> {
     tokio::spawn(async move {
         match handler.pierce_firewall(token).await {
-            Ok(()) => info!("Connection with {:?} ended successfully", handler.peer_username),
+            Ok(()) => info!(
+                "Connection with {:?} ended successfully",
+                handler.peer_username
+            ),
             Err(e) => error!("Error during direct peer connection, cause = {}", e),
         }
     });
@@ -74,9 +77,13 @@ pub(crate) async fn pierce_firewall(mut handler: PeerHandler, token: u32) -> Res
 impl PeerHandler {
     pub(crate) async fn listen(&mut self, handler_rx: Receiver<PeerRequestPacket>) -> Result<()> {
         debug!("{:?}", self.connection_type());
+
         match self.connection_type() {
             ConnectionType::PeerToPeer => {
-                info!("Peer to Peer connection established with {:?} [token={:?}]", self.peer_username, self.connection.token);
+                info!(
+                    "Peer to Peer connection established with {:?} [token={:?}]",
+                    self.peer_username, self.connection.token
+                );
                 self.listen_p2p(handler_rx).await?;
             }
             ConnectionType::FileTransfer => {
@@ -103,44 +110,51 @@ impl PeerHandler {
     ) -> Result<()> {
         while !self.shutdown.is_shutdown() {
             tokio::select! {
-                        response = self.connection.read_message::<PeerResponse>() =>  {
-                            match response {
-                                Ok(message) => {
-                                    // When receiving a SearchReply we want to close the connection asap
-                                    if let PeerResponse::SearchReply(_) = message {
-                                            return self.sse_tx.send(message)
-                                            .await
-                                            .map_err(|err| eyre!(err));
-                                    } else {
-                                       // Don't flood the log with search replies
-                                       info!("[token={:?}] - Got Peer message {:?}", self.connection.token, message);
-                                    }
+                response = self.connection.read_message::<PeerResponse>() =>  {
+                    match response {
+                        Ok(message) => {
+                            // When receiving a SearchReply we want to close the connection asap
+                            if let PeerResponse::SearchReply(_) = message {
+                                // TODO
+                               //  if self.limit_search.get() > 0 {
+                                   //  self.limit_search.decrement();
+                                    // info!("Search limit : {}", self.limit_search.get());
 
-                                    if let Err(e) = self.handle_peer_message(&message).await {
-                                        return Err(eyre!("Error handling peer message : {}", e));
-                                    }
-
-                                    self.sse_tx.send(message)
+                                    return self.sse_tx.send(message)
                                         .await
-                                        .map_err(|err| eyre!(err))?;
-                                }
-                                Err(e) => {
-                                    return Err(eyre!("Error in connection handler with {:?} : {}", self.peer_username, e));
-                                }
+                                        .map_err(|err| eyre!(err));
+                               //  }
+
+                            } else {
+                               // Don't flood the log with search replies
+                               info!("[token={:?}] - Got Peer message {:?}", self.connection.token, message);
+
+                            if let Err(e) = self.handle_peer_message(&message).await {
+                                return Err(eyre!("Error handling peer message : {}", e));
                             }
 
-                        },
-                        request = handler_rx.recv() => if let Some(request) = request  {
-                            debug!("Sending request to {:?}", self.peer_username);
-                            if let Err(err) = self.connection.write_request(request).await {
-                                error!("Handler write error, {:?}", err);
+                            self.sse_tx.send(message)
+                                .await
+                                .map_err(|err| eyre!(err))?;
                             }
-                        },
-                        _ = self.shutdown.recv() => {
-                            // If a shutdown signal is received, return from `run`.
-                            // This will result in the task terminating.
-                            break;
                         }
+                        Err(e) => {
+                            return Err(eyre!("Error in connection handler with {:?} : {}", self.peer_username, e));
+                        }
+                    }
+
+                },
+                request = handler_rx.recv() => if let Some(request) = request  {
+                    debug!("Sending request to {:?}", self.peer_username);
+                    if let Err(err) = self.connection.write_request(request).await {
+                        error!("Handler write error, {:?}", err);
+                    }
+                },
+                _ = self.shutdown.recv() => {
+                    // If a shutdown signal is received, return from `run`.
+                    // This will result in the task terminating.
+                    break;
+                }
             }
         }
 
@@ -399,7 +413,7 @@ impl PeerHandler {
                     ticket,
                     file_name,
                     file_size: None,
-                }
+                },
             )))
             .await?;
         Ok(())

@@ -62,7 +62,10 @@ impl RoomList {
         Ok(rooms_names
             .into_iter()
             .zip(connected_users.into_iter())
-            .map(|(name, connected_users)| Room {name, connected_users})
+            .map(|(name, connected_users)| Room {
+                name,
+                connected_users,
+            })
             .collect())
     }
 }

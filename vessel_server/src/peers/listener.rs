@@ -29,13 +29,7 @@ use soulseek_protocol::{
 use vessel_database::entity::peer::PeerEntity;
 use vessel_database::Database;
 
-use crate::peers::{
-    channels::SenderPool,
-    connection::PeerConnection,
-    dispatcher::Dispatcher,
-    handler::{connect_direct, pierce_firewall, PeerHandler},
-    shutdown::Shutdown,
-};
+use crate::peers::{channels::SenderPool, connection::PeerConnection, dispatcher::Dispatcher, handler::{connect_direct, pierce_firewall, PeerHandler}, SearchLimit, shutdown::Shutdown};
 
 /// TODO : Make this value configurable
 const MAX_CONNECTIONS: usize = 10_000;
@@ -55,6 +49,7 @@ struct GlobalConnectionHandler {
     channels: SenderPool,
     shutdown_complete_rx: mpsc::Receiver<()>,
     shutdown_helper: ShutdownHelper,
+    search_limit: SearchLimit,
 }
 
 pub struct PeerListenerSenders {
@@ -90,7 +85,10 @@ impl GlobalConnectionHandler {
             ready_tx: ready_tx.clone(),
             server_request_tx: server_request_tx.clone(),
             message_queue: Default::default(),
+            search_limit: self.search_limit.clone(),
         };
+
+        let search_limit = self.search_limit.clone();
 
         let _ = tokio::join!(
             dispatcher.run(),
@@ -101,13 +99,15 @@ impl GlobalConnectionHandler {
                 ready_tx.clone(),
                 channels.clone(),
                 shutdown_helper.clone(),
-                db.clone()
+                db.clone(),
+                search_limit.clone()
             ),
             self.accept_peer_connection(
                 sse_tx.clone(),
                 ready_tx.clone(),
                 channels.clone(),
-                db.clone()
+                db.clone(),
+                search_limit.clone()
             ),
             connect_to_parents(
                 server_request_tx,
@@ -116,7 +116,9 @@ impl GlobalConnectionHandler {
                 channels,
                 shutdown_helper.clone(),
                 &mut receivers.possible_parent_rx,
-                db
+                db,
+                search_limit
+
             )
         );
 
@@ -129,6 +131,7 @@ impl GlobalConnectionHandler {
         ready_tx: mpsc::Sender<u32>,
         channels: SenderPool,
         db: Database,
+        search_limit: SearchLimit
     ) -> Result<()> {
         if self.shutdown_helper.limit_connections.available_permits() > 0 {
             info!("Accepting inbound connections");
@@ -165,6 +168,7 @@ impl GlobalConnectionHandler {
                                 self.shutdown_helper.notify_shutdown.subscribe(),
                             ),
                             limit_connections: self.shutdown_helper.limit_connections.clone(),
+                            limit_search: search_limit.clone(),
                             _shutdown_complete: self.shutdown_helper.shutdown_complete_tx.clone(),
                             connection_states: channels.clone(),
                             db: db.clone(),
@@ -206,6 +210,7 @@ pub async fn run(
     receivers: PeerListenerReceivers,
     db: Database,
     channels: SenderPool,
+    search_limit: SearchLimit
 ) -> crate::Result<()> {
     debug!("Waiting for user to be logged in");
 
@@ -231,6 +236,7 @@ pub async fn run(
         channels,
         shutdown_complete_rx,
         shutdown_helper,
+        search_limit: search_limit.clone()
     };
 
     tokio::select! {
@@ -312,6 +318,7 @@ async fn listen_indirect_peer_connection_request(
     channels: SenderPool,
     shutdown_helper: ShutdownHelper,
     db: Database,
+    search_limit: SearchLimit
 ) -> Result<()> {
     while let Some(connection_request) = indirect_connection_rx.recv().await {
         let sse_tx = sse_tx.clone();
@@ -358,6 +365,7 @@ async fn listen_indirect_peer_connection_request(
             connection_request,
             addr,
             db.clone(),
+            search_limit.clone()
         )
         .and_then(|handler| pierce_firewall(handler, token))
         .await;
@@ -388,6 +396,7 @@ async fn connect_to_parents(
     shutdown_helper: ShutdownHelper,
     possible_parent_rx: &mut Receiver<Vec<Peer>>,
     database: Database,
+    search_limit: SearchLimit
 ) -> Result<(), soulseek_protocol::Error> {
     loop {
         while let Some(parents) = possible_parent_rx.recv().await {
@@ -415,8 +424,9 @@ async fn connect_to_parents(
                     database.clone(),
                     &parent,
                     ConnectionType::DistributedNetwork,
+                    search_limit.clone(),
                 )
-                .await?;
+                    .await?;
             }
         }
     }
@@ -433,6 +443,7 @@ pub(crate) async fn connect_to_peer_with_fallback(
     database: Database,
     peer: &PeerEntity,
     conn_type: ConnectionType,
+    search_limit: SearchLimit
 ) -> Result<()> {
     shutdown_helper
         .limit_connections
@@ -455,8 +466,9 @@ pub(crate) async fn connect_to_peer_with_fallback(
         shutdown_helper.clone(),
         peer.clone(),
         database,
+        search_limit.clone(),
     )
-    .and_then(|handler| connect_direct(handler, conn_type))
+        .and_then(|handler| connect_direct(handler, conn_type))
     .or_else(|e| {
         warn!(
             "Unable to establish peer connection with {:?},  cause = {}",
@@ -508,6 +520,7 @@ async fn prepare_direct_connection_to_peer(
     connection_request: PeerConnectionRequest,
     address: SocketAddr,
     db: Database,
+    search_limit: SearchLimit
 ) -> Result<PeerHandler> {
     let username = connection_request.username.clone();
 
@@ -519,6 +532,7 @@ async fn prepare_direct_connection_to_peer(
             ready_tx,
             shutdown: Shutdown::new(shutdown_helper.notify_shutdown.subscribe()),
             limit_connections: shutdown_helper.limit_connections.clone(),
+            limit_search: search_limit.clone(),
             _shutdown_complete: shutdown_helper.shutdown_complete_tx.clone(),
             connection_states: channels,
             db,
@@ -541,6 +555,7 @@ async fn prepare_direct_connection_to_peer_with_fallback(
     shutdown_helper: ShutdownHelper,
     peer: PeerEntity,
     db: Database,
+    search_limit: SearchLimit
 ) -> Result<PeerHandler> {
     let address = peer.get_address();
     let username = peer.username;
@@ -553,6 +568,7 @@ async fn prepare_direct_connection_to_peer_with_fallback(
             ready_tx,
             shutdown: Shutdown::new(shutdown_helper.notify_shutdown.subscribe()),
             limit_connections: shutdown_helper.limit_connections.clone(),
+            limit_search: search_limit.clone(),
             _shutdown_complete: shutdown_helper.shutdown_complete_tx.clone(),
             connection_states: channels,
             db,

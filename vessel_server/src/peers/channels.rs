@@ -106,11 +106,7 @@ impl SenderPool {
         channels.get(&token).cloned()
     }
 
-    pub fn ready(
-        &self,
-        token: u32,
-        tx: Sender<PeerRequestPacket>,
-    ) -> Result<PeerConnectionState> {
+    pub fn ready(&self, token: u32, tx: Sender<PeerRequestPacket>) -> Result<PeerConnectionState> {
         let mut pending_connections = self.pending_connections.lock().unwrap();
 
         let (idx, ready_state) = pending_connections
@@ -128,7 +124,10 @@ impl SenderPool {
         let mut ok_connections = self.ok_connections.lock().unwrap();
         ok_connections.insert(token, ready_state.clone());
 
-        info!("Connection  username={}, token={} is alive", ready_state.username, token);
+        info!(
+            "Connection  username={}, token={} is alive",
+            ready_state.username, token
+        );
         Ok(ready_state)
     }
 

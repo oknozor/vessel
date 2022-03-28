@@ -23,6 +23,7 @@ use soulseek_protocol::{
 };
 use tokio::sync::mpsc::{Receiver, Sender};
 use vessel_database::Database;
+use crate::peers::SearchLimit;
 
 pub fn spawn_server_listener_task(
     http_rx: Receiver<ServerRequest>,
@@ -76,14 +77,14 @@ async fn server_listener(
                                 }
 
 
-                                ServerResponse:: PeerConnectionRequest(connection_request) => {
-                                    let token = connection_request.token;
+                               ServerResponse:: PeerConnectionRequest(connection_request) => {
+                                   let token = connection_request.token;
 
-                                    peer_listener_tx
-                                        .send(connection_request)
-                                        .await
-                                        .map_err(|err| eyre!("Error dispatching connection request with token {} to peer listener: {}", token, err))
-                                }
+                                   peer_listener_tx
+                                       .send(connection_request)
+                                       .await
+                                       .map_err(|err| eyre!("Error dispatching connection request with token {} to peer listener: {}", token, err))
+                               }
 
                                 ServerResponse::PossibleParents(parents) => {
                                     possible_parent_tx
@@ -117,13 +118,13 @@ async fn server_listener(
               http_command = http_rx.recv() => {
                   if let Some(request) = http_command {
                     info!("Got http request {:?}", request);
-                    connection.write_request(&request).await.expect("Error writing to soulseek connection")
+                    connection.write_request(&request).await.expect("Error writing to soulseek connection");
                   }
               }
 
               peer_connection_request = request_peer_connection_rx.recv() => {
                 if let Some(request) = peer_connection_request {
-                    connection.write_request(&request).await.expect("Error writing to soulseek connection")
+                    connection.write_request(&request).await.expect("Error writing to soulseek connection");
                 }
               }
         }
@@ -160,9 +161,10 @@ pub fn spawn_peer_listener(
             receivers,
             database,
             channels.clone(),
+            SearchLimit::new(10),
         )
-        .await
-        .expect("Unable to run peer listener");
+            .await
+            .expect("Unable to run peer listener");
     })
 }
 

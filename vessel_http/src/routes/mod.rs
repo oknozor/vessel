@@ -1,9 +1,9 @@
-use std::convert::Infallible;
-use warp::{Filter};
-use soulseek_protocol::server::request::ServerRequest;
 use crate::sender::VesselSender;
 use soulseek_protocol::peers::PeerRequestPacket;
+use soulseek_protocol::server::request::ServerRequest;
+use std::convert::Infallible;
 use vessel_database::Database;
+use warp::Filter;
 
 pub(crate) mod chat;
 pub(crate) mod peers;
@@ -26,7 +26,9 @@ pub fn routes(
         .or(rooms::routes(sender))
 }
 
-fn with_sender<T: Send>(sender: VesselSender<T>) -> impl Filter<Extract = (VesselSender<T>,), Error = Infallible> + Clone {
+fn with_sender<T: Send>(
+    sender: VesselSender<T>,
+) -> impl Filter<Extract = (VesselSender<T>,), Error = Infallible> + Clone {
     warp::any().map(move || sender.clone())
 }
 

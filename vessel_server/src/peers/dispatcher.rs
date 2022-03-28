@@ -11,10 +11,7 @@ use soulseek_protocol::{
 use vessel_database::entity::peer::PeerEntity;
 use vessel_database::Database;
 
-use crate::peers::{
-    channels::SenderPool,
-    listener::{connect_to_peer_with_fallback, ShutdownHelper},
-};
+use crate::peers::{channels::SenderPool, listener::{connect_to_peer_with_fallback, ShutdownHelper}, SearchLimit};
 
 pub struct Dispatcher {
     // Receive connection state updates from peer handler
@@ -38,6 +35,7 @@ pub struct Dispatcher {
 
     // Save message sent to peer if the connection is not ready yet
     pub(crate) message_queue: HashMap<String, Vec<PeerRequestPacket>>,
+    pub(crate) search_limit: SearchLimit
 }
 
 impl Dispatcher {
@@ -58,7 +56,7 @@ impl Dispatcher {
                 peer = self.peer_address_rx.recv() => {
                     if let Some(peer) = peer {
                         let peer = PeerEntity::from(peer);
-                        self.on_peer_address_received(peer).await;
+                        self.on_peer_address_received(peer, self.search_limit.clone()).await;
                     }
 
                 }
@@ -66,12 +64,12 @@ impl Dispatcher {
         }
     }
 
-    async fn on_peer_address_received(&mut self, peer: PeerEntity) {
+    async fn on_peer_address_received(&mut self, peer: PeerEntity, search_limit: SearchLimit) {
         self.db.insert(&peer).unwrap();
         if let Some(queue) = self.message_queue.get(&peer.username) {
             if let Some(msg) = queue.last() {
                 let conn_type = ConnectionType::from(msg);
-                self.initiate_connection(conn_type, peer).await;
+                self.initiate_connection(conn_type, peer, search_limit).await;
             }
         }
     }
@@ -129,17 +127,16 @@ impl Dispatcher {
                 // }
                 _ => {
                     debug!("Requesting peer address");
-                    self
-                        .server_request_tx
+                    self.server_request_tx
                         .send(ServerRequest::GetPeerAddress(username.to_string()))
                         .await
                         .expect("Server send error")
-                },
+                }
             },
         }
     }
 
-    async fn initiate_connection(&mut self, conn_type: ConnectionType, peer: PeerEntity) {
+    async fn initiate_connection(&mut self, conn_type: ConnectionType, peer: PeerEntity, search_limit: SearchLimit) {
         let sender = self.server_request_tx.clone();
         let sse_tx = self.sse_tx.clone();
         let channels = self.channels.clone();
@@ -149,6 +146,7 @@ impl Dispatcher {
 
         let connection_result = connect_to_peer_with_fallback(
             sender, sse_tx, ready_tx, channels, helpers, db, &peer, conn_type,
+            search_limit
         )
         .await;
 

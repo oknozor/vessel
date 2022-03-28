@@ -7,16 +7,26 @@
     export let ticket;
     export let progress;
 
-
     async function download() {
-        await fetch(`http://localhost:3030/rooms/${username}/queue`, {
-            method: 'POST',
-            body: JSON.stringify({
-                filename: name
-            }),
+        let body = JSON.stringify({
+            file_name: name
         });
 
-    }
+        console.log(body);
+
+        await fetch(`http://localhost:3030/${username}/queue`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body
+        })
+            .then(response => {
+                console.log(response);
+            })
+            .catch(err => {
+                console.error(err);
+            });    }
 </script>
 
 <tr>

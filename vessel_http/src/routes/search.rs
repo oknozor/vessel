@@ -1,33 +1,36 @@
-use warp::Filter;
+use warp::{Filter, Rejection, Reply};
+use warp::reply::json;
 
 use soulseek_protocol::server::{request::ServerRequest, search::SearchRequest};
 
 use crate::{
-    model,
     model::{SearchQuery, SearchTicket},
     sender::VesselSender,
 };
+use crate::routes::with_sender;
 
-pub fn search(
+
+pub fn routes(
     sender: VesselSender<ServerRequest>,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-    let opt_query = warp::query::<SearchQuery>()
-        .map(Some)
-        .or_else(|_| async { Ok::<(Option<SearchQuery>,), std::convert::Infallible>((None,)) });
-
     warp::path!("search")
-        .and(opt_query)
-        .map(move |query: Option<SearchQuery>| match query {
-            Some(query) => {
-                let ticket = rand::random();
-                sender.send(ServerRequest::FileSearch(SearchRequest {
-                    ticket,
-                    query: query.term,
-                }));
-                warp::reply::json(&SearchTicket { ticket })
-            }
-            None => warp::reply::json(&model::Error {
-                cause: "Failed to decode query param.".to_string(),
-            }),
-        })
+        .and(warp::get())
+        .and(warp::query::<SearchQuery>())
+        .and(with_sender(sender))
+        .and_then(search_handler)
+}
+
+
+async fn search_handler(
+    query: SearchQuery,
+    sender: VesselSender<ServerRequest>,
+) -> Result<impl Reply, Rejection> {
+    let ticket = rand::random();
+
+    sender.send(ServerRequest::FileSearch(SearchRequest {
+        ticket,
+        query: query.term,
+    })).await;
+
+    Ok(json(&SearchTicket { ticket }))
 }

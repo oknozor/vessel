@@ -1,16 +1,35 @@
 use vessel_database::entity::download::DownloadEntity;
 use vessel_database::entity::upload::UploadEntity;
 use vessel_database::Database;
-use warp::Filter;
+use warp::{Filter, Rejection, Reply};
+use warp::reply::json;
+use crate::routes::with_db;
 
-pub fn get_downloads(
-    database: Database,
+pub fn route(
+    db: Database,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-    warp::path!("downloads").map(move || warp::reply::json(&database.get_all::<DownloadEntity>()))
+    let get_downloads =
+        warp::path!("downloads")
+            .and(warp::get())
+            .and(with_db(db.clone()))
+            .and_then(get_downloads_handler);
+
+    let get_uploads= warp::path!("uploads")
+        .and(warp::get())
+        .and(with_db(db.clone()))
+        .and_then(get_uploads_handler);
+
+    get_downloads.or(get_uploads)
 }
 
-pub fn get_uploads(
+async fn get_downloads_handler(
     database: Database,
-) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-    warp::path!("uploads").map(move || warp::reply::json(&database.get_all::<UploadEntity>()))
+) -> Result<impl Reply, Rejection> {
+    Ok(json(&database.get_all::<DownloadEntity>()))
+}
+
+async fn get_uploads_handler(
+    database: Database,
+) -> Result<impl Reply, Rejection> {
+    Ok(json(&database.get_all::<UploadEntity>()))
 }

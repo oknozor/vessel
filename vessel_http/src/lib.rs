@@ -6,7 +6,7 @@ use tokio::sync::mpsc;
 use sender::VesselSender;
 use soulseek_protocol::{peers::PeerRequestPacket, server::request::ServerRequest};
 use vessel_database::Database;
-use warp::{http::Method, Filter};
+use warp::Filter;
 
 mod model;
 mod routes;
@@ -22,7 +22,8 @@ pub async fn start(
 
     info!("Starting vessel http ...");
     warp::serve(routes::routes(db, sender, peer_sender)
-        .with(warp::cors::cors().allow_any_origin()))
+        .with(warp::cors().allow_any_origin()))
         .run(([127, 0, 0, 1], 3030))
         .await;
+
 }

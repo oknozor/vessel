@@ -46,6 +46,7 @@ impl Dispatcher {
             tokio::select! {
                 request = self.queue_rx.recv() => {
                     if let Some((username, request)) = request {
+                        debug!("Got peer message from HTTP server {}, {:?}", username, request);
                         self.on_peer_request(&username, request).await;
                     }
                 }
@@ -121,15 +122,19 @@ impl Dispatcher {
                 }
             }
             None => match self.db.get_by_key::<PeerEntity>(username) {
-                Some(peer) => {
-                    self.initiate_connection(ConnectionType::PeerToPeer, peer)
+                // FIXME
+                // Some(peer) => {
+                //     self.initiate_connection(ConnectionType::PeerToPeer, peer)
+                //         .await
+                // }
+                _ => {
+                    debug!("Requesting peer address");
+                    self
+                        .server_request_tx
+                        .send(ServerRequest::GetPeerAddress(username.to_string()))
                         .await
-                }
-                None => self
-                    .server_request_tx
-                    .send(ServerRequest::GetPeerAddress(username.to_string()))
-                    .await
-                    .expect("Server send error"),
+                        .expect("Server send error")
+                },
             },
         }
     }

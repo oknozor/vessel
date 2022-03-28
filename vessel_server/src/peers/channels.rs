@@ -128,6 +128,7 @@ impl SenderPool {
         let mut ok_connections = self.ok_connections.lock().unwrap();
         ok_connections.insert(token, ready_state.clone());
 
+        info!("Connection  username={}, token={} is alive", ready_state.username, token);
         Ok(ready_state)
     }
 

@@ -45,7 +45,7 @@ async fn main() -> Result<()> {
         .init();
 
     // Forward http request to the Soulseek server
-    let channel_bound = 4096;
+    let channel_bound = 500;
     let (http_tx, http_rx) = mpsc::channel::<ServerRequest>(channel_bound);
 
     // Send http request directly to a peer connection

@@ -38,8 +38,8 @@ use crate::peers::{
 };
 
 /// TODO : Make this value configurable
-const MAX_CONNECTIONS: usize = 4096;
-const MAX_PARENT: usize = 10;
+const MAX_CONNECTIONS: usize = 10_000;
+const MAX_PARENT: usize = 1;
 
 #[derive(Debug, Clone)]
 pub(crate) struct ShutdownHelper {
@@ -214,10 +214,11 @@ pub async fn run(
     let (notify_shutdown, _) = broadcast::channel(1);
     let (shutdown_complete_tx, shutdown_complete_rx) = mpsc::channel(1);
 
+    let connection_limit = Arc::new(Semaphore::new(MAX_CONNECTIONS));
     let shutdown_helper = ShutdownHelper {
         notify_shutdown,
         shutdown_complete_tx,
-        limit_connections: Arc::new(Semaphore::new(MAX_CONNECTIONS)),
+        limit_connections: connection_limit.clone(),
     };
 
     // Initialize the listener state
@@ -237,7 +238,7 @@ pub async fn run(
             if let Err(err) = res {
                 error!(cause = %err, "failed to accept");
             }
-        }
+        },
         _err = shutdown => {
             info!("shutting down");
             std::process::exit(0);

@@ -1,7 +1,6 @@
-use warp::Filter;
-
+use std::convert::Infallible;
+use warp::{Filter};
 use soulseek_protocol::server::request::ServerRequest;
-
 use crate::sender::VesselSender;
 use soulseek_protocol::peers::PeerRequestPacket;
 use vessel_database::Database;
@@ -18,54 +17,19 @@ pub fn routes(
     sender: VesselSender<ServerRequest>,
     peer_sender: VesselSender<(String, PeerRequestPacket)>,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-    rooms_routes(sender.clone())
-        .or(peers_routes(peer_sender))
-        .or(chat_routes(sender.clone()))
-        .or(users_routes(sender.clone(), db.clone()))
-        .or(search_routes(sender.clone()))
-        .or(transfer_routes(db))
-        .or(rooms_routes(sender))
+    rooms::routes(sender.clone())
+        .or(peers::routes(peer_sender))
+        .or(chat::routes(sender.clone()))
+        .or(users::routes(sender.clone(), db.clone()))
+        .or(search::routes(sender.clone()))
+        .or(transfer::route(db))
+        .or(rooms::routes(sender))
 }
 
-pub(crate) fn rooms_routes(
-    sender: VesselSender<ServerRequest>,
-) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-    rooms::list(sender.clone())
-        .or(rooms::send_chat_message(sender.clone()))
-        .or(rooms::join_room(sender))
+fn with_sender<T: Send>(sender: VesselSender<T>) -> impl Filter<Extract = (VesselSender<T>,), Error = Infallible> + Clone {
+    warp::any().map(move || sender.clone())
 }
 
-pub(crate) fn chat_routes(
-    sender: VesselSender<ServerRequest>,
-) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-    chat::start_public_chat(sender.clone()).or(chat::stop_public_chat(sender))
-}
-
-pub(crate) fn peers_routes(
-    peer_sender: VesselSender<(String, PeerRequestPacket)>,
-) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-    peers::queue_upload_request(peer_sender.clone())
-        .or(peers::send_share_resquest(peer_sender.clone()))
-        .or(peers::send_user_info_request(peer_sender))
-}
-
-pub(crate) fn users_routes(
-    sender: VesselSender<ServerRequest>,
-    db: Database,
-) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-    users::get_all_connected_users(db)
-        .or(users::get_user_status(sender.clone()))
-        .or(users::get_peer_address(sender))
-}
-
-pub(crate) fn search_routes(
-    sender: VesselSender<ServerRequest>,
-) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-    search::search(sender)
-}
-
-pub(crate) fn transfer_routes(
-    db: Database,
-) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-    transfer::get_downloads(db.clone()).or(transfer::get_uploads(db))
+fn with_db(db: Database) -> impl Filter<Extract = (Database,), Error = Infallible> + Clone {
+    warp::any().map(move || db.clone())
 }

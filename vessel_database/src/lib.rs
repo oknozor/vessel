@@ -13,7 +13,6 @@ use serde::Serialize;
 use crate::entity::upload::UploadEntity;
 use entity::{shared_dirs::get_shared_directories, Entity};
 use soulseek_protocol::peers::p2p::shared_directories::SharedDirectories;
-use std::sync::atomic::AtomicU32;
 
 pub mod entity;
 pub mod settings;

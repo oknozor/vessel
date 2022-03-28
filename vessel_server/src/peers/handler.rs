@@ -64,10 +64,7 @@ pub(crate) async fn connect_direct(
 pub(crate) async fn pierce_firewall(mut handler: PeerHandler, token: u32) -> Result<()> {
     tokio::spawn(async move {
         match handler.pierce_firewall(token).await {
-            Ok(_) => info!(
-                "Connection with {:?} ended successfully",
-                handler.peer_username
-            ),
+            Ok(()) => info!("Connection with {:?} ended successfully", handler.peer_username),
             Err(e) => error!("Error during direct peer connection, cause = {}", e),
         }
     });
@@ -79,6 +76,7 @@ impl PeerHandler {
         debug!("{:?}", self.connection_type());
         match self.connection_type() {
             ConnectionType::PeerToPeer => {
+                info!("Peer to Peer connection established with {:?} [token={:?}]", self.peer_username, self.connection.token);
                 self.listen_p2p(handler_rx).await?;
             }
             ConnectionType::FileTransfer => {
@@ -387,24 +385,23 @@ impl PeerHandler {
     }
 
     async fn queue_upload(&mut self, queue_upload: &QueueUpload) -> tokio::io::Result<()> {
-        debug!("{:?}", queue_upload);
+        info!("{:?}", queue_upload);
         let file_name = queue_upload.file_name.clone();
         let user_name = self.peer_username.as_ref().unwrap().clone();
         // FIXME: NO MORE RANDOM TICKET
         let ticket = random();
         let upload = UploadEntity::new(file_name.clone(), user_name, ticket);
         self.db.insert(&upload)?;
-        // TODO BLBALBALBLALBLA
-       // self.connection
-       //     .write_request(PeerRequestPacket::Message(PeerRequest::TransferRequest(
-       //         TransferRequest {
-       //             direction: 1,
-       //             ticket,
-       //             file_name,
-       //             file_size: None
-       //         }
-       //     )))
-       //     .await?;
+        self.connection
+            .write_request(PeerRequestPacket::Message(PeerRequest::TransferRequest(
+                TransferRequest {
+                    direction: 1,
+                    ticket,
+                    file_name,
+                    file_size: None,
+                }
+            )))
+            .await?;
         Ok(())
     }
 

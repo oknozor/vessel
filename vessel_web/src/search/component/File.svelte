@@ -17,7 +17,7 @@
         await fetch(`http://localhost:3030/peers/${username}/queue`, {
             method: "POST",
             headers: {
-                "Content-Type": "application/json"
+                "content-Type": "application/json"
             },
             body
         })

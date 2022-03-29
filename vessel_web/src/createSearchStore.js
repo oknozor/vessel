@@ -18,7 +18,6 @@ export const createSearchStore = () => {
             if (search_result.ticket === messages.ticket || messages.ticket === 0) {
                 messages.items.push(search_result)
             }
-            console.log(messages.items);
             return messages;
         });
 
@@ -46,9 +45,13 @@ export const createDownloadStore = () => {
 
     const reset = () => set({});
 
-    const close = () => eventSource.removeEventListener("download_started", handler)
+    const close = () => {
+        eventSource.removeEventListener("download_started", handler)
+        eventSource.removeEventListener("download_progress", handler)
+    }
 
     eventSource.addEventListener("download_started", handler);
+    eventSource.addEventListener("download_progress", handler);
 
     return {
         subscribe,
@@ -74,26 +77,6 @@ export const createRoomListStore = () => {
     const close = () => eventSource.removeEventListener("room_lists", handler)
 
     eventSource.addEventListener("room_lists", handler);
-
-    return {
-        subscribe,
-        reset,
-        close,
-    }
-};
-
-export const createDownloadProgressStore = () => {
-    const {subscribe, set, update} = writable({})
-
-    const handler = e => {
-        update(_ => JSON.parse(e.data));
-    };
-
-    const reset = () => set({});
-
-    const close = () => eventSource.removeEventListener("download_progress", handler)
-
-    eventSource.addEventListener("download_progress", handler);
 
     return {
         subscribe,

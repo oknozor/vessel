@@ -32,7 +32,7 @@
                     </thead>
                     <tbody class="bg-white divide-y divide-gray-200" x-max="1">
                     {#each files as file}
-                        <File name={file.name} extension={file.extension} size={file.size} username={username} ticket={file.ticket} progress={file.progress}/>
+                        <File name={file.name} extension={file.extension} size={file.size} username={username} ticket={file.ticket}/>
                     {/each}
                     </tbody>
                 </table>

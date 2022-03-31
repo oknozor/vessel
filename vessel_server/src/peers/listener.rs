@@ -29,7 +29,14 @@ use soulseek_protocol::{
 use vessel_database::entity::peer::PeerEntity;
 use vessel_database::Database;
 
-use crate::peers::{channels::SenderPool, connection::PeerConnection, dispatcher::Dispatcher, handler::{connect_direct, pierce_firewall, PeerHandler}, SearchLimit, shutdown::Shutdown};
+use crate::peers::{
+    channels::SenderPool,
+    connection::PeerConnection,
+    dispatcher::Dispatcher,
+    handler::{connect_direct, pierce_firewall, PeerHandler},
+    shutdown::Shutdown,
+    SearchLimit,
+};
 
 /// TODO : Make this value configurable
 const MAX_CONNECTIONS: usize = 10_000;
@@ -59,7 +66,7 @@ pub struct PeerListenerSenders {
 
 // This is mainly used to avoid having to much arguments in function definition
 pub struct PeerListenerReceivers {
-    pub peer_connection_rx: Receiver<PeerConnectionRequest>,
+    pub peer_listener_rx: Receiver<PeerConnectionRequest>,
     pub possible_parent_rx: Receiver<Vec<Peer>>,
     pub peer_request_rx: Receiver<(String, PeerRequestPacket)>,
     pub peer_address_rx: Receiver<PeerAddress>,
@@ -94,7 +101,7 @@ impl GlobalConnectionHandler {
             dispatcher.run(),
             listen_indirect_peer_connection_request(
                 server_request_tx.clone(),
-                receivers.peer_connection_rx,
+                receivers.peer_listener_rx,
                 sse_tx.clone(),
                 ready_tx.clone(),
                 channels.clone(),
@@ -118,7 +125,6 @@ impl GlobalConnectionHandler {
                 &mut receivers.possible_parent_rx,
                 db,
                 search_limit
-
             )
         );
 
@@ -131,7 +137,7 @@ impl GlobalConnectionHandler {
         ready_tx: mpsc::Sender<u32>,
         channels: SenderPool,
         db: Database,
-        search_limit: SearchLimit
+        search_limit: SearchLimit,
     ) -> Result<()> {
         if self.shutdown_helper.limit_connections.available_permits() > 0 {
             info!("Accepting inbound connections");
@@ -210,7 +216,7 @@ pub async fn run(
     receivers: PeerListenerReceivers,
     db: Database,
     channels: SenderPool,
-    search_limit: SearchLimit
+    search_limit: SearchLimit,
 ) -> crate::Result<()> {
     debug!("Waiting for user to be logged in");
 
@@ -236,7 +242,7 @@ pub async fn run(
         channels,
         shutdown_complete_rx,
         shutdown_helper,
-        search_limit: search_limit.clone()
+        search_limit: search_limit.clone(),
     };
 
     tokio::select! {
@@ -309,7 +315,7 @@ impl PeerListener {
     }
 }
 
-// Receive connection request from server, and attempt direct connection to peeer
+// Receive connection request from server, and attempt direct connection to peer
 async fn listen_indirect_peer_connection_request(
     server_request_tx: mpsc::Sender<ServerRequest>,
     mut indirect_connection_rx: mpsc::Receiver<PeerConnectionRequest>,
@@ -318,7 +324,7 @@ async fn listen_indirect_peer_connection_request(
     channels: SenderPool,
     shutdown_helper: ShutdownHelper,
     db: Database,
-    search_limit: SearchLimit
+    search_limit: SearchLimit,
 ) -> Result<()> {
     while let Some(connection_request) = indirect_connection_rx.recv().await {
         let sse_tx = sse_tx.clone();
@@ -335,12 +341,12 @@ async fn listen_indirect_peer_connection_request(
             .unwrap()
             .forget();
 
-        debug!(
+        info!(
             "Available permit : {:?}",
             shutdown_helper.limit_connections.available_permits()
         );
 
-        debug!(
+        info!(
             "Trying requested direct connection : {:?}",
             connection_request,
         );
@@ -365,13 +371,13 @@ async fn listen_indirect_peer_connection_request(
             connection_request,
             addr,
             db.clone(),
-            search_limit.clone()
+            search_limit.clone(),
         )
         .and_then(|handler| pierce_firewall(handler, token))
         .await;
 
         if let Err(err) = connection_result {
-            debug!(
+            info!(
                 "Unable to establish requested connection to peer, {}, token = {}, cause = {}",
                 username, token, err
             );
@@ -382,6 +388,8 @@ async fn listen_indirect_peer_connection_request(
                     username,
                 }))
                 .await?;
+        } else {
+            info!("Direct connection established via server indirection")
         }
     }
 
@@ -396,7 +404,7 @@ async fn connect_to_parents(
     shutdown_helper: ShutdownHelper,
     possible_parent_rx: &mut Receiver<Vec<Peer>>,
     database: Database,
-    search_limit: SearchLimit
+    search_limit: SearchLimit,
 ) -> Result<(), soulseek_protocol::Error> {
     loop {
         while let Some(parents) = possible_parent_rx.recv().await {
@@ -426,14 +434,14 @@ async fn connect_to_parents(
                     ConnectionType::DistributedNetwork,
                     search_limit.clone(),
                 )
-                    .await?;
+                .await?;
             }
         }
     }
 }
 
-// Try to connect directly to a peer and fallback to indirect connection
-// if direct connection fails
+/// Try to connect directly to a peer and fallback to indirect connection
+/// if direct connection fails.
 pub(crate) async fn connect_to_peer_with_fallback(
     request_peer_connection_tx: Sender<ServerRequest>,
     sse_tx: Sender<PeerResponse>,
@@ -443,7 +451,7 @@ pub(crate) async fn connect_to_peer_with_fallback(
     database: Database,
     peer: &PeerEntity,
     conn_type: ConnectionType,
-    search_limit: SearchLimit
+    search_limit: SearchLimit,
 ) -> Result<()> {
     shutdown_helper
         .limit_connections
@@ -468,10 +476,10 @@ pub(crate) async fn connect_to_peer_with_fallback(
         database,
         search_limit.clone(),
     )
-        .and_then(|handler| connect_direct(handler, conn_type))
+    .and_then(|handler| connect_direct(handler, conn_type))
     .or_else(|e| {
         warn!(
-            "Unable to establish peer connection with {:?},  cause = {}",
+            "Direct connection to peer {:?} failed,  cause = {}",
             peer, e
         );
 
@@ -520,11 +528,11 @@ async fn prepare_direct_connection_to_peer(
     connection_request: PeerConnectionRequest,
     address: SocketAddr,
     db: Database,
-    search_limit: SearchLimit
+    search_limit: SearchLimit,
 ) -> Result<PeerHandler> {
     let username = connection_request.username.clone();
 
-    match timeout(Duration::from_secs(4), TcpStream::connect(address)).await {
+    match timeout(Duration::from_secs(1), TcpStream::connect(address)).await {
         Ok(Ok(socket)) => Ok(PeerHandler {
             peer_username: Some(username),
             connection: PeerConnection::new_with_token(socket, connection_request.token),
@@ -555,12 +563,12 @@ async fn prepare_direct_connection_to_peer_with_fallback(
     shutdown_helper: ShutdownHelper,
     peer: PeerEntity,
     db: Database,
-    search_limit: SearchLimit
+    search_limit: SearchLimit,
 ) -> Result<PeerHandler> {
     let address = peer.get_address();
     let username = peer.username;
 
-    match timeout(Duration::from_millis(2000), TcpStream::connect(address)).await {
+    match timeout(Duration::from_secs(1), TcpStream::connect(address)).await {
         Ok(Ok(socket)) => Ok(PeerHandler {
             peer_username: Some(username),
             connection: PeerConnection::new(socket),

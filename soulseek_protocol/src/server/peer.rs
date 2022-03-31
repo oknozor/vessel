@@ -61,6 +61,8 @@ pub struct PeerConnectionRequest {
     pub port: u32,
     pub token: u32,
     pub privileged: bool,
+    pub use_obfuscation: bool,
+    pub obfuscated_port: u32,
 }
 
 impl PeerConnectionRequest {
@@ -77,6 +79,8 @@ impl ParseBytes for PeerConnectionRequest {
         let port = src.get_u32_le();
         let token = src.get_u32_le();
         let privileged = src.get_u8() == 1;
+        let use_obfuscation = src.get_u8() == 1;
+        let obfuscated_port = src.get_u32_le();
 
         Ok(PeerConnectionRequest {
             username,
@@ -85,6 +89,8 @@ impl ParseBytes for PeerConnectionRequest {
             port,
             token,
             privileged,
+            use_obfuscation,
+            obfuscated_port,
         })
     }
 }

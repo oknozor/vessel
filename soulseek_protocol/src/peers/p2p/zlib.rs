@@ -11,10 +11,9 @@ pub(crate) fn decompress(src: &mut Cursor<&[u8]>) -> std::io::Result<Vec<u8>> {
 
     match decompress_result {
         Ok(status) => {
-            debug!("Data successfully decompressed : {:?}", status)
+            trace!("Data successfully decompressed : {:?}", status)
         }
         Err(e) => {
-            error!("Decompress error: {}", e);
             return Err(std::io::Error::from(std::io::ErrorKind::InvalidData));
         }
     };

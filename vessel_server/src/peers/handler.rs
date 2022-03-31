@@ -27,7 +27,9 @@ use vessel_database::entity::download::DownloadEntity;
 use vessel_database::entity::upload::UploadEntity;
 use vessel_database::Database;
 
-use crate::peers::{channels::SenderPool, connection::PeerConnection, SearchLimit, shutdown::Shutdown};
+use crate::peers::{
+    channels::SenderPool, connection::PeerConnection, shutdown::Shutdown, SearchLimit,
+};
 
 pub struct PeerHandler {
     pub peer_username: Option<String>,
@@ -45,6 +47,7 @@ pub struct PeerHandler {
     pub(crate) address: SocketAddr,
 }
 
+/// Spawn a new peer handler attempting a direct connection
 pub(crate) async fn connect_direct(
     mut handler: PeerHandler,
     conn_type: ConnectionType,
@@ -52,12 +55,13 @@ pub(crate) async fn connect_direct(
     tokio::spawn(async move {
         match handler.init_connection_outgoing(conn_type).await {
             Ok(_) => info!(
-                "Connection with {:?} ended successfully",
-                handler.peer_username
+                "Direct outgoing established with peer {:?} token={:?}",
+                handler.peer_username, handler.connection.token
             ),
             Err(e) => error!("Error during direct peer connection, cause = {}", e),
         }
     });
+
     Ok(())
 }
 
@@ -81,7 +85,7 @@ impl PeerHandler {
         match self.connection_type() {
             ConnectionType::PeerToPeer => {
                 info!(
-                    "Peer to Peer connection established with {:?} [token={:?}]",
+                    "Peer to Peer connection established with peer {:?}, token={:?}",
                     self.peer_username, self.connection.token
                 );
                 self.listen_p2p(handler_rx).await?;
@@ -191,21 +195,15 @@ impl PeerHandler {
             "Initiate direct connection with peer init, token = {}",
             token
         );
-
         self.send_peer_init(token, conn_type).await?;
-
         let (tx, rx) = channel(32);
-        self.connection_states.peer_init(
-            &self.peer_username.as_ref().unwrap(),
-            self.connection_type(),
-            token,
-            tx,
-        );
+        let username = &self.peer_username.as_ref().unwrap();
+        let connection_type = self.connection_type();
+        self.connection_states
+            .peer_init(username, connection_type, token, tx);
         self.connection.token = Some(token);
         self.connection.connection_type = conn_type;
-
         self.ready_tx.send(token).await?;
-
         self.listen(rx).await
     }
 
@@ -426,6 +424,7 @@ impl Drop for PeerHandler {
     fn drop(&mut self) {
         // Release a connection permit
         self.limit_connections.add_permits(1);
+        debug!("Peer handler [{:?}, {:?}] dropped, connection permit released", self.peer_username, self.connection.token);
 
         // If we have a token we need to clean up channel state
         // Otherwise connection was never ready and does not have a ready channel

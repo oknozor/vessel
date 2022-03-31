@@ -10,6 +10,7 @@ extern crate eyre;
 use tokio::{net::TcpListener, sync::mpsc};
 use tracing_subscriber::fmt::format::FmtSpan;
 
+use crate::peers::SearchLimit;
 use crate::{
     peers::{
         channels::SenderPool,
@@ -27,7 +28,6 @@ use soulseek_protocol::{
     },
 };
 use vessel_database::Database;
-use crate::peers::SearchLimit;
 
 const PEER_LISTENER_ADDRESS: &str = "0.0.0.0:2255";
 
@@ -50,7 +50,7 @@ async fn main() -> Result<()> {
     let (http_tx, http_rx) = mpsc::channel::<ServerRequest>(channel_bound);
 
     // Send http request directly to a peer connection
-    let (peer_message_dispatcher_tx, peer_message_dispatcher_rx) =
+    let (peer_message_dispatcher_tx, peer_request_rx) =
         mpsc::channel::<(String, PeerRequestPacket)>(channel_bound);
 
     // Send Soulseek server response to the SSE client
@@ -59,7 +59,7 @@ async fn main() -> Result<()> {
     let (sse_peer_tx, sse_peer_rx) = mpsc::channel::<PeerResponse>(channel_bound);
 
     // Dispatch incoming indirect connection request to the global peer handler
-    let (peer_listener_tx, peer_connection_rx) =
+    let (peer_listener_tx, peer_listener_rx) =
         mpsc::channel::<PeerConnectionRequest>(channel_bound);
 
     // Request an indirect connection via http
@@ -90,7 +90,7 @@ async fn main() -> Result<()> {
         connection,
         logged_in_tx,
         peer_address_tx,
-        search_limit.clone()
+        search_limit.clone(),
     );
 
     // Start the warp SSE server with a soulseek mpsc event receiver
@@ -118,16 +118,16 @@ async fn main() -> Result<()> {
             server_request_tx: request_peer_connection_tx,
         },
         PeerListenerReceivers {
-            peer_connection_rx,
+            peer_listener_rx,
             possible_parent_rx,
-            peer_request_rx: peer_message_dispatcher_rx,
+            peer_request_rx,
             peer_address_rx,
         },
         logged_in_rx,
         listener,
         database,
         channels,
-        search_limit
+        search_limit,
     );
 
     // Wraps everything with tokio::join so we don't block on servers startup

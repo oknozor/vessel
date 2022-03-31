@@ -22,7 +22,10 @@ impl SearchLimit {
     }
 
     pub(crate) fn new() -> Self {
-        SearchLimit { limit: Arc::new(Mutex::new(30)), ticket: Arc::new(Mutex::new(0)) }
+        SearchLimit {
+            limit: Arc::new(Mutex::new(30)),
+            ticket: Arc::new(Mutex::new(0)),
+        }
     }
 
     fn decrement(&self) {
@@ -38,4 +41,3 @@ impl SearchLimit {
         *self.ticket.lock().unwrap()
     }
 }
-

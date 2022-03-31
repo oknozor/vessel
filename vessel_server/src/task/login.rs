@@ -1,8 +1,8 @@
-use tokio::sync::mpsc::Sender;
-use soulseek_protocol::server::request::ServerRequest;
-use tokio::task::JoinHandle;
 use futures::TryFutureExt;
 use soulseek_protocol::server::login::LoginRequest;
+use soulseek_protocol::server::request::ServerRequest;
+use tokio::sync::mpsc::Sender;
+use tokio::task::JoinHandle;
 
 pub fn spawn_login_task(login_sender: Sender<ServerRequest>) -> JoinHandle<()> {
     debug!("Spawning logging task");

@@ -1,15 +1,9 @@
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
-};
-
+use soulseek_protocol::message_common::ConnectionType;
+use soulseek_protocol::peers::p2p::download::DownloadProgress;
+use soulseek_protocol::peers::PeerRequestPacket;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
-
-use eyre::Result;
-use soulseek_protocol::{
-    message_common::ConnectionType,
-    peers::{p2p::download::DownloadProgress, PeerRequestPacket},
-};
 use tokio::sync::mpsc::Sender;
 
 #[derive(Debug, Clone)]
@@ -106,7 +100,11 @@ impl SenderPool {
         channels.get(&token).cloned()
     }
 
-    pub fn ready(&self, token: u32, tx: Sender<PeerRequestPacket>) -> Result<PeerConnectionState> {
+    pub fn ready(
+        &self,
+        token: u32,
+        tx: Sender<PeerRequestPacket>,
+    ) -> eyre::Result<PeerConnectionState> {
         let mut pending_connections = self.pending_connections.lock().unwrap();
 
         let (idx, ready_state) = pending_connections
@@ -131,7 +129,7 @@ impl SenderPool {
         Ok(ready_state)
     }
 
-    pub fn remove_channel(&mut self, token: u32) -> Result<()> {
+    pub fn remove_channel(&mut self, token: u32) -> eyre::Result<()> {
         let mut channels = self.ok_connections.lock().unwrap();
 
         channels.remove(&token).map(|_| ()).ok_or_else(|| {

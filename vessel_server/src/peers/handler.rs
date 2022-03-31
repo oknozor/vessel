@@ -27,10 +27,9 @@ use vessel_database::entity::download::DownloadEntity;
 use vessel_database::entity::upload::UploadEntity;
 use vessel_database::Database;
 
-use crate::peers::{
-    channels::SenderPool, connection::PeerConnection, shutdown::Shutdown,
-};
-use crate::peers::search_limit::SearchLimit;
+use crate::peers::{connection::PeerConnection, shutdown::Shutdown};
+use crate::state_manager::channel_manager::SenderPool;
+use crate::state_manager::search_limit::SearchLimit;
 
 pub struct PeerHandler {
     pub peer_username: Option<String>,
@@ -425,7 +424,10 @@ impl Drop for PeerHandler {
     fn drop(&mut self) {
         // Release a connection permit
         self.limit_connections.add_permits(1);
-        debug!("Peer handler [{:?}, {:?}] dropped, connection permit released", self.peer_username, self.connection.token);
+        debug!(
+            "Peer handler [{:?}, {:?}] dropped, connection permit released",
+            self.peer_username, self.connection.token
+        );
 
         // If we have a token we need to clean up channel state
         // Otherwise connection was never ready and does not have a ready channel

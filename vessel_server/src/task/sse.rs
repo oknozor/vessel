@@ -1,7 +1,7 @@
-use tokio::sync::mpsc::Receiver;
 use soulseek_protocol::peers::p2p::download::DownloadProgress;
 use soulseek_protocol::peers::p2p::response::PeerResponse;
 use soulseek_protocol::server::response::ServerResponse;
+use tokio::sync::mpsc::Receiver;
 use tokio::task::JoinHandle;
 
 pub fn spawn_sse_server(

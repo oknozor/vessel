@@ -10,15 +10,8 @@ extern crate eyre;
 use tokio::{net::TcpListener, sync::mpsc};
 use tracing_subscriber::fmt::format::FmtSpan;
 
-use peers::search_limit::SearchLimit;
-use crate::{
-    peers::{
-        channels::SenderPool,
-        listener::{PeerListenerReceivers, PeerListenerSenders},
-    },
-};
+use crate::peers::peer_listener::{PeerListenerReceivers, PeerListenerSenders};
 use eyre::Result;
-use task::soulseek::spawn_server_listener_task;
 use soulseek_protocol::{
     peers::{p2p::response::PeerResponse, PeerRequestPacket},
     server::{
@@ -27,13 +20,19 @@ use soulseek_protocol::{
         response::ServerResponse,
     },
 };
+use state_manager::channel_manager::SenderPool;
+use state_manager::search_limit::SearchLimit;
+use task::soulseek::spawn_server_listener_task;
 use task::{http, login, sse};
 use vessel_database::Database;
 
 const PEER_LISTENER_ADDRESS: &str = "0.0.0.0:2255";
 
+mod peer_connection_manager;
+mod peer_message_dispatcher;
 mod peers;
 mod slsk;
+mod state_manager;
 mod task;
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 10)]

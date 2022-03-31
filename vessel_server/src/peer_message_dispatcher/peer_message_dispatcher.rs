@@ -11,11 +11,9 @@ use soulseek_protocol::{
 use vessel_database::entity::peer::PeerEntity;
 use vessel_database::Database;
 
-use crate::peers::{
-    channels::SenderPool,
-    listener::{connect_to_peer_with_fallback, ShutdownHelper},
-};
-use crate::peers::search_limit::SearchLimit;
+use crate::peers::peer_listener::{connect_to_peer_with_fallback, ShutdownHelper};
+use crate::state_manager::channel_manager::SenderPool;
+use crate::state_manager::search_limit::SearchLimit;
 
 pub struct Dispatcher {
     // Receive connection state updates from peer handlers,
@@ -146,10 +144,14 @@ impl Dispatcher {
                 }
             }
             None => match self.db.get_by_key::<PeerEntity>(username) {
-                 Some(peer) => {
-                     self.initiate_connection(ConnectionType::PeerToPeer, peer, self.search_limit.clone())
-                         .await
-                 }
+                Some(peer) => {
+                    self.initiate_connection(
+                        ConnectionType::PeerToPeer,
+                        peer,
+                        self.search_limit.clone(),
+                    )
+                    .await
+                }
                 _ => {
                     debug!("Requesting peer address");
                     self.server_request_tx

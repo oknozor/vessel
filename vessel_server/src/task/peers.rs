@@ -1,14 +1,13 @@
-use crate::peers;
 use crate::state_manager::channel_manager::SenderPool;
 use crate::state_manager::search_limit::SearchLimit;
-use tokio::net::TcpListener;
-use tokio::signal;
-use tokio::sync::mpsc::{Receiver, Sender};
-use tokio::task::JoinHandle;
 use soulseek_protocol::peers::p2p::response::PeerResponse;
 use soulseek_protocol::peers::PeerRequestPacket;
 use soulseek_protocol::server::peer::{Peer, PeerAddress, PeerConnectionRequest};
 use soulseek_protocol::server::request::ServerRequest;
+use tokio::net::TcpListener;
+use tokio::signal;
+use tokio::sync::mpsc::{Receiver, Sender};
+use tokio::task::JoinHandle;
 use vessel_database::Database;
 
 pub fn spawn_peer_listener(
@@ -29,7 +28,7 @@ pub fn spawn_peer_listener(
             // Wait for soulseek login
         }
 
-        peers::peer_listener::run(
+        crate::peer_connection_manager::run(
             listener,
             signal::ctrl_c(),
             sse_tx,

@@ -166,20 +166,20 @@ impl PeerHandler {
     pub(crate) async fn listen_distributed(&mut self) -> Result<()> {
         while !self.shutdown.is_shutdown() {
             tokio::select! {
-                        response = self.connection.read_message::<DistributedMessage>() =>  {
-                            match response {
-                                Ok(message) => trace!("Got distributed message {:?}", message),
-                                Err(e) => {
-                                    return Err(eyre!("Error in connection handler with {:?} : {}", self.peer_username, e));
-                                }
-                            }
-
-                        },
-                        _ = self.shutdown.recv() => {
-                            // If a shutdown signal is received, return from `run`.
-                            // This will result in the task terminating.
-                            break;
+                response = self.connection.read_message::<DistributedMessage>() =>  {
+                    match response {
+                        Ok(message) => trace!("Got distributed message {:?}", message),
+                        Err(e) => {
+                            return Err(eyre!("Error in connection handler with {:?} : {}", self.peer_username, e));
                         }
+                    }
+
+                },
+                _ = self.shutdown.recv() => {
+                    // If a shutdown signal is received, return from `run`.
+                    // This will result in the task terminating.
+                    break;
+                }
             }
         }
 

@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use eyre::Result;
 use tokio::sync::mpsc::{Receiver, Sender};
 
+use crate::peer_connection_manager::{connect_to_peer_with_fallback, ShutdownHelper};
 use soulseek_protocol::{
     message_common::ConnectionType,
     peers::{p2p::response::PeerResponse, PeerRequestPacket},
@@ -11,7 +12,6 @@ use soulseek_protocol::{
 use vessel_database::entity::peer::PeerEntity;
 use vessel_database::Database;
 
-use crate::peers::peer_listener::{connect_to_peer_with_fallback, ShutdownHelper};
 use crate::state_manager::channel_manager::SenderPool;
 use crate::state_manager::search_limit::SearchLimit;
 

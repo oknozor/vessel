@@ -1,4 +1,3 @@
-use std::net::{IpAddr, SocketAddr};
 use std::{future::Future, sync::Arc};
 
 use eyre::Result;
@@ -17,24 +16,22 @@ use tracing::{error, info};
 
 use crate::peer_connection_manager::GlobalConnectionHandler;
 use crate::peer_connection_manager::MAX_CONNECTIONS;
-use crate::peer_message_dispatcher::peer_message_dispatcher::Dispatcher;
 use soulseek_protocol::{
     message_common::ConnectionType,
     peers::{p2p::response::PeerResponse, PeerRequestPacket},
     server::{
         peer::{
-            Peer, PeerAddress, PeerConnectionRequest, PeerConnectionTicket, RequestConnectionToPeer,
+            Peer, PeerAddress, PeerConnectionRequest, RequestConnectionToPeer,
         },
         request::ServerRequest,
     },
-    SlskError,
 };
 use vessel_database::entity::peer::PeerEntity;
 use vessel_database::Database;
 
 use crate::peers::{
     connection::PeerConnection,
-    handler::{connect_direct, pierce_firewall, PeerHandler},
+    handler::{connect_direct, PeerHandler},
     shutdown::Shutdown,
 };
 use crate::state_manager::channel_manager::SenderPool;
@@ -45,19 +42,6 @@ pub struct ShutdownHelper {
     pub notify_shutdown: broadcast::Sender<()>,
     pub shutdown_complete_tx: mpsc::Sender<()>,
     pub limit_connections: Arc<Semaphore>,
-}
-
-pub struct PeerListenerSenders {
-    pub sse_tx: mpsc::Sender<PeerResponse>,
-    pub server_request_tx: Sender<ServerRequest>,
-}
-
-// This is mainly used to avoid having to much arguments in function definition
-pub struct PeerListenerReceivers {
-    pub peer_listener_rx: Receiver<PeerConnectionRequest>,
-    pub possible_parent_rx: Receiver<Vec<Peer>>,
-    pub peer_request_rx: Receiver<(String, PeerRequestPacket)>,
-    pub peer_address_rx: Receiver<PeerAddress>,
 }
 
 /// Server listener state. Created in the `run` call. It includes a `run` method
@@ -71,8 +55,12 @@ pub struct PeerListener {
 pub async fn run(
     listener: TcpListener,
     shutdown: impl Future,
-    senders: PeerListenerSenders,
-    receivers: PeerListenerReceivers,
+    sse_tx: Sender<PeerResponse>,
+    server_request_tx: Sender<ServerRequest>,
+    peer_listener_rx: Receiver<PeerConnectionRequest>,
+    possible_parent_rx: Receiver<Vec<Peer>>,
+    peer_request_rx: Receiver<(String, PeerRequestPacket)>,
+    peer_address_rx: Receiver<PeerAddress>,
     db: Database,
     channels: SenderPool,
     search_limit: SearchLimit,
@@ -96,16 +84,22 @@ pub async fn run(
 
     let mut server = GlobalConnectionHandler {
         peer_listener,
-        senders,
+        sse_tx,
         db,
         channels,
         shutdown_complete_rx,
         shutdown_helper,
         search_limit: search_limit.clone(),
+        server_request_tx,
     };
 
     tokio::select! {
-        res = server.run(receivers) => {
+        res = server.run(
+            peer_listener_rx,
+            possible_parent_rx,
+            peer_request_rx,
+            peer_address_rx,
+        ) => {
             if let Err(err) = res {
                 error!(cause = %err, "failed to accept");
             }

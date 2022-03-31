@@ -10,7 +10,6 @@ extern crate eyre;
 use tokio::{net::TcpListener, sync::mpsc};
 use tracing_subscriber::fmt::format::FmtSpan;
 
-use crate::peers::peer_listener::{PeerListenerReceivers, PeerListenerSenders};
 use eyre::Result;
 use soulseek_protocol::{
     peers::{p2p::response::PeerResponse, PeerRequestPacket},
@@ -113,16 +112,12 @@ async fn main() -> Result<()> {
 
     // Listen for peer connection
     let peer_listener = task::peers::spawn_peer_listener(
-        PeerListenerSenders {
-            sse_tx: sse_peer_tx,
-            server_request_tx: request_peer_connection_tx,
-        },
-        PeerListenerReceivers {
-            peer_listener_rx,
-            possible_parent_rx,
-            peer_request_rx,
-            peer_address_rx,
-        },
+        sse_peer_tx,
+        request_peer_connection_tx,
+        peer_listener_rx,
+        possible_parent_rx,
+        peer_request_rx,
+        peer_address_rx,
         logged_in_rx,
         listener,
         database,

@@ -1,10 +1,7 @@
 use crate::peer_message_dispatcher::peer_message_dispatcher::Dispatcher;
 use crate::peers::connection::PeerConnection;
 use crate::peers::handler::{pierce_firewall, PeerHandler};
-use crate::peers::peer_listener::{
-    connect_to_peer_with_fallback, PeerListener, PeerListenerReceivers, PeerListenerSenders,
-    ShutdownHelper,
-};
+use crate::peers::peer_listener::{connect_to_peer_with_fallback, PeerListener, ShutdownHelper};
 use crate::peers::shutdown::Shutdown;
 use crate::state_manager::channel_manager::SenderPool;
 use crate::state_manager::search_limit::SearchLimit;
@@ -12,15 +9,16 @@ use eyre::Result;
 use futures::TryFutureExt;
 use soulseek_protocol::message_common::ConnectionType;
 use soulseek_protocol::peers::p2p::response::PeerResponse;
-use soulseek_protocol::server::peer::{Peer, PeerConnectionRequest, PeerConnectionTicket};
+use soulseek_protocol::server::peer::{Peer, PeerAddress, PeerConnectionRequest, PeerConnectionTicket};
 use soulseek_protocol::server::request::ServerRequest;
 use soulseek_protocol::SlskError;
 use std::net::{IpAddr, SocketAddr};
 use std::time::Duration;
 use tokio::net::TcpStream;
 use tokio::sync::mpsc;
-use tokio::sync::mpsc::Receiver;
+use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::time::timeout;
+use soulseek_protocol::peers::PeerRequestPacket;
 use vessel_database::entity::peer::PeerEntity;
 use vessel_database::Database;
 
@@ -30,18 +28,23 @@ pub const MAX_PARENT: usize = 1;
 
 pub struct GlobalConnectionHandler {
     pub peer_listener: PeerListener,
-    pub senders: PeerListenerSenders,
+    pub sse_tx: Sender<PeerResponse>,
+    pub server_request_tx: Sender<ServerRequest>,
     pub db: Database,
     pub channels: SenderPool,
-    pub shutdown_complete_rx: mpsc::Receiver<()>,
+    pub shutdown_complete_rx: Receiver<()>,
     pub shutdown_helper: ShutdownHelper,
     pub search_limit: SearchLimit,
 }
 
 impl GlobalConnectionHandler {
-    pub async fn run(&mut self, mut receivers: PeerListenerReceivers) -> crate::Result<()> {
-        let server_request_tx = self.senders.server_request_tx.clone();
-        let sse_tx = self.senders.sse_tx.clone();
+    pub async fn run(&mut self, peer_listener_rx: Receiver<PeerConnectionRequest>,
+                     mut possible_parent_rx: Receiver<Vec<Peer>>,
+                     peer_request_rx: Receiver<(String, PeerRequestPacket)>,
+                     peer_address_rx: Receiver<PeerAddress>,
+    ) -> crate::Result<()> {
+        let server_request_tx = self.server_request_tx.clone();
+        let sse_tx = self.sse_tx.clone();
         let channels = self.channels.clone();
         let db = self.db.clone();
         let (ready_tx, ready_rx) = mpsc::channel(32);
@@ -49,8 +52,8 @@ impl GlobalConnectionHandler {
 
         let mut dispatcher = Dispatcher {
             ready_rx,
-            queue_rx: receivers.peer_request_rx,
-            peer_address_rx: receivers.peer_address_rx,
+            queue_rx: peer_request_rx,
+            peer_address_rx,
             channels: channels.clone(),
             db: db.clone(),
             shutdown_helper: shutdown_helper.clone(),
@@ -67,7 +70,7 @@ impl GlobalConnectionHandler {
             dispatcher.run(),
             listen_indirect_peer_connection_request(
                 server_request_tx.clone(),
-                receivers.peer_listener_rx,
+                peer_listener_rx,
                 sse_tx.clone(),
                 ready_tx.clone(),
                 channels.clone(),
@@ -88,7 +91,7 @@ impl GlobalConnectionHandler {
                 ready_tx,
                 channels,
                 shutdown_helper.clone(),
-                &mut receivers.possible_parent_rx,
+                &mut possible_parent_rx,
                 db,
                 search_limit
             )

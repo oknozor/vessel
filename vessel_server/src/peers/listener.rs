@@ -11,7 +11,7 @@ use tokio::{
         mpsc::{Receiver, Sender},
         Semaphore,
     },
-    time::{self, timeout, Duration},
+    time::{self, Duration, timeout},
 };
 use tracing::{error, info};
 
@@ -33,10 +33,10 @@ use crate::peers::{
     channels::SenderPool,
     connection::PeerConnection,
     dispatcher::Dispatcher,
-    handler::{connect_direct, pierce_firewall, PeerHandler},
+    handler::{connect_direct, PeerHandler, pierce_firewall},
     shutdown::Shutdown,
-    SearchLimit,
 };
+use crate::peers::search_limit::SearchLimit;
 
 /// TODO : Make this value configurable
 const MAX_CONNECTIONS: usize = 10_000;

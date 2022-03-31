@@ -14,8 +14,8 @@ use vessel_database::Database;
 use crate::peers::{
     channels::SenderPool,
     listener::{connect_to_peer_with_fallback, ShutdownHelper},
-    SearchLimit,
 };
+use crate::peers::search_limit::SearchLimit;
 
 pub struct Dispatcher {
     // Receive connection state updates from peer handlers,

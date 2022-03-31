@@ -1,29 +1,10 @@
-use futures::TryFutureExt;
-use tokio::{net::TcpListener, signal, task::JoinHandle};
-
-use crate::peers::SearchLimit;
-use crate::{
-    peers,
-    peers::{
-        channels::SenderPool,
-        listener::{PeerListenerReceivers, PeerListenerSenders},
-    },
-    slsk::connection::SlskConnection,
-};
-use soulseek_protocol::{
-    peers::{
-        p2p::{download::DownloadProgress, response::PeerResponse},
-        PeerRequestPacket,
-    },
-    server::{
-        login::LoginRequest,
-        peer::{Peer, PeerAddress, PeerConnectionRequest},
-        request::ServerRequest,
-        response::ServerResponse,
-    },
-};
 use tokio::sync::mpsc::{Receiver, Sender};
-use vessel_database::Database;
+use soulseek_protocol::server::peer::{Peer, PeerAddress, PeerConnectionRequest};
+use soulseek_protocol::server::request::ServerRequest;
+use soulseek_protocol::server::response::ServerResponse;
+use tokio::task::JoinHandle;
+use crate::peers::search_limit::SearchLimit;
+use crate::slsk::connection::SlskConnection;
 
 pub fn spawn_server_listener_task(
     http_rx: Receiver<ServerRequest>,
@@ -138,70 +119,4 @@ async fn server_listener(
               }
         }
     }
-}
-
-pub fn spawn_sse_server(
-    sse_rx: Receiver<ServerResponse>,
-    sse_peer_rx: Receiver<PeerResponse>,
-    download_progress_rx: Receiver<DownloadProgress>,
-) -> JoinHandle<()> {
-    tokio::spawn(async {
-        vessel_sse::start_sse_listener(sse_rx, sse_peer_rx, download_progress_rx).await;
-    })
-}
-
-pub fn spawn_peer_listener(
-    senders: PeerListenerSenders,
-    receivers: PeerListenerReceivers,
-    mut logged_in_rx: Receiver<()>,
-    listener: TcpListener,
-    database: Database,
-    channels: SenderPool,
-    search_limit: SearchLimit,
-) -> JoinHandle<()> {
-    tokio::spawn(async move {
-
-
-        while logged_in_rx.recv().await.is_none() {
-            // Wait for soulseek login
-        }
-
-        peers::listener::run(
-            listener,
-            signal::ctrl_c(),
-            senders,
-            receivers,
-            database,
-            channels.clone(),
-            search_limit,
-        )
-        .await
-        .expect("Unable to run peer listener");
-    })
-}
-
-pub fn spawn_login_task(login_sender: Sender<ServerRequest>) -> JoinHandle<()> {
-    debug!("Spawning logging task");
-    tokio::spawn(async move {
-        let listen_port_sender = login_sender.clone();
-        let parent_request_sender = login_sender.clone();
-        let join_nicotine_room = login_sender.clone();
-        let username = &vessel_database::settings::CONFIG.username;
-        let password = &vessel_database::settings::CONFIG.password;
-        login_sender
-            .send(ServerRequest::Login(LoginRequest::new(username, password)))
-            .and_then(|_| listen_port_sender.send(ServerRequest::SetListenPort(2255)))
-            .and_then(|_| parent_request_sender.send(ServerRequest::NoParents(true)))
-            .and_then(|_| join_nicotine_room.send(ServerRequest::JoinRoom("nicotine".to_string())))
-            .await
-            .expect("Unable to establish connection with soulseek server");
-    })
-}
-
-pub fn spawn_http_listener(
-    http_tx: Sender<ServerRequest>,
-    peer_message_dispatcher_tx: Sender<(String, PeerRequestPacket)>,
-    database: Database,
-) -> JoinHandle<()> {
-    tokio::spawn(async { vessel_http::start(http_tx, peer_message_dispatcher_tx, database).await })
 }

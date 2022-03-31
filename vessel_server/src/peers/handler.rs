@@ -28,8 +28,9 @@ use vessel_database::entity::upload::UploadEntity;
 use vessel_database::Database;
 
 use crate::peers::{
-    channels::SenderPool, connection::PeerConnection, shutdown::Shutdown, SearchLimit,
+    channels::SenderPool, connection::PeerConnection, shutdown::Shutdown,
 };
+use crate::peers::search_limit::SearchLimit;
 
 pub struct PeerHandler {
     pub peer_username: Option<String>,

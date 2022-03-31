@@ -10,15 +10,15 @@ extern crate eyre;
 use tokio::{net::TcpListener, sync::mpsc};
 use tracing_subscriber::fmt::format::FmtSpan;
 
-use crate::peers::SearchLimit;
+use peers::search_limit::SearchLimit;
 use crate::{
     peers::{
         channels::SenderPool,
         listener::{PeerListenerReceivers, PeerListenerSenders},
     },
-    tasks::spawn_server_listener_task,
 };
 use eyre::Result;
+use task::soulseek::spawn_server_listener_task;
 use soulseek_protocol::{
     peers::{p2p::response::PeerResponse, PeerRequestPacket},
     server::{
@@ -27,13 +27,14 @@ use soulseek_protocol::{
         response::ServerResponse,
     },
 };
+use task::{http, login, sse};
 use vessel_database::Database;
 
 const PEER_LISTENER_ADDRESS: &str = "0.0.0.0:2255";
 
 mod peers;
 mod slsk;
-mod tasks;
+mod task;
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 10)]
 // #[tokio::main(flavor = "current_thread")]
@@ -95,24 +96,24 @@ async fn main() -> Result<()> {
 
     // Start the warp SSE server with a soulseek mpsc event receiver
     // this task will proxy soulseek events to the web clients
-    let sse_server = tasks::spawn_sse_server(sse_rx, sse_peer_rx, download_progress_rx);
+    let sse_server = sse::spawn_sse_server(sse_rx, sse_peer_rx, download_progress_rx);
 
     // Start the HTTP api proxy with the soulseek mpsc event sender
     // Here we are only sending request via HTTP and expect no other response
     // than 201/NO_CONTENT
     let http_server =
-        tasks::spawn_http_listener(http_tx, peer_message_dispatcher_tx, database.clone());
+        http::spawn_http_listener(http_tx, peer_message_dispatcher_tx, database.clone());
 
     // Once every thing is ready we need to login before talking to the soulseek server
     // Vessel support one and only one user connection, credentials are retrieved from vessel configuration
-    let login = tasks::spawn_login_task(login_sender);
+    let login = login::spawn_login_task(login_sender);
 
     let listener = TcpListener::bind(PEER_LISTENER_ADDRESS).await?;
 
     let channels = SenderPool::new(download_progress_tx);
 
     // Listen for peer connection
-    let peer_listener = tasks::spawn_peer_listener(
+    let peer_listener = task::peers::spawn_peer_listener(
         PeerListenerSenders {
             sse_tx: sse_peer_tx,
             server_request_tx: request_peer_connection_tx,

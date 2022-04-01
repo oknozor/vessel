@@ -28,6 +28,7 @@ use state_manager::search_limit::SearchLimit;
 use vessel_database::Database;
 use crate::peer_connection_manager::{MAX_CONNECTIONS, ShutdownHelper};
 use crate::peer_connection_manager::distributed::DistributedConnectionManager;
+use crate::peer_connection_manager::indirect_connection::IndirectConnectionRequestHandler;
 use crate::peer_message_dispatcher::peer_message_dispatcher::Dispatcher;
 use crate::slsk::SoulseekServerListener;
 
@@ -135,6 +136,17 @@ async fn main() -> Result<()> {
         ,
     };
 
+    let mut indirect_connection_manager = IndirectConnectionRequestHandler {
+        server_request_tx: request_peer_connection_tx.clone(),
+        indirect_connection_rx: peer_listener_rx,
+        sse_tx: sse_peer_tx.clone(),
+        ready_tx: ready_tx.clone(),
+        channels: channels.clone(),
+        shutdown_helper: shutdown_helper.clone(),
+        db: database.clone(),
+        search_limit: search_limit.clone(),
+    };
+
     let mut distributed_connection_manager = DistributedConnectionManager {
         request_peer_connection_tx: request_peer_connection_tx.clone(),
         sse_tx: sse_peer_tx.clone(),
@@ -165,8 +177,6 @@ async fn main() -> Result<()> {
         listener,
         tokio::signal::ctrl_c(),
         sse_peer_tx,
-        request_peer_connection_tx,
-        peer_listener_rx,
         database.clone(),
         channels.clone(),
         search_limit.clone(),
@@ -178,6 +188,7 @@ async fn main() -> Result<()> {
 
     // Wraps everything with tokio::join so we don't block on servers startup
     let _ = join!(
+        indirect_connection_manager.run(),
         distributed_connection_manager.run(),
         dispatcher.run(),
         sse_server,

@@ -1,27 +1,26 @@
 use crate::peers::connection::PeerConnection;
-use crate::peers::handler::{pierce_firewall, PeerHandler};
+use crate::peers::handler::PeerHandler;
 use crate::peers::shutdown::Shutdown;
 use crate::state_manager::channel_manager::SenderPool;
 use crate::state_manager::search_limit::SearchLimit;
 use connection::PeerConnectionListener;
 use eyre::Result;
-use futures::TryFutureExt;
 use rand::random;
 use soulseek_protocol::message_common::ConnectionType;
 use soulseek_protocol::peers::p2p::response::PeerResponse;
 use soulseek_protocol::server::peer::{
-    PeerConnectionRequest, PeerConnectionTicket, RequestConnectionToPeer,
+    PeerConnectionRequest, RequestConnectionToPeer,
 };
 use soulseek_protocol::server::request::ServerRequest;
-use soulseek_protocol::SlskError;
 use std::future::Future;
-use std::net::{IpAddr, SocketAddr};
+use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::sync::{broadcast, mpsc, Semaphore};
 use tokio::time::timeout;
+use peer_manager::PeerConnectionManager;
 use vessel_database::entity::peer::PeerEntity;
 use vessel_database::Database;
 
@@ -32,208 +31,8 @@ pub const MAX_CONNECTIONS: usize = 10_000;
 
 pub mod distributed;
 pub mod peer_to_peer;
-
-pub trait ConnectionManager {
-
-}
-
-pub struct PeerConnectionManager {
-    pub peer_listener: PeerConnectionListener,
-    pub sse_tx: Sender<PeerResponse>,
-    pub server_request_tx: Sender<ServerRequest>,
-    pub db: Database,
-    pub channels: SenderPool,
-    pub shutdown_complete_rx: Receiver<()>,
-    pub shutdown_helper: ShutdownHelper,
-    pub search_limit: SearchLimit,
-}
-
-impl PeerConnectionManager {
-    pub async fn run(
-        &mut self,
-        peer_listener_rx: Receiver<PeerConnectionRequest>,
-        ready_tx: Sender<u32>,
-        search_limit: SearchLimit
-    ) -> crate::Result<()> {
-        let server_request_tx = self.server_request_tx.clone();
-        let sse_tx = self.sse_tx.clone();
-        let channels = self.channels.clone();
-        let db = self.db.clone();
-        let shutdown_helper = self.shutdown_helper.clone();
-
-        let _ = tokio::join!(
-            listen_indirect_peer_connection_request(
-                server_request_tx.clone(),
-                peer_listener_rx,
-                sse_tx.clone(),
-                ready_tx.clone(),
-                channels.clone(),
-                shutdown_helper.clone(),
-                db.clone(),
-                search_limit.clone()
-            ),
-            self.accept_peer_connection(
-                sse_tx.clone(),
-                ready_tx.clone(),
-                channels.clone(),
-                db.clone(),
-                search_limit.clone()
-            ),
-        );
-
-        Ok(())
-    }
-
-    async fn accept_peer_connection(
-        &mut self,
-        sse_tx: mpsc::Sender<PeerResponse>,
-        ready_tx: mpsc::Sender<u32>,
-        channels: SenderPool,
-        db: Database,
-        search_limit: SearchLimit,
-    ) -> eyre::Result<()> {
-        if self.shutdown_helper.limit_connections.available_permits() > 0 {
-            info!("Accepting inbound connections");
-
-            loop {
-                match self.peer_listener.accept().await {
-                    Ok(socket) => {
-                        self.shutdown_helper
-                            .limit_connections
-                            .acquire()
-                            .await
-                            .unwrap()
-                            .forget();
-
-                        debug!(
-                            "Incoming direct connection from {:?} accepted",
-                            socket.peer_addr()
-                        );
-
-                        debug!(
-                            "Available connections : {}/{}",
-                            self.shutdown_helper.limit_connections.available_permits(),
-                            MAX_CONNECTIONS
-                        );
-
-                        let address = socket.peer_addr()?;
-
-                        let mut handler = PeerHandler {
-                            peer_username: None,
-                            connection: PeerConnection::new(socket),
-                            sse_tx: sse_tx.clone(),
-                            ready_tx: ready_tx.clone(),
-                            shutdown: Shutdown::new(
-                                self.shutdown_helper.notify_shutdown.subscribe(),
-                            ),
-                            limit_connections: self.shutdown_helper.limit_connections.clone(),
-                            limit_search: search_limit.clone(),
-                            _shutdown_complete: self.shutdown_helper.shutdown_complete_tx.clone(),
-                            connection_states: channels.clone(),
-                            db: db.clone(),
-                            address,
-                        };
-
-                        tokio::spawn(async move {
-                            match handler.wait_for_connection_handshake().await {
-                                Err(e) => {
-                                    error!(cause = ?e, "Error accepting inbound connection {}", handler.address)
-                                }
-                                Ok(()) => debug!("Handler closed successfully"),
-                            };
-                        });
-                    }
-                    Err(err) => {
-                        error!("Failed to accept incoming connection : {}", err);
-                    }
-                };
-            }
-        } else {
-            Err(eyre!(SlskError::NoPermitAvailable))
-        }
-    }
-}
-
-// Receive connection request from server, and attempt direct connection to peer
-async fn listen_indirect_peer_connection_request(
-    server_request_tx: mpsc::Sender<ServerRequest>,
-    mut indirect_connection_rx: mpsc::Receiver<PeerConnectionRequest>,
-    sse_tx: mpsc::Sender<PeerResponse>,
-    ready_tx: mpsc::Sender<u32>,
-    channels: SenderPool,
-    shutdown_helper: ShutdownHelper,
-    db: Database,
-    search_limit: SearchLimit,
-) -> Result<()> {
-    while let Some(connection_request) = indirect_connection_rx.recv().await {
-        let sse_tx = sse_tx.clone();
-
-        // Filter out our own connection requests
-        if connection_request.username == "vessel" {
-            continue;
-        };
-
-        shutdown_helper
-            .limit_connections
-            .acquire()
-            .await
-            .unwrap()
-            .forget();
-
-        info!(
-            "Available permit : {:?}",
-            shutdown_helper.limit_connections.available_permits()
-        );
-
-        info!(
-            "Trying requested direct connection : {:?}",
-            connection_request,
-        );
-
-        let addr = SocketAddr::new(
-            IpAddr::V4(connection_request.ip),
-            connection_request.port as u16,
-        );
-        let token = connection_request.token;
-        let username = connection_request.username.clone();
-        let conn_type = connection_request.connection_type;
-
-        channels
-            .clone()
-            .insert_indirect_connection_expected(&username, conn_type, token);
-
-        let connection_result = prepare_direct_connection_to_peer(
-            channels.clone(),
-            sse_tx.clone(),
-            ready_tx.clone(),
-            shutdown_helper.clone(),
-            connection_request,
-            addr,
-            db.clone(),
-            search_limit.clone(),
-        )
-        .and_then(|handler| pierce_firewall(handler, token))
-        .await;
-
-        if let Err(err) = connection_result {
-            info!(
-                "Unable to establish requested connection to peer, {}, token = {}, cause = {}",
-                username, token, err
-            );
-
-            server_request_tx
-                .send(ServerRequest::CantConnectToPeer(PeerConnectionTicket {
-                    token,
-                    username,
-                }))
-                .await?;
-        } else {
-            info!("Direct connection established via server indirection")
-        }
-    }
-
-    Ok(())
-}
+pub mod indirect_connection;
+pub mod peer_manager;
 
 async fn prepare_direct_connection_to_peer(
     channels: SenderPool,
@@ -275,8 +74,6 @@ pub async fn run(
     listener: TcpListener,
     shutdown: impl Future,
     sse_tx: Sender<PeerResponse>,
-    server_request_tx: Sender<ServerRequest>,
-    peer_listener_rx: Receiver<PeerConnectionRequest>,
     db: Database,
     channels: SenderPool,
     search_limit: SearchLimit,
@@ -303,12 +100,10 @@ pub async fn run(
         shutdown_complete_rx,
         shutdown_helper,
         search_limit: search_limit.clone(),
-        server_request_tx,
     };
 
     tokio::select! {
         res = server.run(
-            peer_listener_rx,
             ready_tx.clone(),
             search_limit.clone(),
         ) => {

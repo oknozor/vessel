@@ -1,15 +1,20 @@
-use tokio::sync::mpsc;
-use tokio::sync::mpsc::{Receiver, Sender};
-use soulseek_protocol::peers::p2p::response::PeerResponse;
-use soulseek_protocol::server::peer::Peer;
-use soulseek_protocol::server::request::ServerRequest;
-use vessel_database::Database;
-use vessel_database::entity::peer::PeerEntity;
+use crate::peers::handler::{connect_direct, PeerHandler};
 use crate::{SearchLimit, SenderPool, ShutdownHelper, TryFutureExt};
 use eyre::Result;
 use soulseek_protocol::message_common::ConnectionType;
-use crate::peer_connection_manager::{prepare_direct_connection_to_peer_with_fallback, request_indirect_connection};
-use crate::peers::handler::connect_direct;
+use soulseek_protocol::peers::p2p::response::PeerResponse;
+use soulseek_protocol::server::peer::{Peer, RequestConnectionToPeer};
+use soulseek_protocol::server::request::ServerRequest;
+use tokio::sync::mpsc;
+use tokio::sync::mpsc::{Receiver, Sender};
+use rand::random;
+use tokio::time::timeout;
+use std::time::Duration;
+use tokio::net::TcpStream;
+use vessel_database::entity::peer::PeerEntity;
+use vessel_database::Database;
+use crate::peers::connection::PeerConnection;
+use crate::peers::shutdown::Shutdown;
 
 pub const MAX_PARENT: usize = 1;
 
@@ -54,7 +59,7 @@ impl DistributedConnectionManager {
                         ConnectionType::DistributedNetwork,
                         self.search_limit.clone(),
                     )
-                        .await?;
+                    .await?;
                 }
             }
         }
@@ -97,19 +102,81 @@ pub(crate) async fn connect_to_peer_with_fallback(
         database,
         search_limit.clone(),
     )
-        .and_then(|handler| connect_direct(handler, conn_type))
-        .or_else(|e| {
-            warn!(
+    .and_then(|handler| connect_direct(handler, conn_type))
+    .or_else(|e| {
+        warn!(
             "Direct connection to peer {:?} failed,  cause = {}",
             peer, e
         );
 
-            request_indirect_connection(
-                request_peer_connection_tx.clone(),
-                channels.clone(),
-                peer,
-                conn_type,
-            )
-        })
+        request_indirect_connection(
+            request_peer_connection_tx.clone(),
+            channels.clone(),
+            peer,
+            conn_type,
+        )
+    })
+    .await
+}
+
+// We were unable to connect to the peer, we are now asking the server
+// to dispatch a connection request and expect a PierceFirewall message
+// before upgrading the connection
+async fn request_indirect_connection(
+    request_peer_connection_tx: Sender<ServerRequest>,
+    mut channels: SenderPool,
+    peer: &PeerEntity,
+    conn_type: ConnectionType,
+) -> Result<()> {
+    let token = random();
+
+    // Save the channel state so we can later create the handler with the correct connection type
+    channels.insert_indirect_connection_expected(&peer.username, conn_type, token);
+
+    info!("Falling back to indirect connection with token {}", token);
+
+    let server_request_sender = request_peer_connection_tx.clone();
+    server_request_sender
+        .send(ServerRequest::ConnectToPeer(RequestConnectionToPeer {
+            token,
+            username: peer.username.clone(),
+            connection_type: conn_type,
+        }))
         .await
+        .map_err(|err| eyre!("Error sending connect to peer request {}", err))
+}
+
+async fn prepare_direct_connection_to_peer_with_fallback(
+    channels: SenderPool,
+    sse_tx: mpsc::Sender<PeerResponse>,
+    ready_tx: mpsc::Sender<u32>,
+    shutdown_helper: ShutdownHelper,
+    peer: PeerEntity,
+    db: Database,
+    search_limit: SearchLimit,
+) -> Result<PeerHandler> {
+    let address = peer.get_address();
+    let username = peer.username;
+
+    match timeout(Duration::from_secs(1), TcpStream::connect(address)).await {
+        Ok(Ok(socket)) => Ok(PeerHandler {
+            peer_username: Some(username),
+            connection: PeerConnection::new(socket),
+            sse_tx: sse_tx.clone(),
+            ready_tx,
+            shutdown: Shutdown::new(shutdown_helper.notify_shutdown.subscribe()),
+            limit_connections: shutdown_helper.limit_connections.clone(),
+            limit_search: search_limit.clone(),
+            _shutdown_complete: shutdown_helper.shutdown_complete_tx.clone(),
+            connection_states: channels,
+            db,
+            address,
+        }),
+        Ok(Err(e)) => Err(eyre!(
+            "Error in direct connection to peer {:?}, cause = {}",
+            username,
+            e
+        )),
+        Err(e) => Err(e.into()),
+    }
 }

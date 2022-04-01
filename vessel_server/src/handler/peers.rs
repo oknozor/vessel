@@ -1,46 +1,41 @@
-use tokio::sync::mpsc::{Receiver, Sender};
-use tokio::sync::mpsc;
-use soulseek_protocol::peers::p2p::response::PeerResponse;
-use vessel_database::Database;
-use crate::peer_connection_manager::connection::PeerConnectionListener;
-use crate::peer_connection_manager::ShutdownHelper;
+use super::MAX_CONNECTIONS;
+use crate::handler::connection::PeerConnectionListener;
+use crate::handler::ShutdownHelper;
 use crate::peers::connection::PeerConnection;
 use crate::peers::handler::PeerHandler;
 use crate::peers::shutdown::Shutdown;
 use crate::state_manager::channel_manager::SenderPool;
 use crate::state_manager::search_limit::SearchLimit;
+use soulseek_protocol::peers::p2p::response::PeerResponse;
 use soulseek_protocol::SlskError;
-use super::MAX_CONNECTIONS;
+use tokio::sync::mpsc;
+use tokio::sync::mpsc::{Receiver, Sender};
+use vessel_database::Database;
 
 pub struct PeerConnectionManager {
-    pub peer_listener: PeerConnectionListener,
+    pub listener: PeerConnectionListener,
     pub sse_tx: Sender<PeerResponse>,
     pub db: Database,
     pub channels: SenderPool,
     pub shutdown_complete_rx: Receiver<()>,
     pub shutdown_helper: ShutdownHelper,
     pub search_limit: SearchLimit,
+    pub ready_tx: Sender<u32>,
 }
 
 impl PeerConnectionManager {
-    pub async fn run(
-        &mut self,
-        ready_tx: Sender<u32>,
-        search_limit: SearchLimit
-    ) -> crate::Result<()> {
-        let sse_tx = self.sse_tx.clone();
-        let channels = self.channels.clone();
-        let db = self.db.clone();
+    pub async fn run(&mut self, mut logged_in_rx: Receiver<()>) -> crate::Result<()> {
+        while logged_in_rx.recv().await.is_none() {
+            // Wait for soulseek login
+        }
 
-        let _ = tokio::join!(
-            self.accept_peer_connection(
-                sse_tx.clone(),
-                ready_tx.clone(),
-                channels.clone(),
-                db.clone(),
-                search_limit.clone()
-            ),
-        );
+        let _ = tokio::join!(self.accept_peer_connection(
+            self.sse_tx.clone(),
+            self.ready_tx.clone(),
+            self.channels.clone(),
+            self.db.clone(),
+            self.search_limit.clone()
+        ),);
 
         Ok(())
     }
@@ -57,7 +52,7 @@ impl PeerConnectionManager {
             info!("Accepting inbound connections");
 
             loop {
-                match self.peer_listener.accept().await {
+                match self.listener.accept().await {
                     Ok(socket) => {
                         self.shutdown_helper
                             .limit_connections
@@ -84,9 +79,7 @@ impl PeerConnectionManager {
                             connection: PeerConnection::new(socket),
                             sse_tx: sse_tx.clone(),
                             ready_tx: ready_tx.clone(),
-                            shutdown: Shutdown::new(
-                                self.shutdown_helper.notify_shutdown.subscribe(),
-                            ),
+                            shutdown: Shutdown::new(self.shutdown_helper.notify_shutdown.subscribe()),
                             limit_connections: self.shutdown_helper.limit_connections.clone(),
                             limit_search: search_limit.clone(),
                             _shutdown_complete: self.shutdown_helper.shutdown_complete_tx.clone(),

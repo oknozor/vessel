@@ -1,6 +1,9 @@
+use std::fmt::Debug;
 use std::time::Duration;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::time;
+
+const PEER_LISTENER_ADDRESS: &str = "0.0.0.0:2255";
 
 /// Server listener state. Created in the `run` call. It includes a `run` method
 /// which performs the TCP listening and initialization of per-connection state.
@@ -11,6 +14,13 @@ pub struct PeerConnectionListener {
 }
 
 impl PeerConnectionListener {
+    pub async fn new() -> Self {
+        PeerConnectionListener {
+            listener: TcpListener::bind(PEER_LISTENER_ADDRESS)
+                .await
+                .expect("Failed to start peer listener"),
+        }
+    }
     /// Accept an inbound connection.
     ///
     /// Errors are handled by backing off and retrying. An exponential backoff

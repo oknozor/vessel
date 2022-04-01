@@ -8,12 +8,19 @@ extern crate tracing;
 extern crate eyre;
 
 use std::sync::Arc;
-use tokio::{net::TcpListener, sync::mpsc};
+use tokio::sync::mpsc;
 use tracing_subscriber::fmt::format::FmtSpan;
 
+use crate::handler::connection::PeerConnectionListener;
+use crate::handler::distributed::DistributedConnectionManager;
+use crate::handler::indirect_connection::IndirectConnectionRequestHandler;
+use crate::handler::peers::PeerConnectionManager;
+use crate::handler::{ShutdownHelper, MAX_CONNECTIONS};
+use crate::dispatcher::peer_message_dispatcher::Dispatcher;
+use crate::slsk::SoulseekServerListener;
 use eyre::Result;
 use futures::TryFutureExt;
-use tokio::sync::Semaphore;
+use soulseek_protocol::server::login::LoginRequest;
 use soulseek_protocol::{
     peers::{p2p::response::PeerResponse, PeerRequestPacket},
     server::{
@@ -22,20 +29,13 @@ use soulseek_protocol::{
         response::ServerResponse,
     },
 };
-use soulseek_protocol::server::login::LoginRequest;
 use state_manager::channel_manager::SenderPool;
 use state_manager::search_limit::SearchLimit;
+use tokio::sync::Semaphore;
 use vessel_database::Database;
-use crate::peer_connection_manager::{MAX_CONNECTIONS, ShutdownHelper};
-use crate::peer_connection_manager::distributed::DistributedConnectionManager;
-use crate::peer_connection_manager::indirect_connection::IndirectConnectionRequestHandler;
-use crate::peer_message_dispatcher::peer_message_dispatcher::Dispatcher;
-use crate::slsk::SoulseekServerListener;
 
-const PEER_LISTENER_ADDRESS: &str = "0.0.0.0:2255";
-
-mod peer_connection_manager;
-mod peer_message_dispatcher;
+mod handler;
+mod dispatcher;
 mod peers;
 mod slsk;
 mod state_manager;
@@ -115,13 +115,11 @@ async fn main() -> Result<()> {
     let username = &vessel_database::settings::CONFIG.username;
     let password = &vessel_database::settings::CONFIG.password;
 
-    let login =
-        login_sender.send(ServerRequest::Login(LoginRequest::new(username, password)))
+    let login = login_sender
+        .send(ServerRequest::Login(LoginRequest::new(username, password)))
         .and_then(|_| listen_port_sender.send(ServerRequest::SetListenPort(2255)))
         .and_then(|_| parent_request_sender.send(ServerRequest::NoParents(true)))
         .and_then(|_| join_nicotine_room.send(ServerRequest::JoinRoom("nicotine".to_string())));
-
-    let listener = TcpListener::bind(PEER_LISTENER_ADDRESS).await?;
 
     let channels = SenderPool::new(download_progress_tx);
 
@@ -132,8 +130,7 @@ async fn main() -> Result<()> {
     let shutdown_helper = ShutdownHelper {
         notify_shutdown,
         shutdown_complete_tx,
-        limit_connections: Arc::new(Semaphore::new(MAX_CONNECTIONS))
-        ,
+        limit_connections: Arc::new(Semaphore::new(MAX_CONNECTIONS)),
     };
 
     let mut indirect_connection_manager = IndirectConnectionRequestHandler {
@@ -172,22 +169,20 @@ async fn main() -> Result<()> {
         search_limit: search_limit.clone(),
     };
 
-    // Listen for peer connection
-    let peer_listener = crate::peer_connection_manager::run(
-        listener,
-        tokio::signal::ctrl_c(),
-        sse_peer_tx,
-        database.clone(),
-        channels.clone(),
-        search_limit.clone(),
-        ready_tx.clone(),
-        logged_in_rx,
-        shutdown_helper.clone(),
-        shutdown_complete_rx
-    );
+    let mut peer_connection_manager = PeerConnectionManager {
+        listener: PeerConnectionListener::new().await,
+        sse_tx: sse_peer_tx,
+        db: database,
+        channels,
+        shutdown_complete_rx,
+        shutdown_helper,
+        search_limit,
+        ready_tx,
+    };
 
     // Wraps everything with tokio::join so we don't block on servers startup
     let _ = join!(
+        peer_connection_manager.run(logged_in_rx),
         indirect_connection_manager.run(),
         distributed_connection_manager.run(),
         dispatcher.run(),
@@ -195,7 +190,6 @@ async fn main() -> Result<()> {
         http_server,
         soulseek_server_listener.listen(),
         login,
-        peer_listener
     );
 
     // TODO : gracefull shutdown

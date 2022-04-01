@@ -19,7 +19,7 @@ impl Broadcaster {
     pub(crate) fn on_sse_event_received(
         &self,
     ) -> impl Stream<Item = Result<Event, Infallible>> + Send + 'static {
-        let client = Client::new(&self);
+        let client = Client::new(self);
         client.map(|msg| msg)
     }
 
@@ -91,7 +91,7 @@ impl Broadcaster {
                 };
 
                 let data = serde_json::to_string(&message).expect("Serialization error");
-                broadcaster.send_message_to_clients(&event, &data);
+                broadcaster.send_message_to_clients(event, &data);
             }
         })
     }

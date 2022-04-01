@@ -1,5 +1,5 @@
 use crate::peers::connection::PeerConnection;
-use crate::peers::handler::{connect_direct, pierce_firewall, PeerHandler};
+use crate::peers::handler::{pierce_firewall, PeerHandler};
 use crate::peers::shutdown::Shutdown;
 use crate::state_manager::channel_manager::SenderPool;
 use crate::state_manager::search_limit::SearchLimit;
@@ -10,7 +10,7 @@ use rand::random;
 use soulseek_protocol::message_common::ConnectionType;
 use soulseek_protocol::peers::p2p::response::PeerResponse;
 use soulseek_protocol::server::peer::{
-    Peer, PeerConnectionRequest, PeerConnectionTicket, RequestConnectionToPeer,
+    PeerConnectionRequest, PeerConnectionTicket, RequestConnectionToPeer,
 };
 use soulseek_protocol::server::request::ServerRequest;
 use soulseek_protocol::SlskError;
@@ -29,7 +29,13 @@ mod connection;
 
 /// TODO : Make this value configurable
 pub const MAX_CONNECTIONS: usize = 10_000;
-pub const MAX_PARENT: usize = 1;
+
+pub mod distributed;
+pub mod peer_to_peer;
+
+pub trait ConnectionManager {
+
+}
 
 pub struct PeerConnectionManager {
     pub peer_listener: PeerConnectionListener,
@@ -46,7 +52,6 @@ impl PeerConnectionManager {
     pub async fn run(
         &mut self,
         peer_listener_rx: Receiver<PeerConnectionRequest>,
-        mut possible_parent_rx: Receiver<Vec<Peer>>,
         ready_tx: Sender<u32>,
         search_limit: SearchLimit
     ) -> crate::Result<()> {
@@ -74,16 +79,6 @@ impl PeerConnectionManager {
                 db.clone(),
                 search_limit.clone()
             ),
-            connect_to_parents(
-                server_request_tx,
-                sse_tx,
-                ready_tx,
-                channels,
-                shutdown_helper.clone(),
-                &mut possible_parent_rx,
-                db,
-                search_limit
-            )
         );
 
         Ok(())
@@ -240,50 +235,6 @@ async fn listen_indirect_peer_connection_request(
     Ok(())
 }
 
-async fn connect_to_parents(
-    request_peer_connection_tx: mpsc::Sender<ServerRequest>,
-    sse_tx: mpsc::Sender<PeerResponse>,
-    ready_tx: mpsc::Sender<u32>,
-    channels: SenderPool,
-    shutdown_helper: ShutdownHelper,
-    possible_parent_rx: &mut Receiver<Vec<Peer>>,
-    database: Database,
-    search_limit: SearchLimit,
-) -> Result<()> {
-    loop {
-        while let Some(parents) = possible_parent_rx.recv().await {
-            for parent in parents {
-                let parent = PeerEntity::from(parent);
-                let parent_count = channels.get_parent_count();
-                debug!("Connected to {}/{} parents", parent_count, MAX_PARENT);
-
-                if parent_count >= MAX_PARENT {
-                    info!("Max parent count reached");
-                    let server_request_sender = request_peer_connection_tx.clone();
-                    server_request_sender
-                        .send(ServerRequest::NoParents(false))
-                        .await?;
-
-                    return Ok(());
-                };
-
-                connect_to_peer_with_fallback(
-                    request_peer_connection_tx.clone(),
-                    sse_tx.clone(),
-                    ready_tx.clone(),
-                    channels.clone(),
-                    shutdown_helper.clone(),
-                    database.clone(),
-                    &parent,
-                    ConnectionType::DistributedNetwork,
-                    search_limit.clone(),
-                )
-                .await?;
-            }
-        }
-    }
-}
-
 async fn prepare_direct_connection_to_peer(
     channels: SenderPool,
     sse_tx: mpsc::Sender<PeerResponse>,
@@ -326,7 +277,6 @@ pub async fn run(
     sse_tx: Sender<PeerResponse>,
     server_request_tx: Sender<ServerRequest>,
     peer_listener_rx: Receiver<PeerConnectionRequest>,
-    possible_parent_rx: Receiver<Vec<Peer>>,
     db: Database,
     channels: SenderPool,
     search_limit: SearchLimit,
@@ -359,7 +309,6 @@ pub async fn run(
     tokio::select! {
         res = server.run(
             peer_listener_rx,
-            possible_parent_rx,
             ready_tx.clone(),
             search_limit.clone(),
         ) => {
@@ -398,59 +347,6 @@ pub struct ShutdownHelper {
     pub notify_shutdown: broadcast::Sender<()>,
     pub shutdown_complete_tx: mpsc::Sender<()>,
     pub limit_connections: Arc<Semaphore>,
-}
-
-/// Try to connect directly to a peer and fallback to indirect connection
-/// if direct connection fails.
-pub(crate) async fn connect_to_peer_with_fallback(
-    request_peer_connection_tx: Sender<ServerRequest>,
-    sse_tx: Sender<PeerResponse>,
-    ready_tx: Sender<u32>,
-    channels: SenderPool,
-    shutdown_helper: ShutdownHelper,
-    database: Database,
-    peer: &PeerEntity,
-    conn_type: ConnectionType,
-    search_limit: SearchLimit,
-) -> Result<()> {
-    shutdown_helper
-        .limit_connections
-        .acquire()
-        .await
-        .unwrap()
-        .forget();
-
-    debug!(
-        "Available permit : {:?}",
-        shutdown_helper.limit_connections.available_permits()
-    );
-
-    debug!("Trying direct {:?} connection to : {:?}", conn_type, peer);
-
-    prepare_direct_connection_to_peer_with_fallback(
-        channels.clone(),
-        sse_tx.clone(),
-        ready_tx.clone(),
-        shutdown_helper.clone(),
-        peer.clone(),
-        database,
-        search_limit.clone(),
-    )
-    .and_then(|handler| connect_direct(handler, conn_type))
-    .or_else(|e| {
-        warn!(
-            "Direct connection to peer {:?} failed,  cause = {}",
-            peer, e
-        );
-
-        request_indirect_connection(
-            request_peer_connection_tx.clone(),
-            channels.clone(),
-            peer,
-            conn_type,
-        )
-    })
-    .await
 }
 
 // We were unable to connect to the peer, we are now asking the server

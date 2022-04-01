@@ -24,7 +24,7 @@ pub fn routes(
 
     let peer_address = warp::path!("users" / String / "address")
         .and(warp::get())
-        .and(with_sender(sender.clone()))
+        .and(with_sender(sender))
         .and_then(get_peer_address_handler);
 
     all_connected_users.or(user_status).or(peer_address)

@@ -34,7 +34,7 @@ impl Default for Database {
             inner: sled::open("vessel_db").unwrap(),
         };
 
-        *UPLOAD_QUEUE.lock().unwrap() = db.get_all::<UploadEntity>().iter().count() as u32;
+        *UPLOAD_QUEUE.lock().unwrap() = db.get_all::<UploadEntity>().len() as u32;
 
         db
     }

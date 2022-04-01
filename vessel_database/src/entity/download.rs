@@ -28,7 +28,7 @@ impl Entity for DownloadEntity {
 
 impl From<(String, &TransferRequest)> for DownloadEntity {
     fn from((user, request): (String, &TransferRequest)) -> Self {
-        let file_name = request.file_name.replace("\\", "/");
+        let file_name = request.file_name.replace('\\', "/");
         let file_name = Path::new(&file_name)
             .file_name()
             .unwrap()

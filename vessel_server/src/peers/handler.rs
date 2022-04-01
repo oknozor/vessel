@@ -286,7 +286,7 @@ impl PeerHandler {
                 // Token = 0 indicate an incoming search reply
                 if *token != 0 {
                     self.connection_states
-                        .peer_init(&username, *connection_type, *token, tx);
+                        .peer_init(username, *connection_type, *token, tx);
                 };
 
                 self.connection.token = Some(*token);

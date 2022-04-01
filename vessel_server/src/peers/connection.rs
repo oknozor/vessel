@@ -157,7 +157,7 @@ impl PeerConnection {
             let file_name = &entry.file_name;
             // Fixme : replace path before download
             info!("starting to download {} from {}", file_name, user_name);
-            let file_name = file_name.replace("\\", "/");
+            let file_name = file_name.replace('\\', "/");
             let file_path = Path::new(&file_name).file_name().expect("File name error");
             let mut download_path =
                 PathBuf::from(&vessel_database::settings::CONFIG.download_folder);

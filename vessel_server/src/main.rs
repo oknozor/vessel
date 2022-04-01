@@ -27,6 +27,7 @@ use state_manager::channel_manager::SenderPool;
 use state_manager::search_limit::SearchLimit;
 use vessel_database::Database;
 use crate::peer_connection_manager::{MAX_CONNECTIONS, ShutdownHelper};
+use crate::peer_connection_manager::distributed::DistributedConnectionManager;
 use crate::peer_message_dispatcher::peer_message_dispatcher::Dispatcher;
 use crate::slsk::SoulseekServerListener;
 
@@ -134,6 +135,17 @@ async fn main() -> Result<()> {
         ,
     };
 
+    let mut distributed_connection_manager = DistributedConnectionManager {
+        request_peer_connection_tx: request_peer_connection_tx.clone(),
+        sse_tx: sse_peer_tx.clone(),
+        ready_tx: ready_tx.clone(),
+        channels: channels.clone(),
+        shutdown_helper: shutdown_helper.clone(),
+        possible_parent_rx,
+        database: database.clone(),
+        search_limit: search_limit.clone(),
+    };
+
     let mut dispatcher = Dispatcher {
         ready_rx,
         queue_rx: peer_request_rx,
@@ -155,7 +167,6 @@ async fn main() -> Result<()> {
         sse_peer_tx,
         request_peer_connection_tx,
         peer_listener_rx,
-        possible_parent_rx,
         database.clone(),
         channels.clone(),
         search_limit.clone(),
@@ -167,6 +178,7 @@ async fn main() -> Result<()> {
 
     // Wraps everything with tokio::join so we don't block on servers startup
     let _ = join!(
+        distributed_connection_manager.run(),
         dispatcher.run(),
         sse_server,
         http_server,

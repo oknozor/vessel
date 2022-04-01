@@ -15,7 +15,7 @@ pub fn route(
 
     let get_uploads = warp::path!("uploads")
         .and(warp::get())
-        .and(with_db(db.clone()))
+        .and(with_db(db))
         .and_then(get_uploads_handler);
 
     get_downloads.or(get_uploads)

@@ -7,10 +7,13 @@ extern crate tracing;
 #[macro_use]
 extern crate eyre;
 
+use std::sync::Arc;
 use tokio::{net::TcpListener, sync::mpsc};
 use tracing_subscriber::fmt::format::FmtSpan;
 
 use eyre::Result;
+use futures::TryFutureExt;
+use tokio::sync::Semaphore;
 use soulseek_protocol::{
     peers::{p2p::response::PeerResponse, PeerRequestPacket},
     server::{
@@ -19,11 +22,13 @@ use soulseek_protocol::{
         response::ServerResponse,
     },
 };
+use soulseek_protocol::server::login::LoginRequest;
 use state_manager::channel_manager::SenderPool;
 use state_manager::search_limit::SearchLimit;
-use task::soulseek::spawn_server_listener_task;
-use task::{http, login, sse};
 use vessel_database::Database;
+use crate::peer_connection_manager::{MAX_CONNECTIONS, ShutdownHelper};
+use crate::peer_message_dispatcher::peer_message_dispatcher::Dispatcher;
+use crate::slsk::SoulseekServerListener;
 
 const PEER_LISTENER_ADDRESS: &str = "0.0.0.0:2255";
 
@@ -32,7 +37,6 @@ mod peer_message_dispatcher;
 mod peers;
 mod slsk;
 mod state_manager;
-mod task;
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 10)]
 // #[tokio::main(flavor = "current_thread")]
@@ -80,7 +84,7 @@ async fn main() -> Result<()> {
     let database = Database::default();
     let search_limit = SearchLimit::new();
     // listen for incoming client commands and forward soulseek message to the sse service
-    let soulseek_server_listener = spawn_server_listener_task(
+    let mut soulseek_server_listener = SoulseekServerListener {
         http_rx,
         sse_tx,
         peer_listener_tx,
@@ -89,47 +93,84 @@ async fn main() -> Result<()> {
         connection,
         logged_in_tx,
         peer_address_tx,
-        search_limit.clone(),
-    );
+        search_limit: search_limit.clone(),
+    };
 
     // Start the warp SSE server with a soulseek mpsc event receiver
     // this task will proxy soulseek events to the web clients
-    let sse_server = sse::spawn_sse_server(sse_rx, sse_peer_rx, download_progress_rx);
+    let sse_server = vessel_sse::start_sse_listener(sse_rx, sse_peer_rx, download_progress_rx);
 
     // Start the HTTP api proxy with the soulseek mpsc event sender
     // Here we are only sending request via HTTP and expect no other response
     // than 201/NO_CONTENT
-    let http_server =
-        http::spawn_http_listener(http_tx, peer_message_dispatcher_tx, database.clone());
+    let http_server = vessel_http::start(http_tx, peer_message_dispatcher_tx, database.clone());
 
     // Once every thing is ready we need to login before talking to the soulseek server
     // Vessel support one and only one user connection, credentials are retrieved from vessel configuration
-    let login = login::spawn_login_task(login_sender);
+    let listen_port_sender = login_sender.clone();
+    let parent_request_sender = login_sender.clone();
+    let join_nicotine_room = login_sender.clone();
+    let username = &vessel_database::settings::CONFIG.username;
+    let password = &vessel_database::settings::CONFIG.password;
+
+    let login =
+        login_sender.send(ServerRequest::Login(LoginRequest::new(username, password)))
+        .and_then(|_| listen_port_sender.send(ServerRequest::SetListenPort(2255)))
+        .and_then(|_| parent_request_sender.send(ServerRequest::NoParents(true)))
+        .and_then(|_| join_nicotine_room.send(ServerRequest::JoinRoom("nicotine".to_string())));
 
     let listener = TcpListener::bind(PEER_LISTENER_ADDRESS).await?;
 
     let channels = SenderPool::new(download_progress_tx);
 
+    let (ready_tx, ready_rx) = mpsc::channel(32);
+
+    let (notify_shutdown, _) = tokio::sync::broadcast::channel(1);
+    let (shutdown_complete_tx, shutdown_complete_rx) = mpsc::channel(1);
+    let shutdown_helper = ShutdownHelper {
+        notify_shutdown,
+        shutdown_complete_tx,
+        limit_connections: Arc::new(Semaphore::new(MAX_CONNECTIONS))
+        ,
+    };
+
+    let mut dispatcher = Dispatcher {
+        ready_rx,
+        queue_rx: peer_request_rx,
+        peer_address_rx,
+        channels: channels.clone(),
+        db: database.clone(),
+        shutdown_helper: shutdown_helper.clone(),
+        sse_tx: sse_peer_tx.clone(),
+        ready_tx: ready_tx.clone(),
+        server_request_tx: request_peer_connection_tx.clone(),
+        message_queue: Default::default(),
+        search_limit: search_limit.clone(),
+    };
+
     // Listen for peer connection
-    let peer_listener = task::peers::spawn_peer_listener(
+    let peer_listener = crate::peer_connection_manager::run(
+        listener,
+        tokio::signal::ctrl_c(),
         sse_peer_tx,
         request_peer_connection_tx,
         peer_listener_rx,
         possible_parent_rx,
-        peer_request_rx,
-        peer_address_rx,
+        database.clone(),
+        channels.clone(),
+        search_limit.clone(),
+        ready_tx.clone(),
         logged_in_rx,
-        listener,
-        database,
-        channels,
-        search_limit,
+        shutdown_helper.clone(),
+        shutdown_complete_rx
     );
 
     // Wraps everything with tokio::join so we don't block on servers startup
     let _ = join!(
+        dispatcher.run(),
         sse_server,
         http_server,
-        soulseek_server_listener,
+        soulseek_server_listener.listen(),
         login,
         peer_listener
     );

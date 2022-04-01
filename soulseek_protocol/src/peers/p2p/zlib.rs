@@ -7,7 +7,7 @@ pub(crate) fn decompress(src: &mut Cursor<&[u8]>) -> std::io::Result<Vec<u8>> {
     // FIXME : 1032 is zlib max ratio
     let mut data = Vec::with_capacity(src.remaining() * 4096);
     let decompress_result =
-        Decompress::new(true).decompress_vec(&src.chunk(), &mut data, FlushDecompress::Sync);
+        Decompress::new(true).decompress_vec(src.chunk(), &mut data, FlushDecompress::Sync);
 
     match decompress_result {
         Ok(status) => {

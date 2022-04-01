@@ -34,7 +34,7 @@ impl ToBytes for AdminCommand {
         write_string(&self.string1, buffer).await?;
         buffer.write_u32_le(self.string2.len() as u32).await?;
         for s in &self.string2 {
-            write_string(&s, buffer).await?
+            write_string(s, buffer).await?
         }
         Ok(())
     }

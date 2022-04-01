@@ -1,4 +1,3 @@
-use crate::peer_message_dispatcher::peer_message_dispatcher::Dispatcher;
 use crate::peers::connection::PeerConnection;
 use crate::peers::handler::{connect_direct, pierce_firewall, PeerHandler};
 use crate::peers::shutdown::Shutdown;
@@ -10,9 +9,8 @@ use futures::TryFutureExt;
 use rand::random;
 use soulseek_protocol::message_common::ConnectionType;
 use soulseek_protocol::peers::p2p::response::PeerResponse;
-use soulseek_protocol::peers::PeerRequestPacket;
 use soulseek_protocol::server::peer::{
-    Peer, PeerAddress, PeerConnectionRequest, PeerConnectionTicket, RequestConnectionToPeer,
+    Peer, PeerConnectionRequest, PeerConnectionTicket, RequestConnectionToPeer,
 };
 use soulseek_protocol::server::request::ServerRequest;
 use soulseek_protocol::SlskError;
@@ -49,34 +47,16 @@ impl PeerConnectionManager {
         &mut self,
         peer_listener_rx: Receiver<PeerConnectionRequest>,
         mut possible_parent_rx: Receiver<Vec<Peer>>,
-        peer_request_rx: Receiver<(String, PeerRequestPacket)>,
-        peer_address_rx: Receiver<PeerAddress>,
+        ready_tx: Sender<u32>,
+        search_limit: SearchLimit
     ) -> crate::Result<()> {
         let server_request_tx = self.server_request_tx.clone();
         let sse_tx = self.sse_tx.clone();
         let channels = self.channels.clone();
         let db = self.db.clone();
-        let (ready_tx, ready_rx) = mpsc::channel(32);
         let shutdown_helper = self.shutdown_helper.clone();
 
-        let mut dispatcher = Dispatcher {
-            ready_rx,
-            queue_rx: peer_request_rx,
-            peer_address_rx,
-            channels: channels.clone(),
-            db: db.clone(),
-            shutdown_helper: shutdown_helper.clone(),
-            sse_tx: sse_tx.clone(),
-            ready_tx: ready_tx.clone(),
-            server_request_tx: server_request_tx.clone(),
-            message_queue: Default::default(),
-            search_limit: self.search_limit.clone(),
-        };
-
-        let search_limit = self.search_limit.clone();
-
         let _ = tokio::join!(
-            dispatcher.run(),
             listen_indirect_peer_connection_request(
                 server_request_tx.clone(),
                 peer_listener_rx,
@@ -347,25 +327,20 @@ pub async fn run(
     server_request_tx: Sender<ServerRequest>,
     peer_listener_rx: Receiver<PeerConnectionRequest>,
     possible_parent_rx: Receiver<Vec<Peer>>,
-    peer_request_rx: Receiver<(String, PeerRequestPacket)>,
-    peer_address_rx: Receiver<PeerAddress>,
     db: Database,
     channels: SenderPool,
     search_limit: SearchLimit,
+    ready_tx: Sender<u32>,
+    mut logged_in_rx: Receiver<()>,
+    shutdown_helper: ShutdownHelper,
+    shutdown_complete_rx: Receiver<()>
 ) -> crate::Result<()> {
     debug!("Waiting for user to be logged in");
+    while logged_in_rx.recv().await.is_none() {
+        // Wait for soulseek login
+    }
 
     info!("User logged in, starting peer listener");
-
-    let (notify_shutdown, _) = broadcast::channel(1);
-    let (shutdown_complete_tx, shutdown_complete_rx) = mpsc::channel(1);
-
-    let connection_limit = Arc::new(Semaphore::new(MAX_CONNECTIONS));
-    let shutdown_helper = ShutdownHelper {
-        notify_shutdown,
-        shutdown_complete_tx,
-        limit_connections: connection_limit.clone(),
-    };
 
     // Initialize the listener state
     let peer_listener = PeerConnectionListener { listener };
@@ -385,8 +360,8 @@ pub async fn run(
         res = server.run(
             peer_listener_rx,
             possible_parent_rx,
-            peer_request_rx,
-            peer_address_rx,
+            ready_tx.clone(),
+            search_limit.clone(),
         ) => {
             if let Err(err) = res {
                 error!(cause = %err, "failed to accept");

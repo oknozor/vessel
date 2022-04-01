@@ -53,7 +53,7 @@ pub(crate) async fn write_string(
 ) -> tokio::io::Result<()> {
     let bytes = src.as_bytes();
     buffer.write_u32_le(bytes.len() as u32).await?;
-    buffer.write(bytes).await?;
+    buffer.write_all(bytes).await?;
     Ok(())
 }
 

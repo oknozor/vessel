@@ -1,4 +1,5 @@
 use std::{net::SocketAddr, sync::Arc};
+use std::time::Duration;
 
 use eyre::Result;
 use rand::random;
@@ -79,6 +80,16 @@ pub(crate) async fn pierce_firewall(mut handler: PeerHandler, token: u32) -> Res
 }
 
 impl PeerHandler {
+    pub (crate) async fn listen_with_timeout(&mut self, rx: Receiver<PeerRequestPacket>) -> Result<()> {
+        let duration = Duration::from_millis(1000);
+        match tokio::time::timeout(duration, self.listen(rx)).await {
+            Ok(result) => result,
+            Err(result) => {
+                error!("Connection {:?} timed out: {:?}", self.connection.token, result);
+                Ok(())
+            }
+        }
+    }
     pub(crate) async fn listen(&mut self, handler_rx: Receiver<PeerRequestPacket>) -> Result<()> {
         debug!("{:?}", self.connection_type());
 
@@ -112,6 +123,7 @@ impl PeerHandler {
         &mut self,
         mut handler_rx: Receiver<PeerRequestPacket>,
     ) -> Result<()> {
+
         while !self.shutdown.is_shutdown() {
             tokio::select! {
                 response = self.connection.read_message::<PeerResponse>() =>  {
@@ -200,11 +212,11 @@ impl PeerHandler {
         let username = &self.peer_username.as_ref().unwrap();
         let connection_type = self.connection_type();
         self.connection_states
-            .peer_init(username, connection_type, token, tx);
+            .on_peer_init_received(username, connection_type, token, tx);
         self.connection.token = Some(token);
         self.connection.connection_type = conn_type;
         self.ready_tx.send(token).await?;
-        self.listen(rx).await
+        self.listen_with_timeout(rx).await
     }
 
     pub(crate) async fn pierce_firewall(&mut self, token: u32) -> Result<()> {
@@ -221,7 +233,7 @@ impl PeerHandler {
 
         self.ready_tx.send(token).await?;
 
-        self.listen(rx).await
+        self.listen_with_timeout(rx).await
     }
 
     pub(crate) async fn wait_for_connection_handshake(&mut self) -> Result<()> {
@@ -230,7 +242,7 @@ impl PeerHandler {
             .read_message::<PeerConnectionMessage>()
             .await?;
         let rx = self.handle_connection_message(&message).await?;
-        self.listen(rx).await
+        self.listen_with_timeout(rx).await
     }
 
     async fn handle_peer_message(&mut self, message: &PeerResponse) -> tokio::io::Result<()> {
@@ -286,7 +298,7 @@ impl PeerHandler {
                 // Token = 0 indicate an incoming search reply
                 if *token != 0 {
                     self.connection_states
-                        .peer_init(username, *connection_type, *token, tx);
+                        .on_peer_init_received(username, *connection_type, *token, tx);
                 };
 
                 self.connection.token = Some(*token);

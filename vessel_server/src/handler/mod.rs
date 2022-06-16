@@ -2,7 +2,7 @@ use std::sync::Arc;
 use tokio::sync::{broadcast, mpsc, Semaphore};
 
 /// TODO : Make this value configurable
-pub const MAX_CONNECTIONS: usize = 10_000;
+pub const MAX_CONNECTIONS: usize = 500;
 
 pub mod connection;
 pub mod distributed;

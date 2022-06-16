@@ -55,7 +55,7 @@ impl SenderPool {
             .count()
     }
 
-    pub fn peer_init(
+    pub fn on_peer_init_received(
         &mut self,
         username: &str,
         conn_type: ConnectionType,

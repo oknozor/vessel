@@ -95,7 +95,7 @@ impl ToBytes for PeerConnectionMessage {
                 buffer
                     .write_u8(ConnectionMessageCode::PeerInit as u8)
                     .await?;
-                write_string(&username, buffer).await?;
+                write_string(username, buffer).await?;
                 write_string(connection_type.as_ref(), buffer).await?;
 
                 buffer.write_u32_le(*token).await?;

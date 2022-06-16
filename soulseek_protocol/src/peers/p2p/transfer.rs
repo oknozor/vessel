@@ -39,9 +39,10 @@ impl ToBytes for QueueUpload {
 
 #[derive(Debug, Serialize)]
 pub struct TransferRequest {
-    direction: u32,
+    // TODO : Make this an enum
+    pub direction: u32,
     pub ticket: u32,
-    pub filename: String,
+    pub file_name: String,
     pub file_size: Option<u64>,
 }
 
@@ -60,7 +61,7 @@ impl ParseBytes for TransferRequest {
         Ok(Self {
             direction,
             ticket,
-            filename,
+            file_name: filename,
             file_size,
         })
     }

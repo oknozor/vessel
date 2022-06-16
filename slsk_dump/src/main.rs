@@ -3,7 +3,6 @@ extern crate serde_derive;
 
 use anyhow::Result;
 use bytes::Buf;
-use serde::Serialize;
 use soulseek_protocol::server::MessageCode;
 use std::{
     io::{BufRead, BufReader, Cursor},

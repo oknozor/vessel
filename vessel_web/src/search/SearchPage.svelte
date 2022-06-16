@@ -1,72 +1,18 @@
 <script>
-    import ResultsTable from "../components/ResultsTable.svelte";
-    import {afterUpdate, onMount} from "svelte";
-    import {createDownloadProgressStore, createDownloadStore, createSearchStore} from "../createSearchStore";
+    import {createSearchStore} from "../createSearchStore";
+    import SearchResultElement from "./component/SearchResultElement.svelte";
 
-    let searchStore
-    let downloadStore
-    let downloadProgressStore
-
+    let searchStore = createSearchStore();
     let searchTerm = '';
-    let searchResults = [];
+    $: searchTicket = $searchStore.ticket;
+    $: result = $searchStore.items
 
-    let searchTicket;
-
-    onMount(() => {
-        searchStore = createSearchStore();
-        downloadStore = createDownloadStore();
-        downloadProgressStore = createDownloadProgressStore();
-
-        searchStore.subscribe(incomingMessages => {
-            // Ensure we get only search response for the current ticket
-            searchResults = incomingMessages.filter(message => {
-                console.debug("got search result with ticket :" + message.ticket);
-                return message.ticket === searchTicket
-            });
-        });
-
-        downloadStore.subscribe(downloadStarting => {
-            console.debug("Download started : ")
-            console.debug(downloadStarting)
-            let searchResultStartingDownload = searchResults.find(item => item.username === downloadStarting.user_name);
-
-            if (searchResultStartingDownload) {
-                searchResultStartingDownload.files.find(entry => entry.name === downloadStarting.file_name).ticket = downloadStarting.ticket
-                console.debug("Found matching search result: ")
-                console.debug(searchResultStartingDownload.files.find(entry => entry.name === downloadStarting.file_name));
-                searchResults = [... searchResults]
-            }
-        });
-
-        downloadProgressStore.subscribe(incomingMessages => {
-            let file = searchResults.map(userFiles => userFiles.files)
-                .flat()
-                .find(file => file.ticket === incomingMessages.ticket);
-
-            if (file) {
-                file.progress = incomingMessages.percent;
-                console.debug("Download progress ")
-                console.debug(file)
-                searchResults = [... searchResults]
-            }
-        });
-
-        return () => {
-            if (searchStore.readyState === 1) {
-                console.debug("Closing event source")
-                createSearchStore.close();
-            }
-        };
-    });
-
-    async function doSearch() {
+    const doSearch = async () => {
         console.debug("Issuing search request : \"" + searchTerm + "\"");
         let response = await fetch(`http://localhost:3030/search?term=${searchTerm}`);
         if (response.ok) { // if HTTP-status is 200-299
             let json = await response.json();
-            searchResults = []
-            searchTicket = json.ticket
-            console.debug("Now rendering search result for ticket : " + json.ticket)
+            searchStore.reset(json.ticket);
         } else {
             alert("HTTP-Error: " + response.status);
         }
@@ -87,8 +33,11 @@
     <button class="wishlist-btn">Wishlist</button>
 </div>
 
-<ResultsTable results={searchResults} searchTicket={searchTicket}/>
-
+<div class="flex flex-col">
+    {#each $searchStore.items as result}
+        <SearchResultElement {...result}/>
+    {/each}
+</div>
 <style>
     .search-input {
         box-sizing: border-box;

@@ -6,13 +6,17 @@ use bytes::Buf;
 use std::io::Cursor;
 use tokio::io::{AsyncWrite, BufWriter};
 
-type Rooms = Vec<(String, u32)>;
+#[derive(Debug, Serialize, Deserialize, Default)]
+pub struct Room {
+    pub name: String,
+    pub connected_users: u32,
+}
 
 #[derive(Debug, Serialize, Deserialize, Default)]
 pub struct RoomList {
-    rooms: Rooms,
-    owned_private_rooms: Rooms,
-    private_rooms: Rooms,
+    rooms: Vec<Room>,
+    owned_private_rooms: Vec<Room>,
+    private_rooms: Vec<Room>,
     operated_private_rooms: Vec<String>,
 }
 
@@ -40,7 +44,7 @@ impl ParseBytes for RoomList {
 }
 
 impl RoomList {
-    fn extract_room(src: &mut Cursor<&[u8]>) -> std::io::Result<Rooms> {
+    fn extract_room(src: &mut Cursor<&[u8]>) -> std::io::Result<Vec<Room>> {
         let number_of_rooms = src.get_u32_le();
         let mut rooms_names = Vec::with_capacity(number_of_rooms as usize);
 
@@ -49,15 +53,19 @@ impl RoomList {
         }
 
         let number_of_rooms = src.get_u32_le();
-        let mut user_per_room = Vec::with_capacity(number_of_rooms as usize);
+        let mut connected_users = Vec::with_capacity(number_of_rooms as usize);
 
         for _ in 0..number_of_rooms {
-            user_per_room.push(src.get_u32_le());
+            connected_users.push(src.get_u32_le());
         }
 
         Ok(rooms_names
             .into_iter()
-            .zip(user_per_room.into_iter())
+            .zip(connected_users.into_iter())
+            .map(|(name, connected_users)| Room {
+                name,
+                connected_users,
+            })
             .collect())
     }
 }

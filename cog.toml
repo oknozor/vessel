@@ -1,6 +1,12 @@
-changelog_path = "CHANGELOG.md"
+ignore_merge_commits = false
+branch_whitelist = []
 pre_bump_hooks = []
 post_bump_hooks = []
-authors = []
 
 [commit_types]
+
+[changelog]
+path = "CHANGELOG.md"
+authors = []
+
+[bump_profiles]

@@ -328,13 +328,13 @@ impl ToBytes for ServerRequest {
                 write_str_msg(username, MessageCode::GetPeerAddress, buffer).await
             }
             ServerRequest::AddUser(username) => {
-                write_str_msg(&username, MessageCode::AddUser, buffer).await
+                write_str_msg(username, MessageCode::AddUser, buffer).await
             }
             ServerRequest::RemoveUser(username) => {
-                write_str_msg(&username, MessageCode::RemoveUser, buffer).await
+                write_str_msg(username, MessageCode::RemoveUser, buffer).await
             }
             ServerRequest::GetUserStatus(username) => {
-                write_str_msg(&username, MessageCode::GetUserStatus, buffer).await
+                write_str_msg(username, MessageCode::GetUserStatus, buffer).await
             }
             ServerRequest::SendChatMessage(message) => message.write_to_buf(buffer).await,
             ServerRequest::JoinRoom(join_room) => {
@@ -350,7 +350,7 @@ impl ToBytes for ServerRequest {
                 write_empty_msg(MessageCode::StopPublicChat, buffer).await
             }
             ServerRequest::GetUserStats(username) => {
-                write_str_msg(&username, MessageCode::GetUserStats, buffer).await
+                write_str_msg(username, MessageCode::GetUserStats, buffer).await
             }
             ServerRequest::NoParents(value) => {
                 write_bool_msg(*value, MessageCode::HaveNoParents, buffer).await

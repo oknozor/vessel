@@ -1,4 +1,5 @@
 use std::{net::SocketAddr, sync::Arc};
+use std::time::Duration;
 
 use eyre::Result;
 use rand::random;
@@ -27,9 +28,10 @@ use vessel_database::entity::download::DownloadEntity;
 use vessel_database::entity::upload::UploadEntity;
 use vessel_database::Database;
 
-use crate::peers::{channels::SenderPool, connection::PeerConnection, shutdown::Shutdown};
+use crate::peers::{connection::PeerConnection, shutdown::Shutdown};
+use crate::state_manager::channel_manager::SenderPool;
+use crate::state_manager::search_limit::SearchLimit;
 
-#[derive(Debug)]
 pub struct PeerHandler {
     pub peer_username: Option<String>,
     pub(crate) connection: PeerConnection,
@@ -37,6 +39,7 @@ pub struct PeerHandler {
     pub(crate) ready_tx: mpsc::Sender<u32>,
     pub(crate) shutdown: Shutdown,
     pub(crate) limit_connections: Arc<Semaphore>,
+    pub(crate) limit_search: SearchLimit,
     pub(crate) _shutdown_complete: mpsc::Sender<()>,
     pub(crate) connection_states: SenderPool,
     pub(crate) db: Database,
@@ -45,6 +48,7 @@ pub struct PeerHandler {
     pub(crate) address: SocketAddr,
 }
 
+/// Spawn a new peer handler attempting a direct connection
 pub(crate) async fn connect_direct(
     mut handler: PeerHandler,
     conn_type: ConnectionType,
@@ -52,19 +56,20 @@ pub(crate) async fn connect_direct(
     tokio::spawn(async move {
         match handler.init_connection_outgoing(conn_type).await {
             Ok(_) => info!(
-                "Connection with {:?} ended successfully",
-                handler.peer_username
+                "Direct outgoing established with peer {:?} token={:?}",
+                handler.peer_username, handler.connection.token
             ),
             Err(e) => error!("Error during direct peer connection, cause = {}", e),
         }
     });
+
     Ok(())
 }
 
 pub(crate) async fn pierce_firewall(mut handler: PeerHandler, token: u32) -> Result<()> {
     tokio::spawn(async move {
         match handler.pierce_firewall(token).await {
-            Ok(_) => info!(
+            Ok(()) => info!(
                 "Connection with {:?} ended successfully",
                 handler.peer_username
             ),
@@ -75,10 +80,25 @@ pub(crate) async fn pierce_firewall(mut handler: PeerHandler, token: u32) -> Res
 }
 
 impl PeerHandler {
+    pub (crate) async fn listen_with_timeout(&mut self, rx: Receiver<PeerRequestPacket>) -> Result<()> {
+        let duration = Duration::from_millis(1000);
+        match tokio::time::timeout(duration, self.listen(rx)).await {
+            Ok(result) => result,
+            Err(result) => {
+                error!("Connection {:?} timed out: {:?}", self.connection.token, result);
+                Ok(())
+            }
+        }
+    }
     pub(crate) async fn listen(&mut self, handler_rx: Receiver<PeerRequestPacket>) -> Result<()> {
         debug!("{:?}", self.connection_type());
+
         match self.connection_type() {
             ConnectionType::PeerToPeer => {
+                info!(
+                    "Peer to Peer connection established with peer {:?}, token={:?}",
+                    self.peer_username, self.connection.token
+                );
                 self.listen_p2p(handler_rx).await?;
             }
             ConnectionType::FileTransfer => {
@@ -103,46 +123,52 @@ impl PeerHandler {
         &mut self,
         mut handler_rx: Receiver<PeerRequestPacket>,
     ) -> Result<()> {
+
         while !self.shutdown.is_shutdown() {
             tokio::select! {
-                        response = self.connection.read_message::<PeerResponse>() =>  {
-                            match response {
-                                Ok(message) => {
-                                    // When receiving a SearchReply we want to close the connection asap
-                                    if let PeerResponse::SearchReply(_) = message {
-                                            return self.sse_tx.send(message)
-                                            .await
-                                            .map_err(|err| eyre!(err));
-                                    } else {
-                                       // Don't flood the log with search replies
-                                       info!("[token={:?}] - Got Peer message {:?}", self.connection.token, message);
-                                    }
+                response = self.connection.read_message::<PeerResponse>() =>  {
+                    match response {
+                        Ok(message) => {
+                            // When receiving a SearchReply we want to close the connection asap
+                            if let PeerResponse::SearchReply(ref search_reply) = message {
+                               if self.limit_search.get() > 0 && search_reply.ticket == self.limit_search.ticket()  {
+                                    self.limit_search.decrement();
 
-                                    if let Err(e) = self.handle_peer_message(&message).await {
-                                        return Err(eyre!("Error handling peer message : {}", e));
-                                    }
-
-                                    self.sse_tx.send(message)
+                                    return self.sse_tx.send(message)
                                         .await
-                                        .map_err(|err| eyre!(err))?;
+                                        .map_err(|err| eyre!(err));
                                 }
-                                Err(e) => {
-                                    return Err(eyre!("Error in connection handler with {:?} : {}", self.peer_username, e));
-                                }
+
+                            } else {
+                               // Don't flood the log with search replies
+                               info!("[token={:?}] - Got Peer message {:?}", self.connection.token, message);
+
+                            if let Err(e) = self.handle_peer_message(&message).await {
+                                return Err(eyre!("Error handling peer message : {}", e));
                             }
 
-                        },
-                        request = handler_rx.recv() => if let Some(request) = request  {
-                            debug!("Sending request to {:?}", self.peer_username);
-                            if let Err(err) = self.connection.write_request(request).await {
-                                error!("Handler write error, {:?}", err);
+                            self.sse_tx.send(message)
+                                .await
+                                .map_err(|err| eyre!(err))?;
                             }
-                        },
-                        _ = self.shutdown.recv() => {
-                            // If a shutdown signal is received, return from `run`.
-                            // This will result in the task terminating.
-                            break;
                         }
+                        Err(e) => {
+                            return Err(eyre!("Error in connection handler with {:?} : {}", self.peer_username, e));
+                        }
+                    }
+
+                },
+                request = handler_rx.recv() => if let Some(request) = request  {
+                    debug!("Sending request to {:?}", self.peer_username);
+                    if let Err(err) = self.connection.write_request(request).await {
+                        error!("Handler write error, {:?}", err);
+                    }
+                },
+                _ = self.shutdown.recv() => {
+                    // If a shutdown signal is received, return from `run`.
+                    // This will result in the task terminating.
+                    break;
+                }
             }
         }
 
@@ -152,20 +178,20 @@ impl PeerHandler {
     pub(crate) async fn listen_distributed(&mut self) -> Result<()> {
         while !self.shutdown.is_shutdown() {
             tokio::select! {
-                        response = self.connection.read_message::<DistributedMessage>() =>  {
-                            match response {
-                                Ok(message) => trace!("Got distributed message {:?}", message),
-                                Err(e) => {
-                                    return Err(eyre!("Error in connection handler with {:?} : {}", self.peer_username, e));
-                                }
-                            }
-
-                        },
-                        _ = self.shutdown.recv() => {
-                            // If a shutdown signal is received, return from `run`.
-                            // This will result in the task terminating.
-                            break;
+                response = self.connection.read_message::<DistributedMessage>() =>  {
+                    match response {
+                        Ok(message) => trace!("Got distributed message {:?}", message),
+                        Err(e) => {
+                            return Err(eyre!("Error in connection handler with {:?} : {}", self.peer_username, e));
                         }
+                    }
+
+                },
+                _ = self.shutdown.recv() => {
+                    // If a shutdown signal is received, return from `run`.
+                    // This will result in the task terminating.
+                    break;
+                }
             }
         }
 
@@ -181,22 +207,16 @@ impl PeerHandler {
             "Initiate direct connection with peer init, token = {}",
             token
         );
-
         self.send_peer_init(token, conn_type).await?;
-
         let (tx, rx) = channel(32);
-        self.connection_states.peer_init(
-            &self.peer_username.as_ref().unwrap(),
-            self.connection_type(),
-            token,
-            tx,
-        );
+        let username = &self.peer_username.as_ref().unwrap();
+        let connection_type = self.connection_type();
+        self.connection_states
+            .on_peer_init_received(username, connection_type, token, tx);
         self.connection.token = Some(token);
         self.connection.connection_type = conn_type;
-
         self.ready_tx.send(token).await?;
-
-        self.listen(rx).await
+        self.listen_with_timeout(rx).await
     }
 
     pub(crate) async fn pierce_firewall(&mut self, token: u32) -> Result<()> {
@@ -213,7 +233,7 @@ impl PeerHandler {
 
         self.ready_tx.send(token).await?;
 
-        self.listen(rx).await
+        self.listen_with_timeout(rx).await
     }
 
     pub(crate) async fn wait_for_connection_handshake(&mut self) -> Result<()> {
@@ -222,7 +242,7 @@ impl PeerHandler {
             .read_message::<PeerConnectionMessage>()
             .await?;
         let rx = self.handle_connection_message(&message).await?;
-        self.listen(rx).await
+        self.listen_with_timeout(rx).await
     }
 
     async fn handle_peer_message(&mut self, message: &PeerResponse) -> tokio::io::Result<()> {
@@ -278,7 +298,7 @@ impl PeerHandler {
                 // Token = 0 indicate an incoming search reply
                 if *token != 0 {
                     self.connection_states
-                        .peer_init(&username, *connection_type, *token, tx);
+                        .on_peer_init_received(username, *connection_type, *token, tx);
                 };
 
                 self.connection.token = Some(*token);
@@ -387,13 +407,23 @@ impl PeerHandler {
     }
 
     async fn queue_upload(&mut self, queue_upload: &QueueUpload) -> tokio::io::Result<()> {
-        debug!("{:?}", queue_upload);
+        info!("{:?}", queue_upload);
         let file_name = queue_upload.file_name.clone();
         let user_name = self.peer_username.as_ref().unwrap().clone();
         // FIXME: NO MORE RANDOM TICKET
         let ticket = random();
-        let upload = UploadEntity::new(file_name, user_name, ticket);
+        let upload = UploadEntity::new(file_name.clone(), user_name, ticket);
         self.db.insert(&upload)?;
+        self.connection
+            .write_request(PeerRequestPacket::Message(PeerRequest::TransferRequest(
+                TransferRequest {
+                    direction: 1,
+                    ticket,
+                    file_name,
+                    file_size: None,
+                },
+            )))
+            .await?;
         Ok(())
     }
 
@@ -406,6 +436,10 @@ impl Drop for PeerHandler {
     fn drop(&mut self) {
         // Release a connection permit
         self.limit_connections.add_permits(1);
+        debug!(
+            "Peer handler [{:?}, {:?}] dropped, connection permit released",
+            self.peer_username, self.connection.token
+        );
 
         // If we have a token we need to clean up channel state
         // Otherwise connection was never ready and does not have a ready channel

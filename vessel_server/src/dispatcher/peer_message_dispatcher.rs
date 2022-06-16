@@ -3,6 +3,8 @@ use std::collections::HashMap;
 use eyre::Result;
 use tokio::sync::mpsc::{Receiver, Sender};
 
+use crate::handler::distributed::connect_to_peer_with_fallback;
+use crate::handler::ShutdownHelper;
 use soulseek_protocol::{
     message_common::ConnectionType,
     peers::{p2p::response::PeerResponse, PeerRequestPacket},
@@ -11,33 +13,51 @@ use soulseek_protocol::{
 use vessel_database::entity::peer::PeerEntity;
 use vessel_database::Database;
 
-use crate::peers::{
-    channels::SenderPool,
-    listener::{connect_to_peer_with_fallback, ShutdownHelper},
-};
+use crate::state_manager::channel_manager::SenderPool;
+use crate::state_manager::search_limit::SearchLimit;
 
 pub struct Dispatcher {
-    // Receive connection state updates from peer handler
+    // Receive connection state updates from peer handlers,
+    // once the handshake has completed we can start to feed the handler with queued messages.
     pub(crate) ready_rx: Receiver<u32>,
 
-    // Receive peer request from the HTTP server
+    // Receive peer request from the HTTP server, if the connection is ready we can dispatch the messages
+    // to the peer directly, otherwise the message is queued until the 'ready' signal is received for this peer.
     pub(crate) queue_rx: Receiver<(String, PeerRequestPacket)>,
-    // Once the server receive a peer address response it send it back
-    // So we can start to pop message from queue
+
+    // When trying to initiate connection to a peer we ask the soulseek server for the address of a peer.
+    // Upon receiving the address we can initiate the connection.
     pub(crate) peer_address_rx: Receiver<PeerAddress>,
 
-    // Hold peer channels and connection type
+    // Hold peer channels states and connection type, their are three kinds of connections :
+    // - pending connection (i.e we want to connect to a peer but the address is unknown yet)
+    // - active connection : we are connected already and we can dispatch HTTP message to the peer
+    // - download connection : these requires a special mpsc sender to dispatch download progress to the SSE server
     pub(crate) channels: SenderPool,
 
-    // Used to initiate new peer connections
-    pub(crate) db: Database,
-    pub(crate) shutdown_helper: ShutdownHelper,
+    // Hold the sender to the SSE mpsc channel, each time a new connection is spawned we pass a copy
+    // po the peer response are dispatched directly via SSE
     pub(crate) sse_tx: Sender<PeerResponse>,
+
+    // Pass a copy of the ready sender to the peer connection so it can notify the connection handshake
+    // has completed
     pub(crate) ready_tx: Sender<u32>,
+
+    // Pass a copy to the peer connection to write download state
+    pub(crate) db: Database,
+
+    // Whenever a direct connection fails send a PeerConnectionRequest to the soulseek server
     pub(crate) server_request_tx: Sender<ServerRequest>,
 
     // Save message sent to peer if the connection is not ready yet
     pub(crate) message_queue: HashMap<String, Vec<PeerRequestPacket>>,
+
+    // Whenever a search reply is issued by a peer decide to dispatch it via SSE or not if the limit
+    // is reached.
+    pub(crate) search_limit: SearchLimit,
+
+    // handle graceful shutdown of peer connections
+    pub(crate) shutdown_helper: ShutdownHelper,
 }
 
 impl Dispatcher {
@@ -46,6 +66,7 @@ impl Dispatcher {
             tokio::select! {
                 request = self.queue_rx.recv() => {
                     if let Some((username, request)) = request {
+                        debug!("Got peer message from HTTP server {}, {:?}", username, request);
                         self.on_peer_request(&username, request).await;
                     }
                 }
@@ -57,7 +78,7 @@ impl Dispatcher {
                 peer = self.peer_address_rx.recv() => {
                     if let Some(peer) = peer {
                         let peer = PeerEntity::from(peer);
-                        self.on_peer_address_received(peer).await;
+                        self.on_peer_address_received(peer, self.search_limit.clone()).await;
                     }
 
                 }
@@ -65,12 +86,13 @@ impl Dispatcher {
         }
     }
 
-    async fn on_peer_address_received(&mut self, peer: PeerEntity) {
+    async fn on_peer_address_received(&mut self, peer: PeerEntity, search_limit: SearchLimit) {
         self.db.insert(&peer).unwrap();
         if let Some(queue) = self.message_queue.get(&peer.username) {
             if let Some(msg) = queue.last() {
                 let conn_type = ConnectionType::from(msg);
-                self.initiate_connection(conn_type, peer).await;
+                self.initiate_connection(conn_type, peer, search_limit)
+                    .await;
             }
         }
     }
@@ -102,7 +124,9 @@ impl Dispatcher {
 
     async fn on_peer_request(&mut self, username: &str, request: PeerRequestPacket) {
         let conn_type = ConnectionType::from(&request);
+        debug!(target:"vessel_http", "Pushing http message to message queue, peer={}, request={:?}", username, request);
         self.push_to_queue(username.to_string(), request).await;
+
         let peer_conn_state = self
             .channels
             .find_by_username_and_connection_type(username, conn_type);
@@ -122,19 +146,30 @@ impl Dispatcher {
             }
             None => match self.db.get_by_key::<PeerEntity>(username) {
                 Some(peer) => {
-                    self.initiate_connection(ConnectionType::PeerToPeer, peer)
-                        .await
-                }
-                None => self
-                    .server_request_tx
-                    .send(ServerRequest::GetPeerAddress(username.to_string()))
+                    self.initiate_connection(
+                        ConnectionType::PeerToPeer,
+                        peer,
+                        self.search_limit.clone(),
+                    )
                     .await
-                    .expect("Server send error"),
+                }
+                _ => {
+                    debug!("Requesting peer address");
+                    self.server_request_tx
+                        .send(ServerRequest::GetPeerAddress(username.to_string()))
+                        .await
+                        .expect("Server send error")
+                }
             },
         }
     }
 
-    async fn initiate_connection(&mut self, conn_type: ConnectionType, peer: PeerEntity) {
+    async fn initiate_connection(
+        &mut self,
+        conn_type: ConnectionType,
+        peer: PeerEntity,
+        search_limit: SearchLimit,
+    ) {
         let sender = self.server_request_tx.clone();
         let sse_tx = self.sse_tx.clone();
         let channels = self.channels.clone();
@@ -143,7 +178,15 @@ impl Dispatcher {
         let db = self.db.clone();
 
         let connection_result = connect_to_peer_with_fallback(
-            sender, sse_tx, ready_tx, channels, helpers, db, &peer, conn_type,
+            sender,
+            sse_tx,
+            ready_tx,
+            channels,
+            helpers,
+            db,
+            &peer,
+            conn_type,
+            search_limit,
         )
         .await;
 
@@ -153,7 +196,7 @@ impl Dispatcher {
     }
 
     async fn push_to_queue(&mut self, username: String, request: PeerRequestPacket) {
-        info!(
+        debug!(
             "Pushing peer request from {} to queue to message queue : {:?}",
             username, request
         );

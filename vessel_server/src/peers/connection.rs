@@ -156,7 +156,8 @@ impl PeerConnection {
         if let Some(entry) = download_entry {
             let file_name = &entry.file_name;
             // Fixme : replace path before download
-            let file_name = file_name.replace("\\", "/");
+            info!("starting to download {} from {}", file_name, user_name);
+            let file_name = file_name.replace('\\', "/");
             let file_path = Path::new(&file_name).file_name().expect("File name error");
             let mut download_path =
                 PathBuf::from(&vessel_database::settings::CONFIG.download_folder);
@@ -191,7 +192,6 @@ impl PeerConnection {
 
             loop {
                 let byte_red = file.write(self.buffer.chunk()).await?;
-
                 let percent = 100 * progress / file_size;
 
                 // Avoid to reprint percent every time the task yield
@@ -209,6 +209,12 @@ impl PeerConnection {
                 if progress >= file_size {
                     debug!("100% of {}", file_name);
                     file.sync_data().await?;
+                    progress_sender
+                        .send(DownloadProgress::Progress {
+                            ticket,
+                            percent: 100,
+                        })
+                        .await?;
                     return Ok(());
                 }
 
@@ -234,11 +240,5 @@ impl PeerConnection {
         } else {
             Ok(bytes_red)
         }
-    }
-}
-
-impl Drop for PeerConnection {
-    fn drop(&mut self) {
-        debug!("[token={:?}] - Dropping peer connection", self.token)
     }
 }

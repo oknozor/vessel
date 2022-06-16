@@ -7,17 +7,20 @@ extern crate tracing;
 #[macro_use]
 extern crate eyre;
 
-use tokio::{net::TcpListener, sync::mpsc};
+use std::sync::Arc;
+use tokio::sync::mpsc;
 use tracing_subscriber::fmt::format::FmtSpan;
 
-use crate::{
-    peers::{
-        channels::SenderPool,
-        listener::{PeerListenerReceivers, PeerListenerSenders},
-    },
-    tasks::spawn_server_listener_task,
-};
+use crate::handler::connection::PeerConnectionListener;
+use crate::handler::distributed::DistributedConnectionManager;
+use crate::handler::indirect_connection::IndirectConnectionRequestHandler;
+use crate::handler::peers::PeerConnectionManager;
+use crate::handler::{ShutdownHelper, MAX_CONNECTIONS};
+use crate::dispatcher::peer_message_dispatcher::Dispatcher;
+use crate::slsk::SoulseekServerListener;
 use eyre::Result;
+use futures::TryFutureExt;
+use soulseek_protocol::server::login::LoginRequest;
 use soulseek_protocol::{
     peers::{p2p::response::PeerResponse, PeerRequestPacket},
     server::{
@@ -26,15 +29,18 @@ use soulseek_protocol::{
         response::ServerResponse,
     },
 };
+use state_manager::channel_manager::SenderPool;
+use state_manager::search_limit::SearchLimit;
+use tokio::sync::Semaphore;
 use vessel_database::Database;
 
-const PEER_LISTENER_ADDRESS: &str = "0.0.0.0:2255";
-
+mod handler;
+mod dispatcher;
 mod peers;
 mod slsk;
-mod tasks;
+mod state_manager;
 
-#[tokio::main]
+#[tokio::main(flavor = "multi_thread", worker_threads = 10)]
 // #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
     let filter = std::env::var("RUST_LOG").unwrap_or_else(|_| "tracing=info,warp=debug".to_owned());
@@ -45,11 +51,11 @@ async fn main() -> Result<()> {
         .init();
 
     // Forward http request to the Soulseek server
-    let channel_bound = 4096;
+    let channel_bound = 500;
     let (http_tx, http_rx) = mpsc::channel::<ServerRequest>(channel_bound);
 
     // Send http request directly to a peer connection
-    let (peer_message_dispatcher_tx, peer_message_dispatcher_rx) =
+    let (peer_message_dispatcher_tx, peer_request_rx) =
         mpsc::channel::<(String, PeerRequestPacket)>(channel_bound);
 
     // Send Soulseek server response to the SSE client
@@ -58,7 +64,7 @@ async fn main() -> Result<()> {
     let (sse_peer_tx, sse_peer_rx) = mpsc::channel::<PeerResponse>(channel_bound);
 
     // Dispatch incoming indirect connection request to the global peer handler
-    let (peer_listener_tx, peer_connection_rx) =
+    let (peer_listener_tx, peer_listener_rx) =
         mpsc::channel::<PeerConnectionRequest>(channel_bound);
 
     // Request an indirect connection via http
@@ -78,9 +84,9 @@ async fn main() -> Result<()> {
     let (download_progress_tx, download_progress_rx) = mpsc::channel(channel_bound);
 
     let database = Database::default();
-
+    let search_limit = SearchLimit::new();
     // listen for incoming client commands and forward soulseek message to the sse service
-    let soulseek_server_listener = spawn_server_listener_task(
+    let mut soulseek_server_listener = SoulseekServerListener {
         http_rx,
         sse_tx,
         peer_listener_tx,
@@ -89,51 +95,101 @@ async fn main() -> Result<()> {
         connection,
         logged_in_tx,
         peer_address_tx,
-    );
+        search_limit: search_limit.clone(),
+    };
 
     // Start the warp SSE server with a soulseek mpsc event receiver
     // this task will proxy soulseek events to the web clients
-    let sse_server = tasks::spawn_sse_server(sse_rx, sse_peer_rx, download_progress_rx);
+    let sse_server = vessel_sse::start_sse_listener(sse_rx, sse_peer_rx, download_progress_rx);
 
     // Start the HTTP api proxy with the soulseek mpsc event sender
     // Here we are only sending request via HTTP and expect no other response
     // than 201/NO_CONTENT
-    let http_server =
-        tasks::spawn_http_listener(http_tx, peer_message_dispatcher_tx, database.clone());
+    let http_server = vessel_http::start(http_tx, peer_message_dispatcher_tx, database.clone());
 
     // Once every thing is ready we need to login before talking to the soulseek server
     // Vessel support one and only one user connection, credentials are retrieved from vessel configuration
-    let login = tasks::spawn_login_task(login_sender);
+    let listen_port_sender = login_sender.clone();
+    let parent_request_sender = login_sender.clone();
+    let join_nicotine_room = login_sender.clone();
+    let username = &vessel_database::settings::CONFIG.username;
+    let password = &vessel_database::settings::CONFIG.password;
 
-    let listener = TcpListener::bind(PEER_LISTENER_ADDRESS).await?;
+    let login = login_sender
+        .send(ServerRequest::Login(LoginRequest::new(username, password)))
+        .and_then(|_| listen_port_sender.send(ServerRequest::SetListenPort(2255)))
+        .and_then(|_| parent_request_sender.send(ServerRequest::NoParents(true)))
+        .and_then(|_| join_nicotine_room.send(ServerRequest::JoinRoom("nicotine".to_string())));
 
     let channels = SenderPool::new(download_progress_tx);
 
-    // Listen for peer connection
-    let peer_listener = tasks::spawn_peer_listener(
-        PeerListenerSenders {
-            sse_tx: sse_peer_tx,
-            server_request_tx: request_peer_connection_tx,
-        },
-        PeerListenerReceivers {
-            peer_connection_rx,
-            possible_parent_rx,
-            peer_request_rx: peer_message_dispatcher_rx,
-            peer_address_rx,
-        },
-        logged_in_rx,
-        listener,
-        database,
+    let (ready_tx, ready_rx) = mpsc::channel(32);
+
+    let (notify_shutdown, _) = tokio::sync::broadcast::channel(1);
+    let (shutdown_complete_tx, shutdown_complete_rx) = mpsc::channel(1);
+    let shutdown_helper = ShutdownHelper {
+        notify_shutdown,
+        shutdown_complete_tx,
+        limit_connections: Arc::new(Semaphore::new(MAX_CONNECTIONS)),
+    };
+
+    let mut indirect_connection_manager = IndirectConnectionRequestHandler {
+        server_request_tx: request_peer_connection_tx.clone(),
+        indirect_connection_rx: peer_listener_rx,
+        sse_tx: sse_peer_tx.clone(),
+        ready_tx: ready_tx.clone(),
+        channels: channels.clone(),
+        shutdown_helper: shutdown_helper.clone(),
+        db: database.clone(),
+        search_limit: search_limit.clone(),
+    };
+
+    let mut distributed_connection_manager = DistributedConnectionManager {
+        request_peer_connection_tx: request_peer_connection_tx.clone(),
+        sse_tx: sse_peer_tx.clone(),
+        ready_tx: ready_tx.clone(),
+        channels: channels.clone(),
+        shutdown_helper: shutdown_helper.clone(),
+        possible_parent_rx,
+        database: database.clone(),
+        search_limit: search_limit.clone(),
+    };
+
+    let mut dispatcher = Dispatcher {
+        ready_rx,
+        queue_rx: peer_request_rx,
+        peer_address_rx,
+        channels: channels.clone(),
+        db: database.clone(),
+        shutdown_helper: shutdown_helper.clone(),
+        sse_tx: sse_peer_tx.clone(),
+        ready_tx: ready_tx.clone(),
+        server_request_tx: request_peer_connection_tx.clone(),
+        message_queue: Default::default(),
+        search_limit: search_limit.clone(),
+    };
+
+    let mut peer_connection_manager = PeerConnectionManager {
+        listener: PeerConnectionListener::new().await,
+        sse_tx: sse_peer_tx,
+        db: database,
         channels,
-    );
+        shutdown_complete_rx,
+        shutdown_helper,
+        search_limit,
+        ready_tx,
+    };
 
     // Wraps everything with tokio::join so we don't block on servers startup
     let _ = join!(
+        peer_connection_manager.run(logged_in_rx),
+        indirect_connection_manager.run(),
+        distributed_connection_manager.run(),
+        dispatcher.run(),
         sse_server,
         http_server,
-        soulseek_server_listener,
+        soulseek_server_listener.listen(),
         login,
-        peer_listener
     );
 
     // TODO : gracefull shutdown

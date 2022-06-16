@@ -15,8 +15,8 @@ where
         Self { inner: sender }
     }
 
-    pub(crate) fn send(&self, t: T) {
-        self.inner.try_send(t).unwrap();
+    pub(crate) async fn send(&self, t: T) {
+        self.inner.send(t).await.unwrap();
     }
 }
 
